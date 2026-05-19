@@ -89,6 +89,16 @@ export function TransactionCodeFormDialog({
   const [debitAccount, setDebitAccount] = useState(item?.debit_account ?? '');
   const [debitSubaccount, setDebitSubaccount] = useState(item?.debit_subaccount ?? '');
   const [debitBranchId, setDebitBranchId] = useState(item?.debit_branch_id ?? NONE);
+  const branchOptions = branches.map((b) => ({ value: b.id, label: `${b.code} — ${b.name}` }));
+  const branchOverrideOptions = [
+    { value: NONE, label: '(use header)' },
+    ...branches.map((b) => ({ value: b.id, label: b.code })),
+  ];
+  const paymentMethodOptions = [
+    { value: NONE, label: 'None' },
+    ...paymentMethods.map((p) => ({ value: p.id, label: p.code })),
+  ];
+
   const [creditAccount, setCreditAccount] = useState(item?.credit_account ?? '');
   const [creditSubaccount, setCreditSubaccount] = useState(item?.credit_subaccount ?? '');
   const [creditBranchId, setCreditBranchId] = useState(item?.credit_branch_id ?? NONE);
@@ -159,11 +169,11 @@ export function TransactionCodeFormDialog({
 
             <div className="flex flex-col gap-2">
               <Label className="font-semibold">Branch *</Label>
-              <Select value={branchId} onValueChange={(v) => v && setBranchId(v)}>
+              <Select items={branchOptions} value={branchId} onValueChange={(v) => v && setBranchId(v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {branches.map((b) => (
-                    <SelectItem key={b.id} value={b.id}>{b.code} — {b.name}</SelectItem>
+                  {branchOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -185,14 +195,14 @@ export function TransactionCodeFormDialog({
             <div className="flex flex-col gap-2">
               <Label className="font-semibold">Payment Method</Label>
               <Select
+                items={paymentMethodOptions}
                 value={paymentMethodId ?? NONE}
                 onValueChange={(v) => setPaymentMethodId(v ?? NONE)}
               >
                 <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NONE}>None</SelectItem>
-                  {paymentMethods.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.code}</SelectItem>
+                  {paymentMethodOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -227,14 +237,14 @@ export function TransactionCodeFormDialog({
             <div className="flex flex-col gap-2">
               <Label className="font-semibold">Branch (override)</Label>
               <Select
+                items={branchOverrideOptions}
                 value={debitBranchId ?? NONE}
                 onValueChange={(v) => setDebitBranchId(v ?? NONE)}
               >
                 <SelectTrigger><SelectValue placeholder="(use header)" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NONE}>(use header)</SelectItem>
-                  {branches.map((b) => (
-                    <SelectItem key={b.id} value={b.id}>{b.code}</SelectItem>
+                  {branchOverrideOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -269,14 +279,14 @@ export function TransactionCodeFormDialog({
             <div className="flex flex-col gap-2">
               <Label className="font-semibold">Branch (override)</Label>
               <Select
+                items={branchOverrideOptions}
                 value={creditBranchId ?? NONE}
                 onValueChange={(v) => setCreditBranchId(v ?? NONE)}
               >
                 <SelectTrigger><SelectValue placeholder="(use header)" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NONE}>(use header)</SelectItem>
-                  {branches.map((b) => (
-                    <SelectItem key={b.id} value={b.id}>{b.code}</SelectItem>
+                  {branchOverrideOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

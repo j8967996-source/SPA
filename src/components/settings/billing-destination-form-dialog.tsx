@@ -82,6 +82,11 @@ export function BillingDestinationFormDialog({
   );
   const [creditTermsDays, setCreditTermsDays] = useState(String(item?.credit_terms_days ?? 30));
 
+  const paymentMethodOptions = [
+    { value: NONE, label: 'None' },
+    ...paymentMethods.map((p) => ({ value: p.id, label: `${p.code} — ${p.display_name}` })),
+  ];
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const payload = {
@@ -228,14 +233,14 @@ export function BillingDestinationFormDialog({
             <div className="flex flex-col gap-2">
               <Label className="font-semibold">Default Payment Method</Label>
               <Select
+                items={paymentMethodOptions}
                 value={defaultPaymentMethodId ?? NONE}
                 onValueChange={(v) => setDefaultPaymentMethodId(v ?? NONE)}
               >
                 <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NONE}>None</SelectItem>
-                  {paymentMethods.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.code} — {p.display_name}</SelectItem>
+                  {paymentMethodOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

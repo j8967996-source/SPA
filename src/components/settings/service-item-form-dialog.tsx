@@ -92,6 +92,8 @@ export function ServiceItemFormDialog({
   const [commissionApplicable, setCommissionApplicable] = useState(item?.commission_applicable ?? true);
   const [tipApplicable, setTipApplicable] = useState(item?.tip_applicable ?? true);
 
+  const categoryOptions = categories.map((c) => ({ value: c.id, label: `${c.code} — ${c.name}` }));
+
   const isEdit = mode === 'edit';
   const slotMinutes = Number(duration || 0) + Number(prep || 0) + Number(cleanup || 0);
 
@@ -159,11 +161,11 @@ export function ServiceItemFormDialog({
 
             <div className="flex flex-col gap-2">
               <Label className="font-semibold">Category *</Label>
-              <Select value={categoryId} onValueChange={(v) => v && setCategoryId(v)}>
+              <Select items={categoryOptions} value={categoryId} onValueChange={(v) => v && setCategoryId(v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {categories.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>{c.code} — {c.name}</SelectItem>
+                  {categoryOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

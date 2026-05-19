@@ -80,6 +80,15 @@ export function CustomerSourceFormDialog({
   const [billingId, setBillingId] = useState(item?.default_billing_to_id ?? NONE);
   const [discountId, setDiscountId] = useState(item?.default_discount_class_id ?? NONE);
 
+  const billingOptions = [
+    { value: NONE, label: 'None (customer self-pays)' },
+    ...billingDestinations.map((b) => ({ value: b.id, label: `${b.code} — ${b.name}` })),
+  ];
+  const discountOptions = [
+    { value: NONE, label: 'None' },
+    ...discountClasses.map((d) => ({ value: d.id, label: `${d.code} — ${d.description}` })),
+  ];
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const payload = {
@@ -150,14 +159,14 @@ export function CustomerSourceFormDialog({
             <div className="flex flex-col gap-2">
               <Label className="font-semibold">Default Billing To</Label>
               <Select
+                items={billingOptions}
                 value={billingId ?? NONE}
                 onValueChange={(v) => setBillingId(v ?? NONE)}
               >
                 <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NONE}>None (customer self-pays)</SelectItem>
-                  {billingDestinations.map((b) => (
-                    <SelectItem key={b.id} value={b.id}>{b.code} — {b.name}</SelectItem>
+                  {billingOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -169,14 +178,14 @@ export function CustomerSourceFormDialog({
             <div className="flex flex-col gap-2">
               <Label className="font-semibold">Default Discount Class</Label>
               <Select
+                items={discountOptions}
                 value={discountId ?? NONE}
                 onValueChange={(v) => setDiscountId(v ?? NONE)}
               >
                 <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NONE}>None</SelectItem>
-                  {discountClasses.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>{d.code} — {d.description}</SelectItem>
+                  {discountOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

@@ -74,6 +74,8 @@ export function SettingFormDialog({
   const [scope, setScope] = useState<SettingItem['scope']>(setting?.scope ?? 'global');
   const [branchId, setBranchId] = useState(setting?.branch_id ?? NONE);
 
+  const branchOptions = branches.map((b) => ({ value: b.id, label: `${b.code} — ${b.name}` }));
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
@@ -199,11 +201,11 @@ export function SettingFormDialog({
                 {scope === 'branch' && (
                   <div className="flex flex-col gap-2">
                     <Label className="font-semibold">Branch *</Label>
-                    <Select value={branchId ?? NONE} onValueChange={(v) => setBranchId(v ?? NONE)}>
+                    <Select items={branchOptions} value={branchId ?? NONE} onValueChange={(v) => setBranchId(v ?? NONE)}>
                       <SelectTrigger><SelectValue placeholder="Select branch" /></SelectTrigger>
                       <SelectContent>
-                        {branches.map((b) => (
-                          <SelectItem key={b.id} value={b.id}>{b.code} — {b.name}</SelectItem>
+                        {branchOptions.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>

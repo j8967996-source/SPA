@@ -75,6 +75,11 @@ export function UserFormDialog({
   const [homeBranchId, setHomeBranchId] = useState(user?.home_branch_id ?? NONE);
   const [active, setActive] = useState(user?.active ?? false);
 
+  const branchOptions = [
+    { value: NONE, label: 'None' },
+    ...branches.map((b) => ({ value: b.id, label: `${b.code} — ${b.name}` })),
+  ];
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const payload = {
@@ -167,12 +172,11 @@ export function UserFormDialog({
 
             <div className="flex flex-col gap-2">
               <Label className="font-semibold">Home Branch</Label>
-              <Select value={homeBranchId ?? NONE} onValueChange={(v) => setHomeBranchId(v ?? NONE)}>
+              <Select items={branchOptions} value={homeBranchId ?? NONE} onValueChange={(v) => setHomeBranchId(v ?? NONE)}>
                 <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NONE}>None</SelectItem>
-                  {branches.map((b) => (
-                    <SelectItem key={b.id} value={b.id}>{b.code} — {b.name}</SelectItem>
+                  {branchOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

@@ -79,6 +79,8 @@ export function ResourceFormDialog({
   const [locationZone, setLocationZone] = useState(resource?.location_zone ?? '');
   const [capacity, setCapacity] = useState(String(resource?.capacity ?? 1));
 
+  const branchOptions = branches.map((b) => ({ value: b.id, label: `${b.code} — ${b.name}` }));
+
   const isEdit = mode === 'edit';
 
   function handleSubmit(e: React.FormEvent) {
@@ -128,13 +130,11 @@ export function ResourceFormDialog({
           <div className="flex flex-col gap-4 py-4">
             <div className="flex flex-col gap-2">
               <Label className="font-semibold">Branch *</Label>
-              <Select value={branchId} onValueChange={(v) => v && setBranchId(v)}>
+              <Select items={branchOptions} value={branchId} onValueChange={(v) => v && setBranchId(v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {branches.map((b) => (
-                    <SelectItem key={b.id} value={b.id}>
-                      {b.code} — {b.name}
-                    </SelectItem>
+                  {branchOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>

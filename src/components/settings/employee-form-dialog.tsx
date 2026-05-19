@@ -86,6 +86,15 @@ export function EmployeeFormDialog({
   const [position, setPosition] = useState(employee?.position ?? 'Massage Therapist');
   const [status, setStatus] = useState<EmployeeItem['status']>(employee?.status ?? 'active');
 
+  const branchOptions = [
+    { value: NONE, label: 'None (freelance / cross)' },
+    ...branches.map((b) => ({ value: b.id, label: `${b.code} — ${b.name}` })),
+  ];
+  const classOptions = [
+    { value: NONE, label: 'None' },
+    ...classes.map((c) => ({ value: c.id, label: `${c.class_code} — ${c.name}` })),
+  ];
+
   const isEdit = mode === 'edit';
 
   function handleSubmit(e: React.FormEvent) {
@@ -195,14 +204,15 @@ export function EmployeeFormDialog({
 
             <div className="flex flex-col gap-2">
               <Label className="font-semibold">Home Branch</Label>
-              <Select value={homeBranchId ?? NONE} onValueChange={(v) => setHomeBranchId(v ?? NONE)}>
+              <Select
+                items={branchOptions}
+                value={homeBranchId ?? NONE}
+                onValueChange={(v) => setHomeBranchId(v ?? NONE)}
+              >
                 <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NONE}>None (freelance / cross)</SelectItem>
-                  {branches.map((b) => (
-                    <SelectItem key={b.id} value={b.id}>
-                      {b.code} — {b.name}
-                    </SelectItem>
+                  {branchOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -210,14 +220,15 @@ export function EmployeeFormDialog({
 
             <div className="flex flex-col gap-2">
               <Label className="font-semibold">Commission Class</Label>
-              <Select value={classId ?? NONE} onValueChange={(v) => setClassId(v ?? NONE)}>
+              <Select
+                items={classOptions}
+                value={classId ?? NONE}
+                onValueChange={(v) => setClassId(v ?? NONE)}
+              >
                 <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NONE}>None</SelectItem>
-                  {classes.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.class_code} — {c.name}
-                    </SelectItem>
+                  {classOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
