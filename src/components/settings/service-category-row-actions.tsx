@@ -58,7 +58,7 @@ export function ServiceCategoryRowActions({ item }: Props) {
             }
           />
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => setTimeout(() => setEditOpen(true))}>
+            <DropdownMenuItem onClick={() => setTimeout(() => setEditOpen(true))}>
               <Pencil className="size-4" />
               Edit
             </DropdownMenuItem>
@@ -66,13 +66,13 @@ export function ServiceCategoryRowActions({ item }: Props) {
             {item.active ? (
               <DropdownMenuItem
                 variant="destructive"
-                onSelect={() => setTimeout(() => setConfirmDeactivate(true))}
+                onClick={() => setTimeout(() => setConfirmDeactivate(true))}
               >
                 <PowerOff className="size-4" />
                 Deactivate
               </DropdownMenuItem>
             ) : (
-              <DropdownMenuItem onSelect={toggleActive}>
+              <DropdownMenuItem onClick={toggleActive}>
                 <Power className="size-4" />
                 Reactivate
               </DropdownMenuItem>

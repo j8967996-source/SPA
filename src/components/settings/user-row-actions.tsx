@@ -69,16 +69,16 @@ export function UserRowActions({ user, branches }: Props) {
             }
           />
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => setTimeout(() => setEditOpen(true))}>
+            <DropdownMenuItem onClick={() => setTimeout(() => setEditOpen(true))}>
               <Pencil className="size-4" />
               Edit
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setTimeout(() => setPinOpen(true))}>
+            <DropdownMenuItem onClick={() => setTimeout(() => setPinOpen(true))}>
               <KeyRound className="size-4" />
               {user.has_pin ? 'Reset Manager PIN' : 'Set Manager PIN'}
             </DropdownMenuItem>
             {user.has_pin && (
-              <DropdownMenuItem onSelect={handleClearPin}>
+              <DropdownMenuItem onClick={handleClearPin}>
                 <Trash2 className="size-4" />
                 Clear Manager PIN
               </DropdownMenuItem>
@@ -87,13 +87,13 @@ export function UserRowActions({ user, branches }: Props) {
             {user.active ? (
               <DropdownMenuItem
                 variant="destructive"
-                onSelect={() => setTimeout(() => setConfirmDeactivate(true))}
+                onClick={() => setTimeout(() => setConfirmDeactivate(true))}
               >
                 <PowerOff className="size-4" />
                 Deactivate
               </DropdownMenuItem>
             ) : (
-              <DropdownMenuItem onSelect={toggleActive}>
+              <DropdownMenuItem onClick={toggleActive}>
                 <Power className="size-4" />
                 Activate
               </DropdownMenuItem>

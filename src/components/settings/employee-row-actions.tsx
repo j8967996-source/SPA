@@ -46,25 +46,25 @@ export function EmployeeRowActions({ employee, branches, classes }: Props) {
             }
           />
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => setTimeout(() => setEditOpen(true))}>
+            <DropdownMenuItem onClick={() => setTimeout(() => setEditOpen(true))}>
               <Pencil className="size-4" />
               Edit
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             {employee.status !== 'active' && (
-              <DropdownMenuItem onSelect={() => setStatus('active')}>
+              <DropdownMenuItem onClick={() => setStatus('active')}>
                 <Power className="size-4" />
                 Activate
               </DropdownMenuItem>
             )}
             {employee.status !== 'on_leave' && (
-              <DropdownMenuItem onSelect={() => setStatus('on_leave')}>
+              <DropdownMenuItem onClick={() => setStatus('on_leave')}>
                 <Plane className="size-4" />
                 Mark on leave
               </DropdownMenuItem>
             )}
             {employee.status !== 'inactive' && (
-              <DropdownMenuItem variant="destructive" onSelect={() => setStatus('inactive')}>
+              <DropdownMenuItem variant="destructive" onClick={() => setStatus('inactive')}>
                 <PowerOff className="size-4" />
                 Deactivate
               </DropdownMenuItem>

@@ -45,31 +45,31 @@ export function ResourceRowActions({ resource, branches }: Props) {
             }
           />
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onSelect={() => setTimeout(() => setEditOpen(true))}>
+            <DropdownMenuItem onClick={() => setTimeout(() => setEditOpen(true))}>
               <Pencil className="size-4" />
               Edit
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             {resource.status !== 'active' && (
-              <DropdownMenuItem onSelect={() => setStatus('active')}>
+              <DropdownMenuItem onClick={() => setStatus('active')}>
                 <Power className="size-4" />
                 Set Active
               </DropdownMenuItem>
             )}
             {resource.status !== 'cleaning' && (
-              <DropdownMenuItem onSelect={() => setStatus('cleaning')}>
+              <DropdownMenuItem onClick={() => setStatus('cleaning')}>
                 <Sparkles className="size-4" />
                 Mark Cleaning
               </DropdownMenuItem>
             )}
             {resource.status !== 'maintenance' && (
-              <DropdownMenuItem onSelect={() => setStatus('maintenance')}>
+              <DropdownMenuItem onClick={() => setStatus('maintenance')}>
                 <Wrench className="size-4" />
                 Mark Maintenance
               </DropdownMenuItem>
             )}
             {resource.status !== 'closed' && (
-              <DropdownMenuItem variant="destructive" onSelect={() => setStatus('closed')}>
+              <DropdownMenuItem variant="destructive" onClick={() => setStatus('closed')}>
                 <Ban className="size-4" />
                 Mark Closed
               </DropdownMenuItem>
