@@ -3,6 +3,8 @@ import { createServerClient as createSSRClient } from '@supabase/ssr';
 import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 
+import type { Database } from '@/types/database';
+
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
 const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY!;
@@ -17,7 +19,7 @@ if (!SUPABASE_PUBLISHABLE_KEY)
  */
 export async function createServerClient() {
   const cookieStore = await cookies();
-  return createSSRClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  return createSSRClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     cookies: {
       getAll() {
         return cookieStore.getAll();
@@ -43,7 +45,7 @@ export async function createServerClient() {
 export function createServiceClient() {
   if (!SUPABASE_SECRET_KEY)
     throw new Error('SUPABASE_SECRET_KEY is not set (required for service client)');
-  return createClient(SUPABASE_URL, SUPABASE_SECRET_KEY, {
+  return createClient<Database>(SUPABASE_URL, SUPABASE_SECRET_KEY, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,
