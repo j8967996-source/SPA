@@ -69,13 +69,13 @@ function NavLink({
         />
       </button>
       {open && (item.children || item.childGroups) && (
-        <div className="mt-1 ml-6 flex flex-col gap-px border-l border-sidebar-border pl-3">
+        <div className="mt-1 ml-3 flex flex-col gap-px border-l border-sidebar-border pl-3">
           {item.children?.map((c) => (
             <ChildLink key={c.href} item={c} pathname={pathname} />
           ))}
           {item.childGroups?.map((group, idx) => (
             <div key={group.label} className={cn('flex flex-col gap-px', idx > 0 && 'mt-2')}>
-              <p className="px-3 pt-1 pb-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+              <p className="mx-3 pt-1 pb-1 mb-1 border-b border-sidebar-border text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
                 {group.label}
               </p>
               {group.items.map((c) => (
