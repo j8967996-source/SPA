@@ -70,6 +70,7 @@ export function BranchRowActions({ branch }: Props) {
           {branch.active ? (
             <AlertDialog>
               <AlertDialogTrigger
+                nativeButton={false}
                 render={
                   <DropdownMenuItem
                     variant="destructive"

@@ -60,7 +60,7 @@ export function CommissionClassFormDialog({ mode = 'create', item, trigger }: Pr
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={trigger as React.ReactElement} />
+      <DialogTrigger nativeButton={false} render={trigger as React.ReactElement} />
       <DialogContent className="sm:max-w-md">
         <form onSubmit={handleSubmit}>
           <DialogHeader>

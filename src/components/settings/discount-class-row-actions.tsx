@@ -74,6 +74,7 @@ export function DiscountClassRowActions({ item }: { item: DiscountItem }) {
           {item.active ? (
             <AlertDialog>
               <AlertDialogTrigger
+                nativeButton={false}
                 render={
                   <DropdownMenuItem variant="destructive" onSelect={(e) => e.preventDefault()}>
                     <PowerOff className="size-4" />

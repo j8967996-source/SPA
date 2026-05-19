@@ -93,7 +93,7 @@ export function DiscountClassFormDialog({ mode = 'create', item, trigger }: Prop
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={trigger as React.ReactElement} />
+      <DialogTrigger nativeButton={false} render={trigger as React.ReactElement} />
       <DialogContent className="sm:max-w-lg">
         <form onSubmit={handleSubmit}>
           <DialogHeader>

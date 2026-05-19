@@ -118,7 +118,7 @@ export function ServiceItemFormDialog({ mode = 'create', item, categories, trigg
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={trigger as React.ReactElement} />
+      <DialogTrigger nativeButton={false} render={trigger as React.ReactElement} />
       <DialogContent className="sm:max-w-xl">
         <form onSubmit={handleSubmit}>
           <DialogHeader>

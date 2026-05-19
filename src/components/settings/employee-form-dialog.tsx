@@ -110,7 +110,7 @@ export function EmployeeFormDialog({ mode = 'create', employee, branches, classe
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={trigger as React.ReactElement} />
+      <DialogTrigger nativeButton={false} render={trigger as React.ReactElement} />
       <DialogContent className="sm:max-w-xl">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
