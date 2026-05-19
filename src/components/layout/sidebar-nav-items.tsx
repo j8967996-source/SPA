@@ -1,0 +1,75 @@
+import {
+  LayoutDashboard,
+  Receipt,
+  CalendarDays,
+  CalendarClock,
+  CreditCard,
+  Wallet,
+  BarChart3,
+  BookOpen,
+  Settings,
+  KeyRound,
+  LogOut,
+  Users,
+  Building2,
+  Database,
+  LucideIcon,
+} from 'lucide-react';
+
+export interface NavSubItem {
+  label: string;
+  href: string;
+}
+
+export interface NavItem {
+  label: string;
+  href?: string;
+  icon: LucideIcon;
+  children?: NavSubItem[];
+}
+
+export const mainNavItems: NavItem[] = [
+  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+  { label: 'Sales Orders', href: '/sales-orders', icon: Receipt },
+  { label: 'Reservations', href: '/reservations', icon: CalendarDays },
+  { label: 'Shift Schedule', href: '/shift-schedule', icon: CalendarClock },
+  { label: 'Stored Value Cards', href: '/stored-value-cards', icon: CreditCard },
+  {
+    label: 'Reconciliation',
+    icon: Wallet,
+    children: [
+      { label: 'Cash Reconciliation', href: '/reconciliation/cash' },
+      { label: 'Revenue Confirm', href: '/reconciliation/revenue-confirm' },
+      { label: 'Tip Settlement', href: '/reconciliation/tips' },
+      { label: 'Commission Settlement', href: '/reconciliation/commission' },
+      { label: 'AR Balance', href: '/reconciliation/ar-balance' },
+      { label: 'Revenue SOA', href: '/reconciliation/soa' },
+    ],
+  },
+  { label: 'Reports', href: '/reports', icon: BarChart3 },
+  { label: 'Help', href: '/help', icon: BookOpen },
+  {
+    label: 'Settings',
+    icon: Settings,
+    children: [
+      { label: 'Branches', href: '/settings/branches' },
+      { label: 'Employees', href: '/settings/employees' },
+      { label: 'Service Categories', href: '/settings/service-categories' },
+      { label: 'Service Items', href: '/settings/service-items' },
+      { label: 'Resources', href: '/settings/resources' },
+      { label: 'Discount Classes', href: '/settings/discount-classes' },
+      { label: 'Sources & Billing', href: '/settings/sources-billing' },
+      { label: 'Payment Methods', href: '/settings/payment-methods' },
+      { label: 'Transaction Codes', href: '/settings/transaction-codes' },
+      { label: 'Users', href: '/settings/users' },
+      { label: 'System Settings', href: '/settings/system' },
+    ],
+  },
+];
+
+export const bottomNavItems: { label: string; href: string; icon: LucideIcon; destructive?: boolean }[] = [
+  { label: 'Change Password', href: '/account/change-password', icon: KeyRound },
+  { label: 'Sign Out', href: '/api/auth/logout', icon: LogOut, destructive: true },
+];
+
+export { Users, Building2, Database };

@@ -1,0 +1,222 @@
+// Acumatica contract-based REST API client.
+//
+// Pattern adopted from集團現有專案 (ST Center / ENGO):
+// - User login passes credentials to Acumatica; Set-Cookie collected server-side
+//   into httpOnly acu_session cookie.
+// - Every GL post / query uses the calling user's own ERP session — clear
+//   responsibility trail, no shared service account for user actions.
+// - Service account exists for webhooks / automation when no user is online.
+// - Session expiry → throws AcuSessionRequiredError → frontend prompts re-login.
+
+const BASE_URL = process.env.ACUMATICA_BASE_URL;
+const COMPANY = process.env.ACUMATICA_COMPANY;
+const BRANCH = process.env.ACUMATICA_BRANCH;
+const LEDGER_ID = process.env.ACUMATICA_LEDGER_ID ?? 'MGMT';
+const API_VERSION = process.env.ACUMATICA_API_VERSION ?? '23.200.001';
+
+function api(): string {
+  if (!BASE_URL) throw new Error('ACUMATICA_BASE_URL is not set');
+  return `${BASE_URL.replace(/\/$/, '')}/entity/Default/${API_VERSION}`;
+}
+
+export class AcuSessionRequiredError extends Error {
+  code = 'ACU_SESSION_REQUIRED' as const;
+  constructor(detail = 'ERP session expired, please log in again') {
+    super(`ACU_SESSION_REQUIRED: ${detail}`);
+    this.name = 'AcuSessionRequiredError';
+  }
+}
+
+function ensureCookie(cookie: string | null | undefined): string {
+  if (!cookie) throw new AcuSessionRequiredError();
+  if (!BASE_URL) throw new Error('ACUMATICA_BASE_URL is not set');
+  return cookie;
+}
+
+export type AcumaticaLoginResult =
+  | { ok: true; userId: string; cookie: string }
+  | { ok: false; error: string };
+
+export async function acumaticaLogin(
+  username: string,
+  password: string,
+): Promise<AcumaticaLoginResult> {
+  if (!BASE_URL) {
+    return { ok: false, error: 'ACUMATICA_BASE_URL is not set' };
+  }
+
+  const body: Record<string, string> = { name: username, password };
+  if (COMPANY) body.company = COMPANY;
+  if (BRANCH) body.branch = BRANCH;
+
+  let res: Response;
+  try {
+    res = await fetch(`${BASE_URL.replace(/\/$/, '')}/entity/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (e) {
+    return {
+      ok: false,
+      error: `Cannot reach Acumatica: ${(e as Error).message}`,
+    };
+  }
+
+  if (res.status === 204 || res.status === 200) {
+    const setCookies =
+      typeof res.headers.getSetCookie === 'function'
+        ? res.headers.getSetCookie()
+        : [];
+    const cookie = setCookies.map((c) => c.split(';')[0]).join('; ');
+    return { ok: true, userId: username, cookie };
+  }
+
+  if (res.status === 401 || res.status === 403) {
+    return { ok: false, error: 'Invalid username or password' };
+  }
+
+  const errorBody = await res.text().catch(() => '');
+  if (
+    res.status === 500 &&
+    /invalid\s+credentials|login\s+failed/i.test(errorBody)
+  ) {
+    return { ok: false, error: 'Invalid username or password' };
+  }
+
+  return {
+    ok: false,
+    error: `Acumatica error (${res.status}): ${errorBody.slice(0, 200) || '(empty)'}`,
+  };
+}
+
+// Service account login for webhooks / automation flows (no user online).
+// Reads ACUMATICA_SERVICE_USERNAME / PASSWORD from env, caches cookie for 5 min.
+let cachedServiceCookie: { cookie: string; expiresAt: number } | null = null;
+const SERVICE_COOKIE_TTL_MS = 5 * 60 * 1000;
+
+export async function loginWithServiceAccount(): Promise<string> {
+  const now = Date.now();
+  if (cachedServiceCookie && cachedServiceCookie.expiresAt > now) {
+    return cachedServiceCookie.cookie;
+  }
+  const username = process.env.ACUMATICA_SERVICE_USERNAME;
+  const password = process.env.ACUMATICA_SERVICE_PASSWORD;
+  if (!username || !password) {
+    throw new Error(
+      'ACUMATICA_SERVICE_USERNAME / PASSWORD not set (service account)',
+    );
+  }
+  const res = await acumaticaLogin(username, password);
+  if (!res.ok) throw new Error(`Service account login failed: ${res.error}`);
+  if (!res.cookie) throw new Error('Service account login OK but no cookie returned');
+  cachedServiceCookie = {
+    cookie: res.cookie,
+    expiresAt: now + SERVICE_COOKIE_TTL_MS,
+  };
+  return res.cookie;
+}
+
+export async function acumaticaLogout(
+  cookie: string | null | undefined,
+): Promise<void> {
+  if (!cookie || !BASE_URL) return;
+  try {
+    await fetch(`${BASE_URL.replace(/\/$/, '')}/entity/auth/logout`, {
+      method: 'POST',
+      headers: { Cookie: cookie },
+    });
+  } catch {
+    /* logout failure shouldn't block — session expires naturally */
+  }
+}
+
+// ---------------------------------------------------------------------------
+// GL push (Journal Transaction) — Two-phase PUT
+//   1) PUT body with Hold:true + Details[] → returns BatchNbr
+//   2) PUT BatchNbr + Hold:false → releases the batch
+// ---------------------------------------------------------------------------
+
+export interface GLLine {
+  account: string;
+  sub_account: string;
+  debit_amount: number | null;
+  credit_amount: number | null;
+  transaction_desc: string;
+  // Optional: override BranchID for this line; falls back to entry.branch.
+  branch?: string | null;
+}
+
+export interface GLPushResult {
+  batchNbr: string | null;
+  raw: unknown;
+}
+
+export async function pushGLEntry(
+  entry: {
+    date: string; // YYYY-MM-DD
+    description: string;
+    currency: string;
+    branch: string;
+    lines: GLLine[];
+    hold?: boolean; // default false; useful for testing
+  },
+  userCookie: string | null | undefined,
+): Promise<GLPushResult> {
+  const cookie = ensureCookie(userCookie);
+  const branch = entry.branch || BRANCH;
+  if (!branch) throw new Error('GL push missing branch (ACUMATICA_BRANCH not set)');
+
+  const body = {
+    Module: { value: 'GL' },
+    LedgerID: { value: LEDGER_ID },
+    BranchID: { value: branch },
+    CurrencyID: { value: entry.currency },
+    Date: { value: entry.date },
+    Description: { value: entry.description },
+    Hold: { value: true },
+    Details: entry.lines.map((l) => ({
+      BranchID: { value: l.branch || branch },
+      Account: { value: l.account },
+      // Acumatica subaccount cannot contain dashes — strip before posting.
+      Subaccount: { value: l.sub_account.replace(/-/g, '') },
+      Project: { value: 'X' },
+      DebitAmount: { value: l.debit_amount ?? 0 },
+      CreditAmount: { value: l.credit_amount ?? 0 },
+      TransactionDescription: { value: l.transaction_desc },
+    })),
+  };
+
+  const res = await fetch(`${api()}/JournalTransaction?$expand=Details`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401) throw new AcuSessionRequiredError();
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`GL push failed (${res.status}): ${text.slice(0, 1500)}`);
+  }
+  const created = (await res.json()) as { BatchNbr?: { value?: string } };
+  const batchNbr = created?.BatchNbr?.value ?? null;
+
+  // Phase 2: release hold → batch becomes posted
+  if (!entry.hold && batchNbr) {
+    const r2 = await fetch(`${api()}/JournalTransaction`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({
+        Module: { value: 'GL' },
+        BatchNbr: { value: batchNbr },
+        Hold: { value: false },
+      }),
+    });
+    if (r2.status === 401) throw new AcuSessionRequiredError();
+    if (!r2.ok) {
+      const text = await r2.text().catch(() => '');
+      throw new Error(`GL release failed (${r2.status}): ${text.slice(0, 1500)}`);
+    }
+  }
+
+  return { batchNbr, raw: created };
+}
