@@ -27,10 +27,11 @@ import { setBranchActive } from '@/app/(dashboard)/settings/branches/actions';
 import { BranchFormDialog } from './branch-form-dialog';
 
 interface Props {
-  branch: { id: string; code: string; name: string; active: boolean };
+  branch: { id: string; code: string; name: string; business_unit_id: string | null; active: boolean };
+  businessUnits: { id: string; code: string; name: string }[];
 }
 
-export function BranchRowActions({ branch }: Props) {
+export function BranchRowActions({ branch, businessUnits }: Props) {
   const [pending, startTransition] = useTransition();
   const [editOpen, setEditOpen] = useState(false);
   const [confirmDeactivate, setConfirmDeactivate] = useState(false);
@@ -83,7 +84,8 @@ export function BranchRowActions({ branch }: Props) {
 
       <BranchFormDialog
         mode="edit"
-        branch={{ id: branch.id, code: branch.code, name: branch.name }}
+        branch={{ id: branch.id, code: branch.code, name: branch.name, business_unit_id: branch.business_unit_id }}
+        businessUnits={businessUnits}
         open={editOpen}
         onOpenChange={setEditOpen}
       />

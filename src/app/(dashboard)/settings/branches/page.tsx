@@ -18,18 +18,25 @@ import { BranchRowActions } from '@/components/settings/branch-row-actions';
 
 export const dynamic = 'force-dynamic';
 
-async function fetchBranches() {
+async function fetchData() {
   const supabase = createServiceClient();
-  const { data, error } = await supabase
-    .from('branches')
-    .select('id, code, name, active, created_at, updated_at')
-    .order('code');
-  if (error) throw new Error(error.message);
-  return data ?? [];
+  const [brRes, buRes] = await Promise.all([
+    supabase
+      .from('branches')
+      .select(`
+        id, code, name, business_unit_id, active, created_at, updated_at,
+        business_unit:business_units ( code, name )
+      `)
+      .order('code'),
+    supabase.from('business_units').select('id, code, name').eq('active', true).order('code'),
+  ]);
+  if (brRes.error) throw new Error(brRes.error.message);
+  if (buRes.error) throw new Error(buRes.error.message);
+  return { branches: brRes.data ?? [], businessUnits: buRes.data ?? [] };
 }
 
 export default async function BranchesPage() {
-  const branches = await fetchBranches();
+  const { branches, businessUnits } = await fetchData();
   const activeCount = branches.filter((b) => b.active).length;
 
   return (
@@ -50,6 +57,7 @@ export default async function BranchesPage() {
         </div>
 
         <BranchFormDialog
+          businessUnits={businessUnits}
           trigger={
             <Button>
               <Plus className="size-4" />
@@ -65,6 +73,7 @@ export default async function BranchesPage() {
             <TableRow>
               <TableHead className="w-32 font-bold">Code</TableHead>
               <TableHead className="font-bold">Name</TableHead>
+              <TableHead className="w-32 font-bold">Business Unit</TableHead>
               <TableHead className="w-32 font-bold">Status</TableHead>
               <TableHead className="w-48 font-bold">Updated</TableHead>
               <TableHead className="w-12" />
@@ -73,7 +82,7 @@ export default async function BranchesPage() {
           <TableBody>
             {branches.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-12">
+                <TableCell colSpan={6} className="text-center py-12">
                   <p className="text-sm font-semibold text-muted-foreground">
                     No branches yet. Click &ldquo;Add Branch&rdquo; above to create the
                     first one.
@@ -81,32 +90,47 @@ export default async function BranchesPage() {
                 </TableCell>
               </TableRow>
             ) : (
-              branches.map((b) => (
-                <TableRow key={b.id}>
-                  <TableCell className="font-mono font-bold">{b.code}</TableCell>
-                  <TableCell className="font-semibold">{b.name}</TableCell>
-                  <TableCell>
-                    {b.active ? (
-                      <Badge variant="default" className="font-bold">
-                        Active
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary" className="font-bold">
-                        Inactive
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="font-medium text-muted-foreground text-sm">
-                    {new Date(b.updated_at).toLocaleString('en-PH', {
-                      dateStyle: 'medium',
-                      timeStyle: 'short',
-                    })}
-                  </TableCell>
-                  <TableCell>
-                    <BranchRowActions branch={b} />
-                  </TableCell>
-                </TableRow>
-              ))
+              branches.map((b) => {
+                const businessUnit = Array.isArray(b.business_unit) ? b.business_unit[0] : b.business_unit;
+                const branchItem = {
+                  id: b.id,
+                  code: b.code,
+                  name: b.name,
+                  business_unit_id: b.business_unit_id,
+                  active: b.active,
+                };
+                return (
+                  <TableRow key={b.id}>
+                    <TableCell className="font-mono font-bold">{b.code}</TableCell>
+                    <TableCell className="font-semibold">{b.name}</TableCell>
+                    <TableCell>
+                      {businessUnit ? (
+                        <Badge variant="secondary" className="font-bold font-mono text-xs uppercase">
+                          {businessUnit.code}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {b.active ? (
+                        <Badge variant="default" className="font-bold">Active</Badge>
+                      ) : (
+                        <Badge variant="secondary" className="font-bold">Inactive</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="font-medium text-muted-foreground text-sm">
+                      {new Date(b.updated_at).toLocaleString('en-PH', {
+                        dateStyle: 'medium',
+                        timeStyle: 'short',
+                      })}
+                    </TableCell>
+                    <TableCell>
+                      <BranchRowActions branch={branchItem} businessUnits={businessUnits} />
+                    </TableCell>
+                  </TableRow>
+                );
+              })
             )}
           </TableBody>
         </Table>

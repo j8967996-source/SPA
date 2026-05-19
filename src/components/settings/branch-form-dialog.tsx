@@ -15,12 +15,20 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 import { createBranch, updateBranch } from '@/app/(dashboard)/settings/branches/actions';
 
 interface BranchFormDialogProps {
   mode?: 'create' | 'edit';
-  branch?: { id: string; code: string; name: string };
+  branch?: { id: string; code: string; name: string; business_unit_id: string | null };
+  businessUnits: { id: string; code: string; name: string }[];
   trigger?: React.ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -29,6 +37,7 @@ interface BranchFormDialogProps {
 export function BranchFormDialog({
   mode = 'create',
   branch,
+  businessUnits,
   trigger,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
@@ -38,16 +47,28 @@ export function BranchFormDialog({
   const setOpen = controlledOnOpenChange ?? setInternalOpen;
   const [code, setCode] = useState(branch?.code ?? '');
   const [name, setName] = useState(branch?.name ?? '');
+  const [businessUnitId, setBusinessUnitId] = useState(
+    branch?.business_unit_id ?? businessUnits[0]?.id ?? '',
+  );
   const [pending, startTransition] = useTransition();
+
+  const businessUnitOptions = businessUnits.map((b) => ({
+    value: b.id,
+    label: `${b.code} — ${b.name}`,
+  }));
 
   const isEdit = mode === 'edit';
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!businessUnitId) {
+      toast.error('Pick a business unit');
+      return;
+    }
     startTransition(async () => {
       const result = isEdit
-        ? await updateBranch({ id: branch!.id, name })
-        : await createBranch({ code, name });
+        ? await updateBranch({ id: branch!.id, name, business_unit_id: businessUnitId })
+        : await createBranch({ code, name, business_unit_id: businessUnitId });
       if (result.ok) {
         toast.success(isEdit ? 'Branch updated' : 'Branch created');
         setOpen(false);
@@ -111,6 +132,25 @@ export function BranchFormDialog({
                 required
                 maxLength={120}
               />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label className="font-semibold">Business Unit *</Label>
+              <Select
+                items={businessUnitOptions}
+                value={businessUnitId}
+                onValueChange={(v) => v && setBusinessUnitId(v)}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {businessUnitOptions.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs font-medium text-muted-foreground">
+                Which business line this branch belongs to. Used to scope staff visibility.
+              </p>
             </div>
           </div>
 

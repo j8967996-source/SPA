@@ -73,6 +73,7 @@ export type Database = {
       branches: {
         Row: {
           active: boolean
+          business_unit_id: string
           code: string
           created_at: string
           created_by: string | null
@@ -83,6 +84,7 @@ export type Database = {
         }
         Insert: {
           active?: boolean
+          business_unit_id: string
           code: string
           created_at?: string
           created_by?: string | null
@@ -93,6 +95,7 @@ export type Database = {
         }
         Update: {
           active?: boolean
+          business_unit_id?: string
           code?: string
           created_at?: string
           created_by?: string | null
@@ -101,7 +104,15 @@ export type Database = {
           updated_at?: string
           updated_by?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "branches_business_unit_id_fkey"
+            columns: ["business_unit_id"]
+            isOneToOne: false
+            referencedRelation: "business_units"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       business_units: {
         Row: {
@@ -2889,6 +2900,36 @@ export type Database = {
             columns: ["original_soa_id"]
             isOneToOne: false
             referencedRelation: "revenue_soa"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      staff_user_business_units: {
+        Row: {
+          business_unit_id: string
+          staff_user_id: string
+        }
+        Insert: {
+          business_unit_id: string
+          staff_user_id: string
+        }
+        Update: {
+          business_unit_id?: string
+          staff_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_user_business_units_business_unit_id_fkey"
+            columns: ["business_unit_id"]
+            isOneToOne: false
+            referencedRelation: "business_units"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_user_business_units_staff_user_id_fkey"
+            columns: ["staff_user_id"]
+            isOneToOne: false
+            referencedRelation: "staff_users"
             referencedColumns: ["id"]
           },
         ]
