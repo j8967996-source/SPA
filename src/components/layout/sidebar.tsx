@@ -132,7 +132,7 @@ export function Sidebar() {
       </div>
 
       {/* Main nav */}
-      <nav className="flex-1 overflow-y-auto px-4 py-4">
+      <nav className="flex-1 overflow-y-auto px-6 py-4">
         <div className="flex flex-col gap-1">
           {mainNavItems.map((item) => (
             <NavLink key={item.label} item={item} pathname={pathname} />
@@ -141,7 +141,7 @@ export function Sidebar() {
       </nav>
 
       {/* Bottom nav */}
-      <div className="border-t border-sidebar-border px-4 py-3">
+      <div className="border-t border-sidebar-border px-6 py-3">
         <div className="flex flex-col gap-1">
           {bottomNavItems.map((item) => {
             const Icon = item.icon;
