@@ -148,6 +148,9 @@ export function ServiceCategoryFormDialog({
                   <SelectItem value="shared">Shared</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-xs font-medium text-muted-foreground">
+                <strong>業別</strong>，不是門市。SPA / Gym 二擇一，或選 Shared（兩種業別共用）。
+              </p>
             </div>
 
             <div className="flex flex-col gap-2">
