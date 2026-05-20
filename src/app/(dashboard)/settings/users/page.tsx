@@ -26,7 +26,7 @@ async function fetchData() {
       .select(`
         id, email, acumatica_user_id, display_name, role, home_branch_id,
         active, last_login_at, manager_pin_hash,
-        home_branch:branches ( code, name ),
+        home_branch:branches!staff_users_home_branch_id_fkey ( code, name ),
         staff_user_branches ( branch_id, branches ( id, code, name ) )
       `)
       .order('acumatica_user_id'),
