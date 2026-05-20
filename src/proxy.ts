@@ -6,6 +6,9 @@ const SESSION_COOKIE = 'hhg_spa_session';
 
 // Next.js 16 renamed the "middleware" file convention to "proxy".
 export function proxy(req: NextRequest) {
+  // Dev-only login bypass — let everything through.
+  if (process.env.AUTH_BYPASS === 'true') return NextResponse.next();
+
   const hasSession = req.cookies.has(SESSION_COOKIE);
   const { pathname } = req.nextUrl;
   const isLogin = pathname === '/login';

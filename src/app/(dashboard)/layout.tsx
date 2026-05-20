@@ -2,14 +2,14 @@ import { redirect } from 'next/navigation';
 
 import { Sidebar } from '@/components/layout/sidebar';
 import { TopBar } from '@/components/layout/topbar';
-import { readSession } from '@/lib/session';
+import { currentSession } from '@/lib/auth';
 
 export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const session = await readSession();
+  const session = await currentSession();
   if (!session) redirect('/login');
 
   return (

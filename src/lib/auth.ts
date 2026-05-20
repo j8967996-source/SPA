@@ -31,8 +31,38 @@ export async function verifyCredentials(
   };
 }
 
+// Dev-only login bypass: when AUTH_BYPASS=true and there is no real session,
+// act as the seeded admin. Controlled by env (default off) so it never ships on.
+async function bypassAdminSession(): Promise<SessionPayload | null> {
+  if (process.env.AUTH_BYPASS !== 'true') return null;
+  const supabase = createServiceClient();
+  const { data } = await supabase
+    .from('staff_users')
+    .select('id, email, acumatica_user_id, display_name, role, home_branch_id')
+    .eq('email', 'admin@acumatica.local')
+    .maybeSingle();
+  if (data) {
+    return {
+      staffUserId: data.id,
+      email: data.email,
+      acumaticaUserId: data.acumatica_user_id,
+      displayName: data.display_name,
+      role: data.role as Role,
+      homeBranchId: data.home_branch_id,
+    };
+  }
+  return {
+    staffUserId: '00000000-0000-0000-0000-000000000000',
+    email: 'admin@acumatica.local',
+    acumaticaUserId: 'admin',
+    displayName: 'System Admin (bypass)',
+    role: 'admin',
+    homeBranchId: null,
+  };
+}
+
 export async function currentSession(): Promise<SessionPayload | null> {
-  return readSession();
+  return (await readSession()) ?? (await bypassAdminSession());
 }
 
 export function isManager(s: SessionPayload | null): boolean {
