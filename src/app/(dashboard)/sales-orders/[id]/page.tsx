@@ -39,6 +39,7 @@ async function fetchData(id: string) {
         method:payment_methods ( display_name ),
         tips ( amount_cents )
       ),
+      feedback ( order_item_id, score ),
       order_items (
         id, order_customer_id, list_price_cents, discount_amount_cents, final_amount_cents, status,
         therapist_id, resource_id, duration_minutes, actual_start, actual_end,
@@ -176,6 +177,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     tip_cents: (p.tips ?? []).reduce((s, t) => s + t.amount_cents, 0),
     paid_at: p.paid_at,
   }));
+  const feedbackByItem = new Map((order.feedback ?? []).map((f) => [f.order_item_id, f.score]));
   const items = (order.order_items ?? []).map((it) => {
     const svc = one(it.service);
     const th = one(it.therapist);
@@ -195,6 +197,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       discount_amount_cents: it.discount_amount_cents,
       final_amount_cents: it.final_amount_cents,
       status: it.status,
+      feedback_score: feedbackByItem.get(it.id) ?? null,
     };
   });
 

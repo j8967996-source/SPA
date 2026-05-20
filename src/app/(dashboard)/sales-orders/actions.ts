@@ -330,6 +330,53 @@ export async function finishOrderItem(itemId: string, orderId: string): Promise<
   return { ok: true };
 }
 
+const feedbackSchema = z.object({
+  order_id: z.string().uuid(),
+  order_item_id: z.string().uuid(),
+  score: z.coerce.number().int().min(1).max(10),
+  age: z.coerce.number().int().min(1).max(120).optional().nullable(),
+  email: z.string().email().optional().nullable().or(z.literal('')),
+  comment: z.string().max(1000).optional().nullable(),
+});
+
+// Customer feedback per service line. Score (1-10) is required; submitting marks
+// the item feedback_done. Spec: feedback submission is the service-complete check.
+export async function submitFeedback(input: unknown): Promise<ActionResult> {
+  const parsed = feedbackSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'A score (1-10) is required' };
+  const d = parsed.data;
+  const supabase = createServiceClient();
+
+  const { data: item } = await supabase
+    .from('order_items')
+    .select('therapist_id, status')
+    .eq('id', d.order_item_id)
+    .single();
+  if (!item) return { ok: false, error: 'Service line not found' };
+
+  await supabase.from('feedback').delete().eq('order_item_id', d.order_item_id);
+  const { error } = await supabase.from('feedback').insert({
+    order_id: d.order_id,
+    order_item_id: d.order_item_id,
+    therapist_id: item.therapist_id,
+    score: d.score,
+    age: d.age ?? null,
+    email: d.email ? d.email : null,
+    comment: d.comment || null,
+    language: 'en',
+    status: 'submitted',
+    filled_via: 'counter',
+    filled_at: new Date().toISOString(),
+  });
+  if (error) return { ok: false, error: error.message };
+
+  if (item.status === 'service_completed') {
+    await supabase.from('order_items').update({ status: 'feedback_done' }).eq('id', d.order_item_id);
+  }
+  revalidatePath(`/sales-orders/${d.order_id}`);
+  return { ok: true };
+}
+
 // ---------------------------------------------------------------------------
 // Payment + status machine
 // ---------------------------------------------------------------------------

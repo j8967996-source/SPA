@@ -33,6 +33,7 @@ import {
 } from '@/app/(dashboard)/sales-orders/actions';
 import { CustomerPaymentCard, type TipTarget } from '@/components/sales-orders/customer-payment-card';
 import { ReasonDialog } from '@/components/sales-orders/reason-dialog';
+import { FeedbackDialog } from '@/components/sales-orders/feedback-dialog';
 
 function peso(cents: number): string {
   return `₱${(cents / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
@@ -53,6 +54,7 @@ interface OrderItem {
   discount_amount_cents: number;
   final_amount_cents: number;
   status: string;
+  feedback_score: number | null;
 }
 interface OrderCustomer {
   id: string;
@@ -152,6 +154,7 @@ export function OrderWorkspace({
   const [payMode, setPayMode] = useState<'split' | 'together'>('split');
   const [voidOpen, setVoidOpen] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
+  const [feedbackItem, setFeedbackItem] = useState<OrderItem | null>(null);
 
   const due = Math.max(0, order.total_cents - order.paid_cents);
   const canRunService = ['open', 'in_service'].includes(order.status);
@@ -392,8 +395,11 @@ export function OrderWorkspace({
                         {it.status === 'in_service' && (
                           <span className="ml-2 text-[10px] font-bold uppercase tracking-wide text-blue-600 dark:text-blue-400">In service</span>
                         )}
-                        {it.status === 'service_completed' && (
+                        {(it.status === 'service_completed' || it.status === 'feedback_done') && (
                           <span className="ml-2 text-[10px] font-bold uppercase tracking-wide text-primary">Done</span>
+                        )}
+                        {it.feedback_score != null && (
+                          <span className="ml-2 text-[10px] font-bold text-amber-600 dark:text-amber-400">★ {it.feedback_score}/10</span>
                         )}
                       </div>
                       {detailParts.length > 0 && (
@@ -408,6 +414,9 @@ export function OrderWorkspace({
                       )}
                       {canRunService && it.status === 'in_service' && (
                         <Button size="sm" onClick={() => doFinishItem(it.id)} disabled={pending}>Finish</Button>
+                      )}
+                      {['service_completed', 'feedback_done'].includes(it.status) && it.feedback_score == null && (
+                        <Button size="sm" variant="outline" onClick={() => setFeedbackItem(it)} disabled={pending}>Feedback</Button>
                       )}
                       <span className="font-bold tabular">
                         {it.discount_amount_cents > 0 && (
@@ -644,6 +653,16 @@ export function OrderWorkspace({
         pending={pending}
         onConfirm={doReopen}
       />
+      {feedbackItem && (
+        <FeedbackDialog
+          orderId={order.id}
+          orderItemId={feedbackItem.id}
+          serviceName={feedbackItem.service_name}
+          therapistName={feedbackItem.therapist_name}
+          open={!!feedbackItem}
+          onOpenChange={(o) => { if (!o) setFeedbackItem(null); }}
+        />
+      )}
     </div>
   );
 }
