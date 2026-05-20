@@ -15,6 +15,7 @@ import {
   Building2,
   Database,
   CircleAlert,
+  ListOrdered,
   LucideIcon,
 } from 'lucide-react';
 
@@ -43,6 +44,7 @@ export const mainNavItems: NavItem[] = [
   { label: 'Reservations', href: '/reservations', icon: CalendarDays },
   { label: 'Shift Schedule', href: '/shift-schedule', icon: CalendarClock },
   { label: 'Availability', href: '/availability', icon: UserCheck },
+  { label: 'Waitlist', href: '/waitlist', icon: ListOrdered },
   { label: 'Stored Value Cards', href: '/stored-value-cards', icon: CreditCard },
   {
     label: 'Reconciliation',
