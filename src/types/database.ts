@@ -827,6 +827,7 @@ export type Database = {
           leave_type: string | null
           note: string | null
           override_commission_class_id: string | null
+          resource_id: string | null
           shift_date: string
           shift_end: string | null
           shift_start: string | null
@@ -844,6 +845,7 @@ export type Database = {
           leave_type?: string | null
           note?: string | null
           override_commission_class_id?: string | null
+          resource_id?: string | null
           shift_date: string
           shift_end?: string | null
           shift_start?: string | null
@@ -861,6 +863,7 @@ export type Database = {
           leave_type?: string | null
           note?: string | null
           override_commission_class_id?: string | null
+          resource_id?: string | null
           shift_date?: string
           shift_end?: string | null
           shift_start?: string | null
@@ -888,6 +891,13 @@ export type Database = {
             columns: ["override_commission_class_id"]
             isOneToOne: false
             referencedRelation: "commission_classes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "employee_shifts_resource_id_fkey"
+            columns: ["resource_id"]
+            isOneToOne: false
+            referencedRelation: "resources"
             referencedColumns: ["id"]
           },
         ]
