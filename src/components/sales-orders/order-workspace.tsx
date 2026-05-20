@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import {
   Select,
@@ -85,6 +86,8 @@ interface Props {
   order: {
     id: string;
     status: string;
+    subtotal_cents: number;
+    discount_cents: number;
     total_cents: number;
     paid_cents: number;
     editable: boolean;
@@ -92,6 +95,7 @@ interface Props {
   customers: OrderCustomer[];
   items: OrderItem[];
   payments: PaymentRecord[];
+  history: { at: string; label: string; reason: string | null; who: string | null }[];
   serviceItems: ServiceVariant[];
   employees: Opt[];
   borrowableEmployees: BorrowOpt[];
@@ -120,6 +124,7 @@ export function OrderWorkspace({
   customers,
   items,
   payments,
+  history,
   serviceItems,
   employees,
   borrowableEmployees,
@@ -365,6 +370,15 @@ export function OrderWorkspace({
         </CardContent>
       </Card>
 
+      <Tabs defaultValue="guests">
+        <TabsList variant="line">
+          <TabsTrigger value="guests">Guest List</TabsTrigger>
+          <TabsTrigger value="folio">Folio</TabsTrigger>
+          <TabsTrigger value="feedback">Feedback</TabsTrigger>
+          <TabsTrigger value="history">Change History</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="guests" className="flex flex-col gap-4">
       {/* add customer */}
       {order.editable && (
         <Card className="border-dashed">
@@ -568,6 +582,14 @@ export function OrderWorkspace({
           </Card>
         ))
       )}
+        </TabsContent>
+
+        <TabsContent value="folio" className="flex flex-col gap-4">
+          <div className="grid grid-cols-3 gap-3">
+            <Card><CardContent className="py-3"><p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Total charges</p><p className="text-xl font-extrabold tabular mt-1">{peso(order.total_cents)}</p></CardContent></Card>
+            <Card><CardContent className="py-3"><p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Paid</p><p className="text-xl font-extrabold tabular mt-1">{peso(order.paid_cents)}</p></CardContent></Card>
+            <Card><CardContent className="py-3"><p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Outstanding</p><p className="text-xl font-extrabold tabular mt-1">{peso(due)}</p></CardContent></Card>
+          </div>
 
       {/* AR-billed orders are invoiced, not collected at the counter */}
       {paymentPolicy.arBilled && ['completed', 'paid'].includes(order.status) && (
@@ -670,6 +692,52 @@ export function OrderWorkspace({
           </CardContent>
         </Card>
       )}
+        </TabsContent>
+
+        <TabsContent value="feedback" className="flex flex-col gap-2">
+          {items.length === 0 ? (
+            <p className="text-sm font-medium text-muted-foreground px-1">No services yet.</p>
+          ) : (
+            <Card>
+              <CardContent className="py-2 flex flex-col divide-y divide-border">
+                {items.map((it) => (
+                  <div key={it.id} className="flex items-center justify-between py-2 text-sm">
+                    <span className="font-semibold">{it.service_name}<span className="ml-2 font-medium text-muted-foreground">{it.therapist_name ?? 'Unassigned'}</span></span>
+                    {it.feedback_score != null
+                      ? <span className="font-bold text-amber-600 dark:text-amber-400">★ {it.feedback_score}/10</span>
+                      : <span className="text-xs font-medium text-muted-foreground">Not submitted</span>}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        <TabsContent value="history">
+          {history.length === 0 ? (
+            <p className="text-sm font-medium text-muted-foreground px-1">No changes logged yet.</p>
+          ) : (
+            <Card>
+              <CardContent className="py-3">
+                <ul className="flex flex-col gap-2">
+                  {history.map((h, i) => (
+                    <li key={i} className="flex items-start justify-between gap-3 text-sm border-b border-border last:border-0 pb-2 last:pb-0">
+                      <div className="min-w-0">
+                        <span className="font-semibold capitalize">{h.label.replace(/_/g, ' ')}</span>
+                        {h.reason && <span className="ml-2 font-medium text-muted-foreground">{h.reason}</span>}
+                      </div>
+                      <div className="shrink-0 text-right text-xs font-medium text-muted-foreground">
+                        <div>{h.who ?? 'system'}</div>
+                        <div className="tabular">{new Date(h.at).toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'short', timeStyle: 'short' })}</div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+      </Tabs>
 
       <ReasonDialog
         open={voidOpen}

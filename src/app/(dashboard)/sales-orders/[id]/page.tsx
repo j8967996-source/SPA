@@ -301,6 +301,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         order={{
           id: order.id,
           status: order.status,
+          subtotal_cents: order.subtotal_cents,
+          discount_cents: order.discount_cents,
           total_cents: order.total_cents,
           paid_cents: order.paid_cents,
           editable,
@@ -308,6 +310,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         customers={customers}
         items={items}
         payments={payments}
+        history={history}
         serviceItems={serviceItems}
         employees={employees}
         borrowableEmployees={borrowableEmployees}
@@ -320,28 +323,6 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         paymentPolicy={paymentPolicy}
         canManage={canManage}
       />
-
-      {history.length > 0 && (
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-base font-bold">Change History</CardTitle></CardHeader>
-          <CardContent>
-            <ul className="flex flex-col gap-2">
-              {history.map((h, i) => (
-                <li key={i} className="flex items-start justify-between gap-3 text-sm border-b border-border last:border-0 pb-2 last:pb-0">
-                  <div className="min-w-0">
-                    <span className="font-semibold capitalize">{h.label.replace(/_/g, ' ')}</span>
-                    {h.reason && <span className="ml-2 font-medium text-muted-foreground">{h.reason}</span>}
-                  </div>
-                  <div className="shrink-0 text-right text-xs font-medium text-muted-foreground">
-                    <div>{h.who ?? 'system'}</div>
-                    <div className="tabular">{new Date(h.at).toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'short', timeStyle: 'short' })}</div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }
