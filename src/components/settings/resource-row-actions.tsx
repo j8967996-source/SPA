@@ -18,11 +18,10 @@ import { ResourceFormDialog, type ResourceItem } from './resource-form-dialog';
 
 interface Props {
   resource: ResourceItem & { status: 'active' | 'cleaning' | 'maintenance' | 'closed' };
-  branches: { id: string; code: string; name: string }[];
-  businessUnits: { id: string; code: string; name: string }[];
+  branches: { id: string; code: string; name: string; businessUnits: { id: string; code: string; name: string }[] }[];
 }
 
-export function ResourceRowActions({ resource, branches, businessUnits }: Props) {
+export function ResourceRowActions({ resource, branches }: Props) {
   const [pending, startTransition] = useTransition();
   const [editOpen, setEditOpen] = useState(false);
 
@@ -83,7 +82,6 @@ export function ResourceRowActions({ resource, branches, businessUnits }: Props)
         mode="edit"
         resource={resource}
         branches={branches}
-        businessUnits={businessUnits}
         open={editOpen}
         onOpenChange={setEditOpen}
       />

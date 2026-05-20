@@ -47,7 +47,14 @@ async function fetchData() {
       .order('service_date', { ascending: false })
       .order('order_no', { ascending: false })
       .limit(200),
-    supabase.from('branches').select('id, code, name').eq('active', true).order('code'),
+    supabase
+      .from('branches')
+      .select(`
+        id, code, name,
+        branch_business_units ( business_units ( id, code, name ) )
+      `)
+      .eq('active', true)
+      .order('code'),
     supabase
       .from('customer_sources')
       .select('id, code, name, default_billing_to_id')
@@ -59,9 +66,17 @@ async function fetchData() {
   if (brRes.error) throw new Error(brRes.error.message);
   if (srcRes.error) throw new Error(srcRes.error.message);
   if (billRes.error) throw new Error(billRes.error.message);
+  const branches = (brRes.data ?? []).map((b) => ({
+    id: b.id,
+    code: b.code,
+    name: b.name,
+    businessUnits: (b.branch_business_units ?? [])
+      .map((row) => (Array.isArray(row.business_units) ? row.business_units[0] : row.business_units))
+      .filter(Boolean) as { id: string; code: string; name: string }[],
+  }));
   return {
     orders: ordRes.data ?? [],
-    branches: brRes.data ?? [],
+    branches,
     sources: srcRes.data ?? [],
     billingDestinations: billRes.data ?? [],
   };

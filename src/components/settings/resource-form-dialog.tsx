@@ -37,23 +37,23 @@ export interface ResourceItem {
   business_unit_id: string | null;
 }
 
-interface BranchOption {
-  id: string;
-  code: string;
-  name: string;
-}
-
 interface BusinessUnitOption {
   id: string;
   code: string;
   name: string;
 }
 
+interface BranchOption {
+  id: string;
+  code: string;
+  name: string;
+  businessUnits: BusinessUnitOption[];
+}
+
 interface Props {
   mode?: 'create' | 'edit';
   resource?: ResourceItem;
   branches: BranchOption[];
-  businessUnits: BusinessUnitOption[];
   trigger?: React.ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -71,7 +71,6 @@ export function ResourceFormDialog({
   mode = 'create',
   resource,
   branches,
-  businessUnits,
   trigger,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
@@ -81,15 +80,28 @@ export function ResourceFormDialog({
   const setOpen = controlledOnOpenChange ?? setInternalOpen;
   const [pending, startTransition] = useTransition();
 
-  const [branchId, setBranchId] = useState(resource?.branch_id ?? branches[0]?.id ?? '');
+  const initialBranchId = resource?.branch_id ?? branches[0]?.id ?? '';
+  const initialUnits = branches.find((b) => b.id === initialBranchId)?.businessUnits ?? [];
+
+  const [branchId, setBranchId] = useState(initialBranchId);
   const [resourceType, setResourceType] = useState<ResourceType>(resource?.resource_type ?? 'massage_bed');
   const [resourceName, setResourceName] = useState(resource?.resource_name ?? '');
   const [locationZone, setLocationZone] = useState(resource?.location_zone ?? '');
   const [capacity, setCapacity] = useState(String(resource?.capacity ?? 1));
-  const [businessUnitId, setBusinessUnitId] = useState(resource?.business_unit_id ?? businessUnits[0]?.id ?? '');
+  const [businessUnitId, setBusinessUnitId] = useState(resource?.business_unit_id ?? initialUnits[0]?.id ?? '');
 
   const branchOptions = branches.map((b) => ({ value: b.id, label: `${b.code} — ${b.name}` }));
-  const businessUnitOptions = businessUnits.map((b) => ({ value: b.id, label: `${b.code} — ${b.name}` }));
+  const selectedBranch = branches.find((b) => b.id === branchId);
+  const businessUnitOptions = (selectedBranch?.businessUnits ?? []).map((b) => ({ value: b.id, label: `${b.code} — ${b.name}` }));
+
+  function handleBranchChange(v: string) {
+    if (!v) return;
+    setBranchId(v);
+    const units = branches.find((b) => b.id === v)?.businessUnits ?? [];
+    if (!units.some((u) => u.id === businessUnitId)) {
+      setBusinessUnitId(units[0]?.id ?? '');
+    }
+  }
 
   const isEdit = mode === 'edit';
 
@@ -140,7 +152,7 @@ export function ResourceFormDialog({
           <div className="flex flex-col gap-4 py-4">
             <div className="flex flex-col gap-2">
               <Label className="font-semibold">Branch *</Label>
-              <Select items={branchOptions} value={branchId} onValueChange={(v) => v && setBranchId(v)}>
+              <Select items={branchOptions} value={branchId} onValueChange={(v) => v && handleBranchChange(v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {branchOptions.map((opt) => (
@@ -152,14 +164,20 @@ export function ResourceFormDialog({
 
             <div className="flex flex-col gap-2">
               <Label className="font-semibold">Business Unit *</Label>
-              <Select items={businessUnitOptions} value={businessUnitId} onValueChange={(v) => v && setBusinessUnitId(v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {businessUnitOptions.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {businessUnitOptions.length === 0 ? (
+                <p className="text-sm font-medium text-muted-foreground rounded-md border border-dashed px-3 py-2">
+                  This branch has no business units assigned. Assign one in Settings → Branches first.
+                </p>
+              ) : (
+                <Select items={businessUnitOptions} value={businessUnitId} onValueChange={(v) => v && setBusinessUnitId(v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {businessUnitOptions.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             <div className="flex flex-col gap-2">

@@ -111,8 +111,8 @@ export default async function BranchesPage() {
                           <span className="text-muted-foreground text-sm">—</span>
                         ) : (
                           units.map((u) => (
-                            <Badge key={u.id} variant="secondary" className="font-bold font-mono text-xs uppercase shrink-0 whitespace-nowrap">
-                              {u.code}
+                            <Badge key={u.id} variant="secondary" className="font-bold text-xs shrink-0 whitespace-nowrap">
+                              {u.name}
                             </Badge>
                           ))
                         )}

@@ -7,6 +7,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 
 const schema = z.object({
   branch_id: z.string().uuid(),
+  business_unit_id: z.string().uuid().optional().nullable(),
   source_id: z.string().uuid().optional().nullable(),
   billing_to_id: z.string().uuid().optional().nullable(),
   order_type: z.enum(['walk_in', 'reservation', 'package_use', 'stored_value', 'external']).default('walk_in'),
@@ -40,10 +41,17 @@ export async function createDraftOrder(input: unknown): Promise<ActionResult<{ i
 
   const { data: branch, error: be } = await supabase
     .from('branches')
-    .select('code')
+    .select('code, branch_business_units ( business_unit_id )')
     .eq('id', d.branch_id)
     .single();
   if (be || !branch) return { ok: false, error: 'Branch not found' };
+
+  const branchUnitIds = (branch.branch_business_units ?? []).map((r) => r.business_unit_id);
+  if (d.business_unit_id && !branchUnitIds.includes(d.business_unit_id)) {
+    return { ok: false, error: 'Selected business unit is not assigned to this branch' };
+  }
+  // Branch hosts exactly one unit → attribute automatically.
+  const businessUnitId = d.business_unit_id ?? (branchUnitIds.length === 1 ? branchUnitIds[0] : null);
 
   const order_no = await nextOrderNo(branch.code, d.service_date);
 
@@ -52,6 +60,7 @@ export async function createDraftOrder(input: unknown): Promise<ActionResult<{ i
     .insert({
       order_no,
       branch_id: d.branch_id,
+      business_unit_id: businessUnitId,
       source_id: d.source_id || null,
       billing_to_id: d.billing_to_id || null,
       order_type: d.order_type,

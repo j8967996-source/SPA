@@ -20,7 +20,7 @@ export const dynamic = 'force-dynamic';
 
 async function fetchData() {
   const supabase = createServiceClient();
-  const [rRes, bRes, buRes] = await Promise.all([
+  const [rRes, bRes] = await Promise.all([
     supabase
       .from('resources')
       .select(`
@@ -29,13 +29,26 @@ async function fetchData() {
         branch:branches ( code, name )
       `)
       .order('resource_name'),
-    supabase.from('branches').select('id, code, name').eq('active', true).order('code'),
-    supabase.from('business_units').select('id, code, name').eq('active', true).order('code'),
+    supabase
+      .from('branches')
+      .select(`
+        id, code, name,
+        branch_business_units ( business_units ( id, code, name ) )
+      `)
+      .eq('active', true)
+      .order('code'),
   ]);
   if (rRes.error) throw new Error(rRes.error.message);
   if (bRes.error) throw new Error(bRes.error.message);
-  if (buRes.error) throw new Error(buRes.error.message);
-  return { resources: rRes.data ?? [], branches: bRes.data ?? [], businessUnits: buRes.data ?? [] };
+  const branches = (bRes.data ?? []).map((b) => ({
+    id: b.id,
+    code: b.code,
+    name: b.name,
+    businessUnits: (b.branch_business_units ?? [])
+      .map((row) => (Array.isArray(row.business_units) ? row.business_units[0] : row.business_units))
+      .filter(Boolean) as { id: string; code: string; name: string }[],
+  }));
+  return { resources: rRes.data ?? [], branches };
 }
 
 const TYPE_LABEL: Record<string, string> = {
@@ -56,7 +69,7 @@ function statusBadge(status: string) {
 }
 
 export default async function ResourcesPage() {
-  const { resources, branches, businessUnits } = await fetchData();
+  const { resources, branches } = await fetchData();
 
   return (
     <div className="flex flex-col gap-6">
@@ -76,7 +89,6 @@ export default async function ResourcesPage() {
         </div>
         <ResourceFormDialog
           branches={branches}
-          businessUnits={businessUnits}
           trigger={
             <Button>
               <Plus className="size-4" />
@@ -138,7 +150,6 @@ export default async function ResourcesPage() {
                       <ResourceRowActions
                         resource={{ ...resourceItem, status: r.status as 'active' | 'cleaning' | 'maintenance' | 'closed' }}
                         branches={branches}
-                        businessUnits={businessUnits}
                       />
                     </TableCell>
                   </TableRow>
