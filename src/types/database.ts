@@ -3004,6 +3004,7 @@ export type Database = {
           manager_pin_last_used_at: string | null
           manager_pin_locked_until: string | null
           manager_pin_set_at: string | null
+          password_hash: string | null
           role: string
           updated_at: string
         }
@@ -3022,6 +3023,7 @@ export type Database = {
           manager_pin_last_used_at?: string | null
           manager_pin_locked_until?: string | null
           manager_pin_set_at?: string | null
+          password_hash?: string | null
           role?: string
           updated_at?: string
         }
@@ -3040,6 +3042,7 @@ export type Database = {
           manager_pin_last_used_at?: string | null
           manager_pin_locked_until?: string | null
           manager_pin_set_at?: string | null
+          password_hash?: string | null
           role?: string
           updated_at?: string
         }

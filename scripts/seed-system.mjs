@@ -3,6 +3,7 @@
 // Usage: node scripts/seed-system.mjs
 
 import { createClient } from '@supabase/supabase-js';
+import bcrypt from 'bcryptjs';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -48,7 +49,7 @@ async function main() {
     if (error) throw error;
   }
 
-  // ---- Sample admin user
+  // ---- Sample admin user (bootstrap login: admin@acumatica.local / ChangeMe123!)
   console.log('  · admin user');
   const { error: ue } = await supabase.from('staff_users').upsert(
     {
@@ -57,6 +58,7 @@ async function main() {
       display_name: 'System Admin',
       role: 'admin',
       active: true,
+      password_hash: await bcrypt.hash('ChangeMe123!', 10),
     },
     { onConflict: 'acumatica_user_id' },
   );
