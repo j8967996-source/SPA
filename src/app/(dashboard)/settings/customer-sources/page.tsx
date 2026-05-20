@@ -21,6 +21,13 @@ import { CustomerSourceRowActions } from '@/components/settings/customer-source-
 
 export const dynamic = 'force-dynamic';
 
+function formatDiscount(d: { discount_percent: number; discount_amount_cents: number } | null): string | null {
+  if (!d) return null;
+  if (d.discount_percent > 0) return `${d.discount_percent}%`;
+  if (d.discount_amount_cents > 0) return `₱${(d.discount_amount_cents / 100).toLocaleString()}`;
+  return null;
+}
+
 async function fetchData() {
   const supabase = createServiceClient();
   const [cs, bd, dc] = await Promise.all([
@@ -29,7 +36,7 @@ async function fetchData() {
       .select(`
         id, code, name, default_billing_to_id, default_discount_class_id, active,
         billing:billing_destinations ( code, name ),
-        discount:discount_classes ( code, description )
+        discount:discount_classes ( code, description, discount_percent, discount_amount_cents )
       `)
       .order('code'),
     supabase.from('billing_destinations').select('id, code, name').eq('active', true).order('code'),
@@ -121,8 +128,8 @@ export default async function CustomerSourcesPage() {
                       )}
                     </TableCell>
                     <TableCell className="font-medium">
-                      {disc ? (
-                        <span className="font-mono font-bold">{disc.code}</span>
+                      {formatDiscount(disc) ? (
+                        <span className="font-bold tabular">{formatDiscount(disc)}</span>
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}
