@@ -1,10 +1,11 @@
 import { NextResponse, type NextRequest } from 'next/server';
 
 // Keep in sync with SESSION_COOKIE in src/lib/session.ts (that module is
-// server-only and cannot be imported into edge middleware).
+// server-only and cannot be imported into the edge proxy).
 const SESSION_COOKIE = 'hhg_spa_session';
 
-export function middleware(req: NextRequest) {
+// Next.js 16 renamed the "middleware" file convention to "proxy".
+export function proxy(req: NextRequest) {
   const hasSession = req.cookies.has(SESSION_COOKIE);
   const { pathname } = req.nextUrl;
   const isLogin = pathname === '/login';
