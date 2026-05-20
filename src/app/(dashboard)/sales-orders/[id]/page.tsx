@@ -216,6 +216,34 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
 
   const editable = ['draft', 'open', 'in_service'].includes(order.status);
 
+  // Change history — merged audit timeline (status changes + edits/reopens).
+  const supabaseLog = createServiceClient();
+  const [statusLog, editLog] = await Promise.all([
+    supabaseLog
+      .from('order_status_log')
+      .select('from_status, to_status, reason, changed_at, staff:staff_users!order_status_log_changed_by_staff_id_fkey ( display_name )')
+      .eq('entity_type', 'order')
+      .eq('entity_id', id),
+    supabaseLog
+      .from('order_edit_log')
+      .select('from_status, to_status, edit_reason, edited_at, staff:staff_users!order_edit_log_edited_by_staff_id_fkey ( display_name )')
+      .eq('order_id', id),
+  ]);
+  const history = [
+    ...(statusLog.data ?? []).map((l) => ({
+      at: l.changed_at,
+      label: `${l.from_status ?? '—'} → ${l.to_status}`,
+      reason: l.reason,
+      who: one(l.staff)?.display_name ?? null,
+    })),
+    ...(editLog.data ?? []).map((l) => ({
+      at: l.edited_at,
+      label: `Reopen ${l.from_status ?? ''} → ${l.to_status ?? ''}`,
+      reason: l.edit_reason,
+      who: one(l.staff)?.display_name ?? null,
+    })),
+  ].sort((a, b) => (a.at < b.at ? 1 : -1));
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -288,6 +316,28 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         paymentPolicy={paymentPolicy}
         canManage={canManage}
       />
+
+      {history.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2"><CardTitle className="text-base font-bold">Change History</CardTitle></CardHeader>
+          <CardContent>
+            <ul className="flex flex-col gap-2">
+              {history.map((h, i) => (
+                <li key={i} className="flex items-start justify-between gap-3 text-sm border-b border-border last:border-0 pb-2 last:pb-0">
+                  <div className="min-w-0">
+                    <span className="font-semibold capitalize">{h.label.replace(/_/g, ' ')}</span>
+                    {h.reason && <span className="ml-2 font-medium text-muted-foreground">{h.reason}</span>}
+                  </div>
+                  <div className="shrink-0 text-right text-xs font-medium text-muted-foreground">
+                    <div>{h.who ?? 'system'}</div>
+                    <div className="tabular">{new Date(h.at).toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'short', timeStyle: 'short' })}</div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
