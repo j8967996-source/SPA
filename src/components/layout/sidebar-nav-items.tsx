@@ -63,9 +63,9 @@ export const mainNavItems: NavItem[] = [
         items: [
           { label: 'Business Units', href: '/settings/business-units' },
           { label: 'Branches', href: '/settings/branches' },
-          { label: 'Employees', href: '/settings/employees' },
           { label: 'Positions', href: '/settings/positions' },
           { label: 'Commission Classes', href: '/settings/commission-classes' },
+          { label: 'Employees', href: '/settings/employees' },
         ],
       },
       {

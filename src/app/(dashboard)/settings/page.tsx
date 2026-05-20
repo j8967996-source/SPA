@@ -24,9 +24,9 @@ const sections = [
     items: [
       { icon: Layers, label: 'Business Units', href: '/settings/business-units', desc: 'Business lines (SPA, Gym, …)' },
       { icon: Building2, label: 'Branches', href: '/settings/branches', desc: 'Manage shop locations' },
-      { icon: Users, label: 'Employees', href: '/settings/employees', desc: 'Therapists & staff records' },
       { icon: BadgeCheck, label: 'Positions', href: '/settings/positions', desc: 'Job titles (Massage Therapist, Hair Stylist…)' },
       { icon: Briefcase, label: 'Commission Classes', href: '/settings/commission-classes', desc: 'M / S / J levels and rates' },
+      { icon: Users, label: 'Employees', href: '/settings/employees', desc: 'Therapists & staff records' },
       { icon: Tags, label: 'Service Categories', href: '/settings/service-categories', desc: 'Massage / Hair / Nail / Rest' },
       { icon: ScrollText, label: 'Service Items', href: '/settings/service-items', desc: 'Individual services & pricing' },
       { icon: Wrench, label: 'Service Stations', href: '/settings/resources', desc: 'Beds, chairs, tables, rooms' },
