@@ -33,7 +33,7 @@ async function main() {
     { key: 'reservation_no_show_minutes', value: '30', value_type: 'integer', description: 'Mins past desired_service_start before auto-marking reservation as no_show' },
     { key: 'stored_value_default_expiry_days', value: '365', value_type: 'integer', description: 'Default expiry days for newly issued Stored Value Cards' },
     { key: 'exception_void_threshold_per_month', value: '5', value_type: 'integer', description: 'Highlight on Dashboard when monthly Void count exceeds this' },
-    { key: 'exception_dis90_threshold_per_month', value: '3', value_type: 'integer', description: 'Highlight when DIS-90 (客訴 100%) usage exceeds this monthly' },
+    { key: 'exception_dis90_threshold_per_month', value: '3', value_type: 'integer', description: 'Highlight when DIS-90 (customer-complaint 100%) usage exceeds this monthly' },
     { key: 'feedback_score_warning_threshold', value: '3', value_type: 'integer', description: 'Score ≤ this triggers manager notification on submit' },
     { key: 'default_prep_minutes_massage', value: '10', value_type: 'integer', description: 'Default prep minutes for new Massage service items' },
     { key: 'default_cleanup_minutes_massage', value: '15', value_type: 'integer', description: 'Default cleanup minutes for new Massage service items' },

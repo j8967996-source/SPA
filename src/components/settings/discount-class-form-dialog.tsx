@@ -221,7 +221,8 @@ export function DiscountClassFormDialog({
               <div>
                 <Label className="font-semibold cursor-pointer">Force Apply</Label>
                 <p className="text-xs font-medium text-muted-foreground">
-                  OTA-style forced discount; cannot be overridden
+                  Applied automatically and staff can&apos;t remove it — for pre-negotiated
+                  channel rates (e.g. an OTA / hotel partner that always gets this discount)
                 </p>
               </div>
               <Switch checked={forceApply} onCheckedChange={setForceApply} />

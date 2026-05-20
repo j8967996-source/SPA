@@ -80,7 +80,7 @@ async function main() {
         dc({ code: 'DIS-80', description: 'Stored Value -1', discount_percent: 10 }),
         dc({ code: 'DIS-81', description: 'Stored Value -2', discount_percent: 15 }),
         dc({ code: 'DIS-82', description: 'Stored Value -3', discount_percent: 20 }),
-        dc({ code: 'DIS-90', description: 'Fully Discount (客訴 100%)', discount_percent: 100, requires_approval: true }),
+        dc({ code: 'DIS-90', description: 'Full discount — customer complaint (100%)', discount_percent: 100, requires_approval: true }),
         dc({ code: 'DIS-91', description: 'Manager Special Discount', requires_approval: true }),
         dc({ code: 'DIS-99', description: 'Manual Input', requires_approval: true }),
       ],
