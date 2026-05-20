@@ -144,6 +144,9 @@ export function OrderWorkspace({
   const [resourceId, setResourceId] = useState(NONE);
   const noDiscount = discountClasses.find((d) => d.code === 'DIS-00');
   const [discountId, setDiscountId] = useState(noDiscount?.id ?? discountClasses[0]?.id ?? '');
+  const [discountOverride, setDiscountOverride] = useState('');
+  const selectedDiscountCode = discountClasses.find((d) => d.id === discountId)?.code ?? '';
+  const needsDiscountAmount = ['DIS-91', 'DIS-99'].includes(selectedDiscountCode);
 
   // Counter payment methods only — AR is an invoice arrangement, not a counter
   // collection, so it is never offered here. AR-billed orders skip payment.
@@ -184,8 +187,9 @@ export function OrderWorkspace({
         therapist_id: therapistId === NONE ? null : therapistId,
         resource_id: resourceId === NONE ? null : resourceId,
         discount_class_id: discountId,
+        discount_override: needsDiscountAmount ? Number(discountOverride || 0) : null,
       });
-      if (r.ok) { setSvcId(''); setGroupSel(''); setActiveCustomer(null); toast.success('Service added'); }
+      if (r.ok) { setSvcId(''); setGroupSel(''); setDiscountOverride(''); setActiveCustomer(null); toast.success('Service added'); }
       else toast.error(r.error);
     });
   }
@@ -511,7 +515,7 @@ export function OrderWorkspace({
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="col-span-2">
+                    <div className={needsDiscountAmount ? '' : 'col-span-2'}>
                       <Label className="text-xs font-semibold">Discount</Label>
                       <Select items={discOptions} value={discountId} onValueChange={(v) => v && setDiscountId(v)}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
@@ -520,6 +524,12 @@ export function OrderWorkspace({
                         </SelectContent>
                       </Select>
                     </div>
+                    {needsDiscountAmount && (
+                      <div>
+                        <Label className="text-xs font-semibold">{selectedDiscountCode} amount (₱) *</Label>
+                        <Input type="number" min="0" step="0.01" value={discountOverride} onChange={(e) => setDiscountOverride(e.target.value)} placeholder="manager-set" />
+                      </div>
+                    )}
                     <div className="col-span-2 flex gap-2 justify-end">
                       <Button size="sm" variant="ghost" onClick={() => setActiveCustomer(null)} disabled={pending}>Cancel</Button>
                       <Button size="sm" onClick={() => doAddItem(c.id)} disabled={pending || !svcId}>Add</Button>

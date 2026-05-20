@@ -213,7 +213,13 @@ const addItemSchema = z.object({
   therapist_id: z.string().uuid().optional().nullable(),
   resource_id: z.string().uuid().optional().nullable(),
   discount_class_id: z.string().uuid(),
+  // Manager-entered amount for variable discounts (DIS-91 / DIS-99), in pesos.
+  discount_override: z.coerce.number().min(0).optional().nullable(),
 });
+
+// Special discounts need manager authority (and a variable amount for 91/99).
+const MANAGER_DISCOUNTS = ['DIS-90', 'DIS-91', 'DIS-99'];
+const VARIABLE_DISCOUNTS = ['DIS-91', 'DIS-99'];
 
 export async function addOrderItem(input: unknown): Promise<ActionResult> {
   const parsed = addItemSchema.safeParse(input);
@@ -228,6 +234,17 @@ export async function addOrderItem(input: unknown): Promise<ActionResult> {
     .eq('id', d.service_item_id)
     .single();
   if (se || !svc) return { ok: false, error: 'Service item not found' };
+
+  // A station must be active to be assigned (cleaning/maintenance/closed reject).
+  if (d.resource_id) {
+    const { data: resource } = await supabase
+      .from('resources')
+      .select('status')
+      .eq('id', d.resource_id)
+      .single();
+    if (!resource) return { ok: false, error: 'Station not found' };
+    if (resource.status !== 'active') return { ok: false, error: `Station is ${resource.status}, not available` };
+  }
 
   // Active Normal / all-branch list price
   const { data: priceRow } = await supabase
@@ -244,13 +261,27 @@ export async function addOrderItem(input: unknown): Promise<ActionResult> {
   // Discount
   const { data: disc, error: de } = await supabase
     .from('discount_classes')
-    .select('discount_percent, discount_amount_cents')
+    .select('code, discount_percent, discount_amount_cents')
     .eq('id', d.discount_class_id)
     .single();
   if (de || !disc) return { ok: false, error: 'Discount class not found' };
+
+  if (MANAGER_DISCOUNTS.includes(disc.code) && !isManager(await currentSession())) {
+    return { ok: false, error: `${disc.code} requires manager permission` };
+  }
+
   let discountAmount = 0;
-  if (disc.discount_percent > 0) discountAmount = Math.round((listPrice * disc.discount_percent) / 100);
-  else if (disc.discount_amount_cents > 0) discountAmount = Math.min(disc.discount_amount_cents, listPrice);
+  if (disc.code === 'DIS-90') {
+    discountAmount = listPrice; // complaint — 100% off
+  } else if (VARIABLE_DISCOUNTS.includes(disc.code)) {
+    const override = Math.round((d.discount_override ?? 0) * 100);
+    if (override <= 0) return { ok: false, error: `Enter a discount amount for ${disc.code}` };
+    discountAmount = Math.min(override, listPrice);
+  } else if (disc.discount_percent > 0) {
+    discountAmount = Math.round((listPrice * disc.discount_percent) / 100);
+  } else if (disc.discount_amount_cents > 0) {
+    discountAmount = Math.min(disc.discount_amount_cents, listPrice);
+  }
   const finalAmount = Math.max(0, listPrice - discountAmount);
 
   // Therapist home branch for commission attribution (commission itself is
@@ -299,6 +330,35 @@ export async function removeOrderItem(itemId: string, orderId: string): Promise<
 export async function startOrderItem(itemId: string, orderId: string): Promise<ActionResult> {
   const supabase = createServiceClient();
   const now = new Date().toISOString();
+
+  // No double-booking: the therapist and the station can't already be mid-service
+  // on another line.
+  const { data: item } = await supabase
+    .from('order_items')
+    .select('therapist_id, resource_id')
+    .eq('id', itemId)
+    .single();
+  if (item?.therapist_id) {
+    const { data: busy } = await supabase
+      .from('order_items')
+      .select('id')
+      .eq('status', 'in_service')
+      .eq('therapist_id', item.therapist_id)
+      .neq('id', itemId)
+      .limit(1);
+    if (busy && busy.length > 0) return { ok: false, error: 'This therapist is already mid-service on another line' };
+  }
+  if (item?.resource_id) {
+    const { data: busy } = await supabase
+      .from('order_items')
+      .select('id')
+      .eq('status', 'in_service')
+      .eq('resource_id', item.resource_id)
+      .neq('id', itemId)
+      .limit(1);
+    if (busy && busy.length > 0) return { ok: false, error: 'This station is occupied by another in-service line' };
+  }
+
   const { error } = await supabase
     .from('order_items')
     .update({ status: 'in_service', actual_start: now, service_start: now })
