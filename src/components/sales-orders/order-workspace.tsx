@@ -30,6 +30,7 @@ import {
   voidPayment,
   voidOrder,
   reopenOrder,
+  requestOrderAdjustment,
 } from '@/app/(dashboard)/sales-orders/actions';
 import { CustomerPaymentCard, type TipTarget } from '@/components/sales-orders/customer-payment-card';
 import { ReasonDialog } from '@/components/sales-orders/reason-dialog';
@@ -160,6 +161,7 @@ export function OrderWorkspace({
   const [payMode, setPayMode] = useState<'split' | 'together'>('split');
   const [voidOpen, setVoidOpen] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
+  const [adjustOpen, setAdjustOpen] = useState(false);
   const [feedbackItem, setFeedbackItem] = useState<OrderItem | null>(null);
   const [interruptItem, setInterruptItem] = useState<OrderItem | null>(null);
 
@@ -289,6 +291,14 @@ export function OrderWorkspace({
     });
   }
 
+  function doAdjust(reason: string) {
+    startTransition(async () => {
+      const r = await requestOrderAdjustment(order.id, reason);
+      if (r.ok) { toast.success('Adjustment requested'); setAdjustOpen(false); }
+      else toast.error(r.error);
+    });
+  }
+
   const groupOptions = [...new Set(serviceItems.map((s) => s.group))]
     .sort()
     .map((g) => ({ value: g, label: g }));
@@ -340,6 +350,11 @@ export function OrderWorkspace({
           {order.status === 'completed' && canManage && (
             <Button size="sm" variant="outline" onClick={() => setReopenOpen(true)} disabled={pending}>
               Reopen
+            </Button>
+          )}
+          {order.status === 'closed' && canManage && (
+            <Button size="sm" variant="outline" onClick={() => setAdjustOpen(true)} disabled={pending}>
+              Request Adjustment
             </Button>
           )}
           {!['closed', 'void'].includes(order.status) && canManage && (
@@ -674,6 +689,15 @@ export function OrderWorkspace({
         confirmLabel="Reopen"
         pending={pending}
         onConfirm={doReopen}
+      />
+      <ReasonDialog
+        open={adjustOpen}
+        onOpenChange={setAdjustOpen}
+        title="Request adjustment?"
+        description="Closed orders are corrected via an adjustment (reversal journal posts in the ERP phase)."
+        confirmLabel="Request adjustment"
+        pending={pending}
+        onConfirm={doAdjust}
       />
       {feedbackItem && (
         <FeedbackDialog

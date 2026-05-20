@@ -500,6 +500,35 @@ export async function submitFeedback(input: unknown): Promise<ActionResult> {
 // Payment + status machine
 // ---------------------------------------------------------------------------
 
+// A closed order can no longer be reopened/voided; correcting it goes through an
+// OrderAdjustment (the reversal journal itself is posted in the ERP phase).
+export async function requestOrderAdjustment(orderId: string, reason: string): Promise<ActionResult> {
+  const session = await currentSession();
+  if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
+  if (!reason || reason.trim().length < 3) return { ok: false, error: 'A reason is required' };
+  const supabase = createServiceClient();
+  const { data: order } = await supabase
+    .from('orders')
+    .select('status, total_cents, service_date')
+    .eq('id', orderId)
+    .single();
+  if (!order) return { ok: false, error: 'Order not found' };
+  if (order.status !== 'closed') return { ok: false, error: 'Only a closed order needs an adjustment (reopen/void otherwise)' };
+  const nowMonth = new Date().toISOString().slice(0, 7);
+  const { error } = await supabase.from('order_adjustments').insert({
+    original_order_id: orderId,
+    adjustment_type: 'reversal',
+    amount_cents: order.total_cents,
+    reason: reason.trim(),
+    original_month: order.service_date.slice(0, 7),
+    adjustment_month: nowMonth,
+    approved_by_user_id: session!.staffUserId,
+  });
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/sales-orders/${orderId}`);
+  return { ok: true };
+}
+
 // Forward-only moves a cashier drives. Paid is reached by takePayment; Closed is
 // reached only by Revenue Confirm (daily close); Void/Reopen are separate gated
 // actions.
