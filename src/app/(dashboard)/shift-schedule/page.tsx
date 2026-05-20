@@ -3,12 +3,80 @@ import { Card } from '@/components/ui/card';
 import { ShiftControls } from '@/components/shift-schedule/shift-controls';
 import { ShiftCell, type ShiftData } from '@/components/shift-schedule/shift-cell';
 import { StationShiftCell, type StationAssignment } from '@/components/shift-schedule/station-shift-cell';
+import { DayTimeline, type DayRow } from '@/components/shift-schedule/day-timeline';
 
 export const dynamic = 'force-dynamic';
 
 const TIMED = ['regular', 'cross_branch', 'on_call'];
 
-type ShiftView = 'employee' | 'station';
+type ShiftView = 'employee' | 'station' | 'day';
+
+function todayISO(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+}
+function timeToMin(t: string | null): number | null {
+  if (!t) return null;
+  const [h, m] = t.split(':');
+  return Number(h) * 60 + Number(m);
+}
+function tsToMin(iso: string): number {
+  const parts = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date(iso));
+  const h = Number(parts.find((p) => p.type === 'hour')?.value ?? 0);
+  const m = Number(parts.find((p) => p.type === 'minute')?.value ?? 0);
+  return h * 60 + m;
+}
+
+// Day view: each rostered therapist's working window + actual service blocks.
+async function fetchDayData(branchId: string, day: string): Promise<{ rows: DayRow[]; windowStartMin: number; windowEndMin: number }> {
+  const supabase = createServiceClient();
+  const [shRes, itemRes] = await Promise.all([
+    supabase
+      .from('employee_shifts')
+      .select('employee_id, shift_type, shift_start, shift_end, employees:employee_id ( name, employee_code )')
+      .eq('branch_id', branchId)
+      .eq('shift_date', day)
+      .in('shift_type', TIMED),
+    supabase
+      .from('order_items')
+      .select('therapist_id, actual_start, actual_end, duration_minutes, service:service_items ( name ), order:orders!order_items_order_id_fkey ( branch_id, service_date )')
+      .not('therapist_id', 'is', null)
+      .not('actual_start', 'is', null),
+  ]);
+
+  const servicesByTherapist = new Map<string, { name: string; startMin: number; endMin: number; ongoing: boolean }[]>();
+  for (const it of itemRes.data ?? []) {
+    const ord = one(it.order);
+    if (!ord || ord.branch_id !== branchId || ord.service_date !== day || !it.actual_start) continue;
+    const startMin = tsToMin(it.actual_start);
+    const endMin = it.actual_end ? tsToMin(it.actual_end) : Math.min(1439, startMin + (it.duration_minutes ?? 60));
+    const arr = servicesByTherapist.get(it.therapist_id as string) ?? [];
+    arr.push({ name: one(it.service)?.name ?? 'Service', startMin, endMin, ongoing: !it.actual_end });
+    servicesByTherapist.set(it.therapist_id as string, arr);
+  }
+
+  const rows: DayRow[] = (shRes.data ?? []).map((s) => {
+    const emp = one(s.employees);
+    return {
+      id: s.employee_id,
+      name: emp?.name ?? '—',
+      code: emp?.employee_code ?? '',
+      shiftType: s.shift_type,
+      shiftStartMin: timeToMin(s.shift_start),
+      shiftEndMin: timeToMin(s.shift_end),
+      services: servicesByTherapist.get(s.employee_id) ?? [],
+    };
+  }).sort((a, b) => a.code.localeCompare(b.code));
+
+  const allMins: number[] = [];
+  for (const r of rows) {
+    if (r.shiftStartMin != null) allMins.push(r.shiftStartMin);
+    if (r.shiftEndMin != null) allMins.push(r.shiftEndMin);
+    for (const s of r.services) { allMins.push(s.startMin, s.endMin); }
+  }
+  const windowStartMin = allMins.length ? Math.min(540, Math.floor(Math.min(...allMins) / 60) * 60) : 540;
+  const windowEndMin = allMins.length ? Math.max(1320, Math.ceil(Math.max(...allMins) / 60) * 60) : 1320;
+  return { rows, windowStartMin, windowEndMin };
+}
 
 interface ShiftRow {
   employee_id: string;
@@ -78,11 +146,13 @@ async function fetchData(branchParam?: string, weekParam?: string) {
 export default async function ShiftSchedulePage({
   searchParams,
 }: {
-  searchParams: Promise<{ branch?: string; week?: string; view?: string }>;
+  searchParams: Promise<{ branch?: string; week?: string; view?: string; day?: string }>;
 }) {
   const sp = await searchParams;
-  const view: ShiftView = sp.view === 'station' ? 'station' : 'employee';
+  const view: ShiftView = sp.view === 'station' ? 'station' : sp.view === 'day' ? 'day' : 'employee';
+  const day = sp.day || todayISO();
   const { branches, branchId, monday, days, employees, shifts, stations } = await fetchData(sp.branch, sp.week);
+  const dayData = view === 'day' && branchId ? await fetchDayData(branchId, day) : null;
 
   const shiftAt = (empId: string, date: string): ShiftData | null => {
     const s = shifts.find((x) => x.employee_id === empId && x.shift_date === date);
@@ -112,16 +182,20 @@ export default async function ShiftSchedulePage({
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Shift Schedule</h2>
           <p className="text-sm font-semibold text-muted-foreground mt-1">
-            Week of {monday} · {view === 'station' ? 'stations × days · click a cell to assign a therapist' : 'home-branch therapists · click a cell to set a shift'}
+            {view === 'day'
+              ? `${day} · hourly timeline · working hours and actual services`
+              : `Week of ${monday} · ${view === 'station' ? 'stations × days · click a cell to assign a therapist' : 'home-branch therapists · click a cell to set a shift'}`}
           </p>
         </div>
-        {branchId && <ShiftControls branches={branches} branchId={branchId} weekStart={monday} view={view} />}
+        {branchId && <ShiftControls branches={branches} branchId={branchId} weekStart={monday} day={day} view={view} />}
       </div>
 
       {!branchId ? (
         <Card className="border-dashed bg-muted/30 p-8 text-center text-sm font-semibold text-muted-foreground">
           Create a branch first.
         </Card>
+      ) : view === 'day' ? (
+        <DayTimeline rows={dayData!.rows} windowStartMin={dayData!.windowStartMin} windowEndMin={dayData!.windowEndMin} />
       ) : view === 'employee' ? (
         employees.length === 0 ? (
           <Card className="border-dashed bg-muted/30 p-8 text-center text-sm font-semibold text-muted-foreground">

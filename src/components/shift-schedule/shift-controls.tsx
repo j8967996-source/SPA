@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight, Users, BedDouble } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Users, BedDouble, Clock } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -13,27 +13,41 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
-type ShiftView = 'employee' | 'station';
+type ShiftView = 'employee' | 'station' | 'day';
 
 interface Props {
   branches: { id: string; code: string; name: string }[];
   branchId: string;
   weekStart: string; // YYYY-MM-DD (Monday)
+  day: string; // YYYY-MM-DD (selected day for the Day view)
   view: ShiftView;
 }
 
-function shiftWeek(weekStart: string, deltaDays: number): string {
-  const d = new Date(`${weekStart}T00:00:00`);
-  d.setDate(d.getDate() + deltaDays);
+function addDays(date: string, delta: number): string {
+  const d = new Date(`${date}T00:00:00`);
+  d.setDate(d.getDate() + delta);
   return d.toISOString().slice(0, 10);
 }
+function thisMonday(): string {
+  const now = new Date();
+  const day = (now.getDay() + 6) % 7;
+  now.setDate(now.getDate() - day);
+  return now.toISOString().slice(0, 10);
+}
+function today(): string {
+  return new Date().toISOString().slice(0, 10);
+}
 
-export function ShiftControls({ branches, branchId, weekStart, view }: Props) {
+export function ShiftControls({ branches, branchId, weekStart, day, view }: Props) {
   const router = useRouter();
   const branchOptions = branches.map((b) => ({ value: b.id, label: `${b.code} — ${b.name}` }));
 
-  function go(branch: string, week: string, v: ShiftView = view) {
-    router.push(`/shift-schedule?branch=${branch}&week=${week}&view=${v}`);
+  function go(opts: { branch?: string; week?: string; day?: string; view?: ShiftView }) {
+    const branch = opts.branch ?? branchId;
+    const v = opts.view ?? view;
+    const w = opts.week ?? weekStart;
+    const dy = opts.day ?? day;
+    router.push(`/shift-schedule?branch=${branch}&view=${v}&week=${w}&day=${dy}`);
   }
 
   return (
@@ -41,49 +55,52 @@ export function ShiftControls({ branches, branchId, weekStart, view }: Props) {
       <div className="inline-flex rounded-lg border border-border p-0.5">
         <button
           type="button"
-          onClick={() => go(branchId, weekStart, 'employee')}
-          className={cn(
-            'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-bold transition-colors',
-            view === 'employee' ? 'bg-sidebar-primary/15 text-sidebar-primary' : 'text-muted-foreground hover:bg-accent',
-          )}
+          onClick={() => go({ view: 'employee' })}
+          className={cn('inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-bold transition-colors', view === 'employee' ? 'bg-sidebar-primary/15 text-sidebar-primary' : 'text-muted-foreground hover:bg-accent')}
         >
           <Users className="size-4" /> Therapist
         </button>
         <button
           type="button"
-          onClick={() => go(branchId, weekStart, 'station')}
-          className={cn(
-            'inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-bold transition-colors',
-            view === 'station' ? 'bg-sidebar-primary/15 text-sidebar-primary' : 'text-muted-foreground hover:bg-accent',
-          )}
+          onClick={() => go({ view: 'station' })}
+          className={cn('inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-bold transition-colors', view === 'station' ? 'bg-sidebar-primary/15 text-sidebar-primary' : 'text-muted-foreground hover:bg-accent')}
         >
           <BedDouble className="size-4" /> Station
         </button>
+        <button
+          type="button"
+          onClick={() => go({ view: 'day' })}
+          className={cn('inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-bold transition-colors', view === 'day' ? 'bg-sidebar-primary/15 text-sidebar-primary' : 'text-muted-foreground hover:bg-accent')}
+        >
+          <Clock className="size-4" /> Day
+        </button>
       </div>
-      <Select items={branchOptions} value={branchId} onValueChange={(v) => v && go(v, weekStart)}>
+      <Select items={branchOptions} value={branchId} onValueChange={(v) => v && go({ branch: v })}>
         <SelectTrigger className="w-56"><SelectValue /></SelectTrigger>
         <SelectContent>
           {branchOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
         </SelectContent>
       </Select>
-      <div className="flex items-center gap-1">
-        <Button size="icon" variant="outline" onClick={() => go(branchId, shiftWeek(weekStart, -7))}>
-          <ChevronLeft className="size-4" />
-        </Button>
-        <Button size="sm" variant="outline" onClick={() => go(branchId, shiftWeek(thisMonday(), 0))}>
-          This week
-        </Button>
-        <Button size="icon" variant="outline" onClick={() => go(branchId, shiftWeek(weekStart, 7))}>
-          <ChevronRight className="size-4" />
-        </Button>
-      </div>
+
+      {view === 'day' ? (
+        <div className="flex items-center gap-1">
+          <Button size="icon" variant="outline" onClick={() => go({ day: addDays(day, -1) })}><ChevronLeft className="size-4" /></Button>
+          <Button size="sm" variant="outline" onClick={() => go({ day: today() })}>Today</Button>
+          <Button size="icon" variant="outline" onClick={() => go({ day: addDays(day, 1) })}><ChevronRight className="size-4" /></Button>
+          <input
+            type="date"
+            value={day}
+            onChange={(e) => e.target.value && go({ day: e.target.value })}
+            className="ml-1 rounded-lg border border-input bg-transparent px-3 py-1.5 text-sm"
+          />
+        </div>
+      ) : (
+        <div className="flex items-center gap-1">
+          <Button size="icon" variant="outline" onClick={() => go({ week: addDays(weekStart, -7) })}><ChevronLeft className="size-4" /></Button>
+          <Button size="sm" variant="outline" onClick={() => go({ week: thisMonday() })}>This week</Button>
+          <Button size="icon" variant="outline" onClick={() => go({ week: addDays(weekStart, 7) })}><ChevronRight className="size-4" /></Button>
+        </div>
+      )}
     </div>
   );
-}
-
-function thisMonday(): string {
-  const now = new Date();
-  const day = (now.getDay() + 6) % 7; // 0 = Monday
-  now.setDate(now.getDate() - day);
-  return now.toISOString().slice(0, 10);
 }
