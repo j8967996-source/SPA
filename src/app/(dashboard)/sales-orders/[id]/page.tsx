@@ -45,7 +45,7 @@ async function fetchData(id: string) {
   if (error) throw new Error(error.message);
   if (!order) return null;
 
-  const [svc, emp, res, disc, pm] = await Promise.all([
+  const [svc, emp, res, disc, pm, shifts] = await Promise.all([
     supabase
       .from('service_items')
       .select('id, code, name, service_group, duration_minutes, service_item_prices ( price_cents, price_class, branch_id )')
@@ -56,7 +56,21 @@ async function fetchData(id: string) {
     supabase.from('resources').select('id, resource_name').eq('branch_id', order.branch_id).eq('status', 'active').order('resource_name'),
     supabase.from('discount_classes').select('id, code, description').eq('active', true).order('code'),
     supabase.from('payment_methods').select('id, code, display_name').eq('active', true).order('code'),
+    // Therapists with a working shift at this branch on the service date.
+    supabase
+      .from('employee_shifts')
+      .select('employee_id')
+      .eq('branch_id', order.branch_id)
+      .eq('shift_date', order.service_date)
+      .in('shift_type', ['regular', 'cross_branch', 'on_call']),
   ]);
+
+  const scheduledIds = new Set((shifts.data ?? []).map((s) => s.employee_id));
+  const allEmployees = (emp.data ?? []).map((e) => ({ id: e.id, code: e.employee_code, name: e.name }));
+  // Prefer scheduled therapists; fall back to all active if nobody is rostered yet.
+  const employeesScoped = scheduledIds.size > 0
+    ? allEmployees.filter((e) => scheduledIds.has(e.id))
+    : allEmployees;
 
   return {
     order,
@@ -70,7 +84,7 @@ async function fetchData(id: string) {
         price_cents: normal?.price_cents ?? null,
       };
     }),
-    employees: (emp.data ?? []).map((e) => ({ id: e.id, code: e.employee_code, name: e.name })),
+    employees: employeesScoped,
     resources: (res.data ?? []).map((r) => ({ id: r.id, code: '', name: r.resource_name })),
     discountClasses: disc.data ?? [],
     paymentMethods: pm.data ?? [],
