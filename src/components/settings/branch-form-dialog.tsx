@@ -15,19 +15,12 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 
 import { createBranch, updateBranch } from '@/app/(dashboard)/settings/branches/actions';
 
 interface BranchFormDialogProps {
   mode?: 'create' | 'edit';
-  branch?: { id: string; code: string; name: string; business_unit_id: string | null };
+  branch?: { id: string; code: string; name: string; business_unit_ids: string[] };
   businessUnits: { id: string; code: string; name: string }[];
   trigger?: React.ReactNode;
   open?: boolean;
@@ -47,34 +40,34 @@ export function BranchFormDialog({
   const setOpen = controlledOnOpenChange ?? setInternalOpen;
   const [code, setCode] = useState(branch?.code ?? '');
   const [name, setName] = useState(branch?.name ?? '');
-  const [businessUnitId, setBusinessUnitId] = useState(
-    branch?.business_unit_id ?? businessUnits[0]?.id ?? '',
-  );
+  const [unitIds, setUnitIds] = useState<string[]>(branch?.business_unit_ids ?? []);
   const [pending, startTransition] = useTransition();
-
-  const businessUnitOptions = businessUnits.map((b) => ({
-    value: b.id,
-    label: `${b.code} — ${b.name}`,
-  }));
 
   const isEdit = mode === 'edit';
 
+  function toggleUnit(id: string) {
+    setUnitIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!businessUnitId) {
-      toast.error('Pick a business unit');
+    if (unitIds.length === 0) {
+      toast.error('Pick at least one business unit');
       return;
     }
     startTransition(async () => {
       const result = isEdit
-        ? await updateBranch({ id: branch!.id, name, business_unit_id: businessUnitId })
-        : await createBranch({ code, name, business_unit_id: businessUnitId });
+        ? await updateBranch({ id: branch!.id, name, business_unit_ids: unitIds })
+        : await createBranch({ code, name, business_unit_ids: unitIds });
       if (result.ok) {
         toast.success(isEdit ? 'Branch updated' : 'Branch created');
         setOpen(false);
         if (!isEdit) {
           setCode('');
           setName('');
+          setUnitIds([]);
         }
       } else {
         toast.error(result.error);
@@ -135,21 +128,33 @@ export function BranchFormDialog({
             </div>
 
             <div className="flex flex-col gap-2">
-              <Label className="font-semibold">Business Unit *</Label>
-              <Select
-                items={businessUnitOptions}
-                value={businessUnitId}
-                onValueChange={(v) => v && setBusinessUnitId(v)}
-              >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {businessUnitOptions.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="font-semibold">Business Units *</Label>
+              <div className="flex flex-col gap-1 rounded-lg border border-input p-2">
+                {businessUnits.length === 0 ? (
+                  <p className="text-xs font-medium text-muted-foreground px-2 py-1">
+                    No business units defined. Create one in Settings → Business Units first.
+                  </p>
+                ) : (
+                  businessUnits.map((b) => (
+                    <label
+                      key={b.id}
+                      className="flex items-center gap-2 cursor-pointer rounded-md px-2 py-1.5 hover:bg-accent"
+                    >
+                      <input
+                        type="checkbox"
+                        className="size-4 cursor-pointer accent-primary"
+                        checked={unitIds.includes(b.id)}
+                        onChange={() => toggleUnit(b.id)}
+                      />
+                      <span className="text-sm font-semibold">{b.name}</span>
+                      <span className="text-xs font-mono text-muted-foreground">{b.code}</span>
+                    </label>
+                  ))
+                )}
+              </div>
               <p className="text-xs font-medium text-muted-foreground">
-                Which business line this branch belongs to. Used to scope staff visibility.
+                Which business lines operate at this branch. A single location can host
+                more than one (e.g. SPA + Gym).
               </p>
             </div>
           </div>

@@ -24,8 +24,8 @@ async function fetchData() {
     supabase
       .from('branches')
       .select(`
-        id, code, name, business_unit_id, active, created_at, updated_at,
-        business_unit:business_units ( code, name )
+        id, code, name, active, created_at, updated_at,
+        branch_business_units ( business_unit_id, business_units ( id, code, name ) )
       `)
       .order('code'),
     supabase.from('business_units').select('id, code, name').eq('active', true).order('code'),
@@ -91,12 +91,14 @@ export default async function BranchesPage() {
               </TableRow>
             ) : (
               branches.map((b) => {
-                const businessUnit = Array.isArray(b.business_unit) ? b.business_unit[0] : b.business_unit;
+                const units = (b.branch_business_units ?? [])
+                  .map((row) => (Array.isArray(row.business_units) ? row.business_units[0] : row.business_units))
+                  .filter(Boolean) as { id: string; code: string; name: string }[];
                 const branchItem = {
                   id: b.id,
                   code: b.code,
                   name: b.name,
-                  business_unit_id: b.business_unit_id,
+                  business_unit_ids: units.map((u) => u.id),
                   active: b.active,
                 };
                 return (
@@ -104,13 +106,17 @@ export default async function BranchesPage() {
                     <TableCell className="font-mono font-bold">{b.code}</TableCell>
                     <TableCell className="font-semibold">{b.name}</TableCell>
                     <TableCell>
-                      {businessUnit ? (
-                        <Badge variant="secondary" className="font-bold font-mono text-xs uppercase">
-                          {businessUnit.code}
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground text-sm">—</span>
-                      )}
+                      <div className="flex flex-wrap gap-1">
+                        {units.length === 0 ? (
+                          <span className="text-muted-foreground text-sm">—</span>
+                        ) : (
+                          units.map((u) => (
+                            <Badge key={u.id} variant="secondary" className="font-bold font-mono text-xs uppercase">
+                              {u.code}
+                            </Badge>
+                          ))
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       {b.active ? (

@@ -70,10 +70,39 @@ export type Database = {
           },
         ]
       }
+      branch_business_units: {
+        Row: {
+          branch_id: string
+          business_unit_id: string
+        }
+        Insert: {
+          branch_id: string
+          business_unit_id: string
+        }
+        Update: {
+          branch_id?: string
+          business_unit_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "branch_business_units_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "branch_business_units_business_unit_id_fkey"
+            columns: ["business_unit_id"]
+            isOneToOne: false
+            referencedRelation: "business_units"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       branches: {
         Row: {
           active: boolean
-          business_unit_id: string
           code: string
           created_at: string
           created_by: string | null
@@ -84,7 +113,6 @@ export type Database = {
         }
         Insert: {
           active?: boolean
-          business_unit_id: string
           code: string
           created_at?: string
           created_by?: string | null
@@ -95,7 +123,6 @@ export type Database = {
         }
         Update: {
           active?: boolean
-          business_unit_id?: string
           code?: string
           created_at?: string
           created_by?: string | null
@@ -104,15 +131,7 @@ export type Database = {
           updated_at?: string
           updated_by?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "branches_business_unit_id_fkey"
-            columns: ["business_unit_id"]
-            isOneToOne: false
-            referencedRelation: "business_units"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       business_units: {
         Row: {
