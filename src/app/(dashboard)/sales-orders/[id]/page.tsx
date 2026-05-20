@@ -34,7 +34,7 @@ async function fetchData(id: string) {
       billing:billing_destinations!orders_billing_to_id_fkey ( code, name ),
       order_customers ( id, customer_name, customer_phone, seq_no ),
       order_items (
-        id, order_customer_id, list_price_cents, discount_amount_cents, final_amount_cents,
+        id, order_customer_id, list_price_cents, discount_amount_cents, final_amount_cents, status,
         service:service_items ( name ),
         therapist:employees ( name )
       )
@@ -65,6 +65,14 @@ async function fetchData(id: string) {
       .in('shift_type', ['regular', 'cross_branch', 'on_call']),
   ]);
 
+  // Therapists currently mid-service anywhere (started, not finished).
+  const busy = await supabase
+    .from('order_items')
+    .select('therapist_id')
+    .eq('status', 'in_service')
+    .not('therapist_id', 'is', null);
+  const busyTherapistIds = [...new Set((busy.data ?? []).map((b) => b.therapist_id).filter(Boolean) as string[])];
+
   const scheduledIds = new Set((shifts.data ?? []).map((s) => s.employee_id));
   const allEmployees = (emp.data ?? []).map((e) => ({ id: e.id, code: e.employee_code, name: e.name }));
   // Prefer scheduled therapists; fall back to all active if nobody is rostered yet.
@@ -85,6 +93,7 @@ async function fetchData(id: string) {
       };
     }),
     employees: employeesScoped,
+    busyTherapistIds,
     resources: (res.data ?? []).map((r) => ({ id: r.id, code: '', name: r.resource_name })),
     discountClasses: disc.data ?? [],
     paymentMethods: pm.data ?? [],
@@ -95,7 +104,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const { id } = await params;
   const result = await fetchData(id);
   if (!result) notFound();
-  const { order, serviceItems, employees, resources, discountClasses, paymentMethods } = result;
+  const { order, serviceItems, employees, busyTherapistIds, resources, discountClasses, paymentMethods } = result;
 
   const branch = one(order.branch);
   const source = one(order.source);
@@ -115,6 +124,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       list_price_cents: it.list_price_cents,
       discount_amount_cents: it.discount_amount_cents,
       final_amount_cents: it.final_amount_cents,
+      status: it.status,
     };
   });
 
@@ -181,6 +191,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         items={items}
         serviceItems={serviceItems}
         employees={employees}
+        busyTherapistIds={busyTherapistIds}
         resources={resources}
         discountClasses={discountClasses}
         paymentMethods={paymentMethods}

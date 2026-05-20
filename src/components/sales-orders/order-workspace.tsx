@@ -20,6 +20,8 @@ import {
   removeOrderCustomer,
   addOrderItem,
   removeOrderItem,
+  startOrderItem,
+  finishOrderItem,
   setOrderStatus,
   takePayment,
 } from '@/app/(dashboard)/sales-orders/actions';
@@ -36,6 +38,7 @@ interface OrderItem {
   list_price_cents: number;
   discount_amount_cents: number;
   final_amount_cents: number;
+  status: string;
 }
 interface OrderCustomer {
   id: string;
@@ -59,6 +62,7 @@ interface Props {
   items: OrderItem[];
   serviceItems: ServiceVariant[];
   employees: Opt[];
+  busyTherapistIds: string[];
   resources: Opt[];
   discountClasses: DiscountOpt[];
   paymentMethods: { id: string; code: string; display_name: string }[];
@@ -76,6 +80,7 @@ export function OrderWorkspace({
   items,
   serviceItems,
   employees,
+  busyTherapistIds,
   resources,
   discountClasses,
   paymentMethods,
@@ -101,6 +106,7 @@ export function OrderWorkspace({
   const [payRef, setPayRef] = useState('');
 
   const due = Math.max(0, order.total_cents - order.paid_cents);
+  const canRunService = ['open', 'in_service'].includes(order.status);
 
   function doAddCustomer() {
     if (!custName.trim()) return toast.error('Customer name required');
@@ -135,6 +141,20 @@ export function OrderWorkspace({
     startTransition(async () => {
       const r = await removeOrderItem(id, order.id);
       if (!r.ok) toast.error(r.error);
+    });
+  }
+
+  function doStartItem(id: string) {
+    startTransition(async () => {
+      const r = await startOrderItem(id, order.id);
+      if (r.ok) toast.success('Service started'); else toast.error(r.error);
+    });
+  }
+
+  function doFinishItem(id: string) {
+    startTransition(async () => {
+      const r = await finishOrderItem(id, order.id);
+      if (r.ok) toast.success('Service finished'); else toast.error(r.error);
     });
   }
 
@@ -175,7 +195,11 @@ export function OrderWorkspace({
   const variantOptions = serviceItems
     .filter((s) => s.group === groupSel)
     .map((s) => ({ value: s.id, label: `${s.duration_minutes} min · ${peso0(s.price_cents)}` }));
-  const empOptions = [{ value: NONE, label: 'Unassigned' }, ...employees.map((e) => ({ value: e.id, label: `${e.code} — ${e.name}` }))];
+  const busy = new Set(busyTherapistIds);
+  const empOptions = [
+    { value: NONE, label: 'Unassigned' },
+    ...employees.map((e) => ({ value: e.id, label: `${e.code} — ${e.name}${busy.has(e.id) ? ' · in service' : ''}` })),
+  ];
   const resOptions = [{ value: NONE, label: 'None' }, ...resources.map((r) => ({ value: r.id, label: r.name }))];
   const discOptions = discountClasses.map((d) => ({ value: d.id, label: `${d.code} — ${d.description}` }));
   const payOptions = paymentMethods.map((p) => ({ value: p.id, label: p.display_name }));
@@ -232,8 +256,20 @@ export function OrderWorkspace({
                     <div className="min-w-0">
                       <span className="font-semibold">{it.service_name}</span>
                       <span className="ml-2 font-medium text-muted-foreground">{it.therapist_name ?? 'Unassigned'}</span>
+                      {it.status === 'in_service' && (
+                        <span className="ml-2 text-[10px] font-bold uppercase tracking-wide text-blue-600 dark:text-blue-400">In service</span>
+                      )}
+                      {it.status === 'service_completed' && (
+                        <span className="ml-2 text-[10px] font-bold uppercase tracking-wide text-primary">Done</span>
+                      )}
                     </div>
-                    <div className="flex items-center gap-3 shrink-0">
+                    <div className="flex items-center gap-2 shrink-0">
+                      {canRunService && it.status === 'scheduled' && (
+                        <Button size="sm" variant="outline" onClick={() => doStartItem(it.id)} disabled={pending}>Start</Button>
+                      )}
+                      {canRunService && it.status === 'in_service' && (
+                        <Button size="sm" onClick={() => doFinishItem(it.id)} disabled={pending}>Finish</Button>
+                      )}
                       <span className="font-bold tabular">
                         {it.discount_amount_cents > 0 && (
                           <span className="line-through text-muted-foreground font-medium mr-1">{peso(it.list_price_cents)}</span>

@@ -224,6 +224,41 @@ export async function removeOrderItem(itemId: string, orderId: string): Promise<
   return { ok: true };
 }
 
+// Per-item service timing — drives real-time therapist availability.
+export async function startOrderItem(itemId: string, orderId: string): Promise<ActionResult> {
+  const supabase = createServiceClient();
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from('order_items')
+    .update({ status: 'in_service', actual_start: now, service_start: now })
+    .eq('id', itemId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/sales-orders/${orderId}`);
+  return { ok: true };
+}
+
+export async function finishOrderItem(itemId: string, orderId: string): Promise<ActionResult> {
+  const supabase = createServiceClient();
+  const now = new Date().toISOString();
+  const { data: item } = await supabase
+    .from('order_items')
+    .select('actual_start')
+    .eq('id', itemId)
+    .single();
+  const patch: { status: string; actual_end: string; service_end: string; actual_duration_minutes?: number } = {
+    status: 'service_completed',
+    actual_end: now,
+    service_end: now,
+  };
+  if (item?.actual_start) {
+    patch.actual_duration_minutes = Math.max(1, Math.round((Date.parse(now) - Date.parse(item.actual_start)) / 60000));
+  }
+  const { error } = await supabase.from('order_items').update(patch).eq('id', itemId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/sales-orders/${orderId}`);
+  return { ok: true };
+}
+
 // ---------------------------------------------------------------------------
 // Payment + status machine
 // ---------------------------------------------------------------------------
