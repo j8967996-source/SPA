@@ -84,7 +84,7 @@ export function BillingDestinationFormDialog({
 
   const paymentMethodOptions = [
     { value: NONE, label: 'None' },
-    ...paymentMethods.map((p) => ({ value: p.id, label: `${p.code} — ${p.display_name}` })),
+    ...paymentMethods.map((p) => ({ value: p.id, label: p.display_name })),
   ];
 
   function handleSubmit(e: React.FormEvent) {
@@ -192,7 +192,7 @@ export function BillingDestinationFormDialog({
                   <div>
                     <span className="text-sm font-bold block">Third-Party</span>
                     <span className="text-xs font-medium text-muted-foreground">
-                      External company — actual payment received (bank transfer)
+                      External company — actual payment received (cash or transfer)
                     </span>
                   </div>
                 </label>
