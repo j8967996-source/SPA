@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { useState, useTransition } from 'react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -62,7 +62,7 @@ interface Props {
   branches: BranchOption[];
   classes: ClassOption[];
   positions: PositionOption[];
-  suggestedCode?: string;
+  nextCodeByBranch?: Record<string, string>;
   trigger?: React.ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -76,7 +76,7 @@ export function EmployeeFormDialog({
   branches,
   classes,
   positions,
-  suggestedCode,
+  nextCodeByBranch,
   trigger,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
@@ -86,7 +86,6 @@ export function EmployeeFormDialog({
   const setOpen = controlledOnOpenChange ?? setInternalOpen;
   const [pending, startTransition] = useTransition();
 
-  const [employeeCode, setEmployeeCode] = useState(employee?.employee_code ?? suggestedCode ?? '');
   const [name, setName] = useState(employee?.name ?? '');
   const [phone, setPhone] = useState(employee?.phone ?? '');
   const [email, setEmail] = useState(employee?.email ?? '');
@@ -97,12 +96,11 @@ export function EmployeeFormDialog({
   const [status, setStatus] = useState<EmployeeItem['status']>(employee?.status ?? 'active');
 
   const isEdit = mode === 'edit';
-
-  // Re-seed the suggested code each time a create dialog opens, so it tracks
-  // the latest "next number" after a previous create + revalidation.
-  useEffect(() => {
-    if (open && !isEdit) setEmployeeCode(suggestedCode ?? '');
-  }, [open, isEdit, suggestedCode]);
+  // Code is system-assigned per home branch. Edit shows the immutable code;
+  // create shows a live preview ({BRANCHCODE}-NNN) the server confirms on save.
+  const employeeCode = isEdit
+    ? employee?.employee_code ?? ''
+    : nextCodeByBranch?.[homeBranchId === NONE ? 'none' : homeBranchId] ?? 'Auto';
 
   const branchOptions = [
     { value: NONE, label: 'None (freelance / cross)' },
@@ -138,7 +136,6 @@ export function EmployeeFormDialog({
         toast.success(isEdit ? 'Employee updated' : 'Employee created');
         setOpen(false);
         if (!isEdit) {
-          setEmployeeCode('');
           setName('');
           setPhone('');
           setEmail('');
@@ -167,16 +164,11 @@ export function EmployeeFormDialog({
 
           <div className="grid grid-cols-2 gap-4 py-4">
             <div className="flex flex-col gap-2">
-              <Label htmlFor="emp-code" className="font-semibold">Code *</Label>
-              <Input
-                id="emp-code"
-                value={employeeCode}
-                onChange={(e) => setEmployeeCode(e.target.value.toUpperCase())}
-                placeholder="E001"
-                disabled={isEdit}
-                required
-                maxLength={20}
-              />
+              <Label htmlFor="emp-code" className="font-semibold">Code</Label>
+              <Input id="emp-code" value={employeeCode} readOnly disabled className="font-mono" />
+              {!isEdit && (
+                <p className="text-[11px] font-medium text-muted-foreground">Auto-assigned by home branch on save</p>
+              )}
             </div>
 
             <div className="flex flex-col gap-2">

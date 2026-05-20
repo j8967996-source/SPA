@@ -62,19 +62,30 @@ function statusBadge(status: EmployeeItem['status']) {
   );
 }
 
-function nextEmployeeCode(codes: string[]): string {
-  // Highest E### suffix + 1, padded to 3 digits. Falls back to E001.
-  const maxNum = codes.reduce((max, code) => {
-    const m = /^E(\d+)$/.exec(code);
-    return m ? Math.max(max, Number(m[1])) : max;
-  }, 0);
-  return `E${String(maxNum + 1).padStart(3, '0')}`;
+// Per-branch next code preview ("{BRANCHCODE}-NNN"), plus 'none' (STAFF-NNN).
+function nextCodeByBranch(
+  codes: string[],
+  branches: { id: string; code: string }[],
+): Record<string, string> {
+  const codeFor = (prefix: string) => {
+    const max = codes.reduce((m, c) => {
+      if (c?.startsWith(`${prefix}-`)) {
+        const n = Number(c.slice(prefix.length + 1));
+        return Number.isFinite(n) ? Math.max(m, n) : m;
+      }
+      return m;
+    }, 0);
+    return `${prefix}-${String(max + 1).padStart(3, '0')}`;
+  };
+  const map: Record<string, string> = { none: codeFor('STAFF') };
+  for (const b of branches) map[b.id] = codeFor(b.code);
+  return map;
 }
 
 export default async function EmployeesPage() {
   const { employees, branches, classes, positions } = await fetchData();
   const activeCount = employees.filter((e) => e.status === 'active').length;
-  const suggestedCode = nextEmployeeCode(employees.map((e) => e.employee_code));
+  const codePreview = nextCodeByBranch(employees.map((e) => e.employee_code), branches);
 
   return (
     <div className="flex flex-col gap-6">
@@ -96,7 +107,7 @@ export default async function EmployeesPage() {
           branches={branches}
           classes={classes}
           positions={positions}
-          suggestedCode={suggestedCode}
+          nextCodeByBranch={codePreview}
           trigger={
             <Button>
               <Plus className="size-4" />

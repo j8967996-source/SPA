@@ -9,7 +9,8 @@ import type { Database } from '@/types/database';
 type EmployeeUpdate = Database['public']['Tables']['employees']['Update'];
 
 const baseSchema = z.object({
-  employee_code: z.string().min(1).max(20),
+  // Ignored on create — the server auto-assigns a per-branch code.
+  employee_code: z.string().max(20).optional().nullable(),
   name: z.string().min(1).max(120),
   phone: z.string().max(40).optional().nullable(),
   email: z.string().email().max(120).optional().nullable().or(z.literal('')),
@@ -28,7 +29,6 @@ export type ActionResult = { ok: true } | { ok: false; error: string };
 
 function normalize(input: z.infer<typeof baseSchema>) {
   return {
-    employee_code: input.employee_code,
     name: input.name,
     phone: input.phone || null,
     email: input.email || null,
@@ -40,20 +40,48 @@ function normalize(input: z.infer<typeof baseSchema>) {
   };
 }
 
+// Auto-assign a per-branch code: "{BRANCHCODE}-NNN" (or STAFF-NNN if no home
+// branch). Each branch has its own running sequence, so managers never need to
+// know another branch's numbering.
+export async function nextEmployeeCode(homeBranchId: string | null): Promise<string> {
+  const supabase = createServiceClient();
+  let prefix = 'STAFF';
+  if (homeBranchId) {
+    const { data: br } = await supabase.from('branches').select('code').eq('id', homeBranchId).single();
+    if (br?.code) prefix = br.code;
+  }
+  const { data } = await supabase
+    .from('employees')
+    .select('employee_code')
+    .like('employee_code', `${prefix}-%`);
+  let max = 0;
+  for (const e of data ?? []) {
+    const n = Number(e.employee_code.slice(prefix.length + 1));
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return `${prefix}-${String(max + 1).padStart(3, '0')}`;
+}
+
 export async function createEmployee(input: unknown): Promise<ActionResult> {
   const parsed = baseSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const supabase = createServiceClient();
-  const { error } = await supabase.from('employees').insert(normalize(parsed.data));
-  if (error) {
+  const base = normalize(parsed.data);
+  // Retry on the off chance two managers grab the same number simultaneously.
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const employee_code = await nextEmployeeCode(base.home_branch_id);
+    const { error } = await supabase.from('employees').insert({ ...base, employee_code });
+    if (!error) {
+      revalidatePath('/settings/employees');
+      return { ok: true };
+    }
     if (error.code === '23505') {
-      const conflict = /employees_phone_key/.test(error.message) ? 'phone' : 'employee_code';
-      return { ok: false, error: `${conflict} already exists` };
+      if (/employees_phone_key/.test(error.message)) return { ok: false, error: 'phone already exists' };
+      continue; // employee_code collision — recompute and retry
     }
     return { ok: false, error: error.message };
   }
-  revalidatePath('/settings/employees');
-  return { ok: true };
+  return { ok: false, error: 'Could not assign an employee code, please retry' };
 }
 
 export async function updateEmployee(input: unknown): Promise<ActionResult> {
