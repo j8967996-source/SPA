@@ -2905,6 +2905,36 @@ export type Database = {
           },
         ]
       }
+      staff_user_branches: {
+        Row: {
+          branch_id: string
+          staff_user_id: string
+        }
+        Insert: {
+          branch_id: string
+          staff_user_id: string
+        }
+        Update: {
+          branch_id?: string
+          staff_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "staff_user_branches_branch_id_fkey"
+            columns: ["branch_id"]
+            isOneToOne: false
+            referencedRelation: "branches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "staff_user_branches_staff_user_id_fkey"
+            columns: ["staff_user_id"]
+            isOneToOne: false
+            referencedRelation: "staff_users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       staff_user_business_units: {
         Row: {
           business_unit_id: string

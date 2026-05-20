@@ -26,7 +26,8 @@ async function fetchData() {
       .select(`
         id, email, acumatica_user_id, display_name, role, home_branch_id,
         active, last_login_at, manager_pin_hash,
-        home_branch:branches ( code, name )
+        home_branch:branches ( code, name ),
+        staff_user_branches ( branch_id, branches ( id, code, name ) )
       `)
       .order('acumatica_user_id'),
     supabase.from('branches').select('id, code, name').eq('active', true).order('code'),
@@ -95,7 +96,7 @@ export default async function UsersPage() {
               <TableHead className="font-bold">Acumatica ID</TableHead>
               <TableHead className="font-bold">Display Name</TableHead>
               <TableHead className="font-bold">Role</TableHead>
-              <TableHead className="font-bold">Home Branch</TableHead>
+              <TableHead className="font-bold">Branches</TableHead>
               <TableHead className="font-bold">PIN</TableHead>
               <TableHead className="font-bold">Last Login</TableHead>
               <TableHead className="w-24 font-bold">Status</TableHead>
@@ -113,7 +114,9 @@ export default async function UsersPage() {
               </TableRow>
             ) : (
               users.map((u) => {
-                const branch = Array.isArray(u.home_branch) ? u.home_branch[0] : u.home_branch;
+                const accessible = (u.staff_user_branches ?? [])
+                  .map((row) => (Array.isArray(row.branches) ? row.branches[0] : row.branches))
+                  .filter(Boolean) as { id: string; code: string; name: string }[];
                 const userRecord: StaffUserItem = {
                   id: u.id,
                   email: u.email,
@@ -121,6 +124,7 @@ export default async function UsersPage() {
                   display_name: u.display_name,
                   role: u.role as UserRole,
                   home_branch_id: u.home_branch_id,
+                  branch_ids: accessible.map((b) => b.id),
                   active: u.active,
                 };
                 return (
@@ -131,11 +135,21 @@ export default async function UsersPage() {
                     </TableCell>
                     <TableCell>{roleBadge(u.role as UserRole)}</TableCell>
                     <TableCell>
-                      {branch ? (
-                        <span className="font-mono font-bold">{branch.code}</span>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
+                      <div className="flex flex-wrap gap-1">
+                        {accessible.length === 0 ? (
+                          <span className="text-muted-foreground">—</span>
+                        ) : (
+                          accessible.map((b) => (
+                            <Badge
+                              key={b.id}
+                              variant={b.id === u.home_branch_id ? 'default' : 'secondary'}
+                              className="font-bold font-mono text-xs uppercase"
+                            >
+                              {b.code}
+                            </Badge>
+                          ))
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell>
                       {u.manager_pin_hash ? (

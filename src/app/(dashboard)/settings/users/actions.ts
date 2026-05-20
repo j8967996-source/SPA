@@ -18,6 +18,7 @@ const schema = z.object({
   display_name: z.string().max(80).optional().nullable(),
   role: z.enum(['admin', 'manager', 'staff', 'external_booker']),
   home_branch_id: z.string().uuid().optional().nullable(),
+  branch_ids: z.array(z.string().uuid()).optional(),
   active: z.boolean().default(false),
 });
 
@@ -32,24 +33,46 @@ const pinSchema = z.object({
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
+async function syncBranches(staffUserId: string, branchIds: string[]) {
+  const supabase = createServiceClient();
+  const del = await supabase
+    .from('staff_user_branches')
+    .delete()
+    .eq('staff_user_id', staffUserId);
+  if (del.error) return del.error;
+  if (branchIds.length === 0) return null;
+  const ins = await supabase.from('staff_user_branches').insert(
+    branchIds.map((branch_id) => ({ staff_user_id: staffUserId, branch_id })),
+  );
+  return ins.error;
+}
+
 export async function createStaffUser(input: unknown): Promise<ActionResult> {
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
   const email = `${d.acumatica_user_id.toLowerCase()}@acumatica.local`;
   const supabase = createServiceClient();
-  const { error } = await supabase.from('staff_users').insert({
-    email,
-    acumatica_user_id: d.acumatica_user_id,
-    display_name: d.display_name || null,
-    role: d.role,
-    home_branch_id: d.home_branch_id || null,
-    active: d.active,
-  });
-  if (error) {
-    if (error.code === '23505') return { ok: false, error: 'User with that Acumatica ID or email already exists' };
-    return { ok: false, error: error.message };
+  const { data, error } = await supabase
+    .from('staff_users')
+    .insert({
+      email,
+      acumatica_user_id: d.acumatica_user_id,
+      display_name: d.display_name || null,
+      role: d.role,
+      home_branch_id: d.home_branch_id || null,
+      active: d.active,
+    })
+    .select('id')
+    .single();
+  if (error || !data) {
+    if (error?.code === '23505') return { ok: false, error: 'User with that Acumatica ID or email already exists' };
+    return { ok: false, error: error?.message ?? 'Insert failed' };
   }
+
+  const linkErr = await syncBranches(data.id, d.branch_ids ?? []);
+  if (linkErr) return { ok: false, error: linkErr.message };
+
   revalidatePath('/settings/users');
   return { ok: true };
 }
@@ -64,8 +87,16 @@ export async function updateStaffUser(input: unknown): Promise<ActionResult> {
   if (d.home_branch_id !== undefined) patch.home_branch_id = d.home_branch_id || null;
   if (d.active !== undefined) patch.active = d.active;
   const supabase = createServiceClient();
-  const { error } = await supabase.from('staff_users').update(patch).eq('id', d.id);
-  if (error) return { ok: false, error: error.message };
+  if (Object.keys(patch).length > 0) {
+    const { error } = await supabase.from('staff_users').update(patch).eq('id', d.id);
+    if (error) return { ok: false, error: error.message };
+  }
+
+  if (d.branch_ids) {
+    const linkErr = await syncBranches(d.id, d.branch_ids);
+    if (linkErr) return { ok: false, error: linkErr.message };
+  }
+
   revalidatePath('/settings/users');
   return { ok: true };
 }
