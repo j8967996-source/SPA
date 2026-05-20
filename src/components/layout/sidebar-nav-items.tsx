@@ -79,9 +79,9 @@ export const mainNavItems: NavItem[] = [
       {
         label: 'Customer & Billing',
         items: [
+          { label: 'Discount Classes', href: '/settings/discount-classes' },
           { label: 'Customer Sources', href: '/settings/customer-sources' },
           { label: 'Billing Destinations', href: '/settings/billing-destinations' },
-          { label: 'Discount Classes', href: '/settings/discount-classes' },
           { label: 'Payment Methods', href: '/settings/payment-methods' },
           { label: 'Transaction Codes', href: '/settings/transaction-codes' },
         ],

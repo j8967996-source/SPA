@@ -35,11 +35,11 @@ const sections = [
   {
     group: 'Customer & Billing',
     items: [
+      { icon: Tags, label: 'Discount Classes', href: '/settings/discount-classes', desc: 'DIS-00 through DIS-99' },
       { icon: Users, label: 'Customer Sources', href: '/settings/customer-sources', desc: 'WALK-IN / Hotels / VIP / Third-Party' },
       { icon: Receipt, label: 'Billing Destinations', href: '/settings/billing-destinations', desc: 'Intercompany / Third-party billing' },
       { icon: CreditCard, label: 'Payment Methods', href: '/settings/payment-methods', desc: 'Cash / PAYMAYA / AR / SVC' },
       { icon: Banknote, label: 'Transaction Codes', href: '/settings/transaction-codes', desc: 'ERP GL postings' },
-      { icon: Tags, label: 'Discount Classes', href: '/settings/discount-classes', desc: 'DIS-00 through DIS-99' },
     ],
   },
   {
