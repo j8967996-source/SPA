@@ -33,6 +33,7 @@ async function fetchData(id: string) {
       source:customer_sources ( code, name ),
       billing:billing_destinations!orders_billing_to_id_fkey ( code, name, settlement_type, default_payment_method_id ),
       order_customers ( id, customer_name, customer_phone, seq_no ),
+      payments ( order_customer_id, amount_cents ),
       order_items (
         id, order_customer_id, list_price_cents, discount_amount_cents, final_amount_cents, status,
         therapist_id, resource_id, duration_minutes, actual_start, actual_end,
@@ -136,9 +137,24 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     defaultMethodId: billing?.default_payment_method_id ?? null,
   };
 
-  const customers = (order.order_customers ?? []).map((c) => ({
-    id: c.id, customer_name: c.customer_name, customer_phone: c.customer_phone, seq_no: c.seq_no,
-  }));
+  const orderItemsRaw = order.order_items ?? [];
+  const orderPayments = order.payments ?? [];
+  const customers = (order.order_customers ?? []).map((c) => {
+    const subtotal = orderItemsRaw
+      .filter((it) => it.order_customer_id === c.id)
+      .reduce((s, it) => s + it.final_amount_cents, 0);
+    const paid = orderPayments
+      .filter((p) => p.order_customer_id === c.id)
+      .reduce((s, p) => s + p.amount_cents, 0);
+    return {
+      id: c.id,
+      customer_name: c.customer_name,
+      customer_phone: c.customer_phone,
+      seq_no: c.seq_no,
+      subtotal_cents: subtotal,
+      paid_cents: paid,
+    };
+  });
   const items = (order.order_items ?? []).map((it) => {
     const svc = one(it.service);
     const th = one(it.therapist);

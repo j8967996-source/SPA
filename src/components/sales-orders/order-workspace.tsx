@@ -26,8 +26,8 @@ import {
   startOrderItem,
   finishOrderItem,
   setOrderStatus,
-  takePayment,
 } from '@/app/(dashboard)/sales-orders/actions';
+import { CustomerPaymentCard, type TipTarget } from '@/components/sales-orders/customer-payment-card';
 
 function peso(cents: number): string {
   return `₱${(cents / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
@@ -54,6 +54,8 @@ interface OrderCustomer {
   customer_name: string;
   customer_phone: string | null;
   seq_no: number;
+  subtotal_cents: number;
+  paid_cents: number;
 }
 interface Opt { id: string; code: string; name: string }
 interface BorrowOpt { id: string; code: string; name: string; homeBranchCode: string | null }
@@ -127,9 +129,6 @@ export function OrderWorkspace({
     : paymentMethods;
   const defaultPayMethod =
     paymentPolicy.lockedMethodId ?? paymentPolicy.defaultMethodId ?? allowedPaymentMethods[0]?.id ?? '';
-  const [payMethod, setPayMethod] = useState(defaultPayMethod);
-  const [payAmount, setPayAmount] = useState('');
-  const [payRef, setPayRef] = useState('');
 
   const due = Math.max(0, order.total_cents - order.paid_cents);
   const canRunService = ['open', 'in_service'].includes(order.status);
@@ -232,22 +231,6 @@ export function OrderWorkspace({
     });
   }
 
-  function doPay() {
-    const amt = Number(payAmount);
-    if (!payMethod) return toast.error('Pick a payment method');
-    if (!amt || amt <= 0) return toast.error('Enter an amount');
-    startTransition(async () => {
-      const r = await takePayment({
-        order_id: order.id,
-        payment_method_id: payMethod,
-        amount: amt,
-        payment_ref: payRef || null,
-      });
-      if (r.ok) { setPayAmount(''); setPayRef(''); toast.success('Payment recorded'); }
-      else toast.error(r.error);
-    });
-  }
-
   const groupOptions = [...new Set(serviceItems.map((s) => s.group))]
     .sort()
     .map((g) => ({ value: g, label: g }));
@@ -264,9 +247,19 @@ export function OrderWorkspace({
   const empOptions = [{ value: NONE, label: 'Unassigned' }, ...thisBranchOptions, ...borrowOptions];
   const resOptions = [{ value: NONE, label: 'None' }, ...resources.map((r) => ({ value: r.id, label: r.name }))];
   const discOptions = discountClasses.map((d) => ({ value: d.id, label: `${d.code} — ${d.description}` }));
-  const payOptions = allowedPaymentMethods.map((p) => ({ value: p.id, label: p.display_name }));
 
   const itemsByCustomer = (cid: string) => items.filter((i) => i.order_customer_id === cid);
+  const multiCustomer = customers.length > 1;
+  // Therapists to tip for a customer (null = whole order): their items that have one.
+  const tipTargetsFor = (customerId: string | null): TipTarget[] =>
+    items
+      .filter((it) => (customerId == null || it.order_customer_id === customerId) && it.therapist_id)
+      .map((it) => ({
+        orderItemId: it.id,
+        therapistId: it.therapist_id as string,
+        therapistName: it.therapist_name ?? 'Therapist',
+        serviceName: it.service_name,
+      }));
 
   return (
     <div className="flex flex-col gap-4">
@@ -488,29 +481,49 @@ export function OrderWorkspace({
               <CreditCard className="size-4" /> Take Payment · Due {peso(due)}
             </CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-wrap items-end gap-2">
-            <div className="flex flex-col gap-1">
-              <Label className="text-xs font-semibold">Method</Label>
-              <Select items={payOptions} value={payMethod} onValueChange={(v) => v && setPayMethod(v)} disabled={paymentPolicy.locked}>
-                <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {payOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              {paymentPolicy.locked && (
-                <p className="text-[11px] font-medium text-muted-foreground">Intercompany — AR only</p>
-              )}
-            </div>
-            <div className="flex flex-col gap-1">
-              <Label className="text-xs font-semibold">Amount (₱)</Label>
-              <Input type="number" min="0" step="0.01" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} className="w-32"
-                placeholder={(due / 100).toFixed(2)} />
-            </div>
-            <div className="flex flex-col gap-1">
-              <Label className="text-xs font-semibold">Reference</Label>
-              <Input value={payRef} onChange={(e) => setPayRef(e.target.value)} placeholder="auth / ref" className="w-36" />
-            </div>
-            <Button size="sm" onClick={doPay} disabled={pending}>Record Payment</Button>
+          <CardContent className="flex flex-col gap-3">
+            {multiCustomer ? (
+              <>
+                {customers
+                  .slice()
+                  .sort((a, b) => a.seq_no - b.seq_no)
+                  .filter((c) => c.subtotal_cents - c.paid_cents > 0)
+                  .map((c) => (
+                    <CustomerPaymentCard
+                      key={c.id}
+                      orderId={order.id}
+                      orderCustomerId={c.id}
+                      label={`#${c.seq_no} · ${c.customer_name}`}
+                      dueCents={c.subtotal_cents - c.paid_cents}
+                      tipTargets={tipTargetsFor(c.id)}
+                      paymentMethods={allowedPaymentMethods}
+                      locked={paymentPolicy.locked}
+                      defaultMethodId={defaultPayMethod}
+                    />
+                  ))}
+                <CustomerPaymentCard
+                  orderId={order.id}
+                  orderCustomerId={null}
+                  label="Pay all remaining together"
+                  dueCents={due}
+                  tipTargets={tipTargetsFor(null)}
+                  paymentMethods={allowedPaymentMethods}
+                  locked={paymentPolicy.locked}
+                  defaultMethodId={defaultPayMethod}
+                />
+              </>
+            ) : (
+              <CustomerPaymentCard
+                orderId={order.id}
+                orderCustomerId={customers[0]?.id ?? null}
+                label="Payment"
+                dueCents={due}
+                tipTargets={tipTargetsFor(customers[0]?.id ?? null)}
+                paymentMethods={allowedPaymentMethods}
+                locked={paymentPolicy.locked}
+                defaultMethodId={defaultPayMethod}
+              />
+            )}
           </CardContent>
         </Card>
       )}

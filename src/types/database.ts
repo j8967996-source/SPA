@@ -1998,6 +1998,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           id: string
+          order_customer_id: string | null
           order_id: string | null
           paid_at: string
           payment_method_id: string
@@ -2013,6 +2014,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          order_customer_id?: string | null
           order_id?: string | null
           paid_at: string
           payment_method_id: string
@@ -2028,6 +2030,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           id?: string
+          order_customer_id?: string | null
           order_id?: string | null
           paid_at?: string
           payment_method_id?: string
@@ -2042,6 +2045,13 @@ export type Database = {
             columns: ["stored_value_card_id"]
             isOneToOne: false
             referencedRelation: "stored_value_cards"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_order_customer_id_fkey"
+            columns: ["order_customer_id"]
+            isOneToOne: false
+            referencedRelation: "order_customers"
             referencedColumns: ["id"]
           },
           {

@@ -304,9 +304,19 @@ export async function setOrderStatus(orderId: string, next: string): Promise<Act
 
 const paymentSchema = z.object({
   order_id: z.string().uuid(),
+  order_customer_id: z.string().uuid().optional().nullable(),
   payment_method_id: z.string().uuid(),
   amount: z.coerce.number().positive(),
   payment_ref: z.string().max(80).optional().nullable(),
+  tips: z
+    .array(
+      z.object({
+        order_item_id: z.string().uuid(),
+        therapist_id: z.string().uuid(),
+        amount: z.coerce.number().positive(),
+      }),
+    )
+    .optional(),
 });
 
 export async function takePayment(input: unknown): Promise<ActionResult> {
@@ -326,14 +336,46 @@ export async function takePayment(input: unknown): Promise<ActionResult> {
     return { ok: false, error: 'Order is already closed or void' };
   }
 
-  const { error: pe } = await supabase.from('payments').insert({
-    order_id: d.order_id,
-    payment_method_id: d.payment_method_id,
-    amount_cents: amountCents,
-    payment_ref: d.payment_ref || null,
-    paid_at: new Date().toISOString(),
-  });
-  if (pe) return { ok: false, error: pe.message };
+  // Tips are only recorded on a PAYMAYA payment (cash tips never enter the system).
+  const tips = d.tips ?? [];
+  if (tips.length > 0) {
+    const { data: pm } = await supabase
+      .from('payment_methods')
+      .select('code')
+      .eq('id', d.payment_method_id)
+      .single();
+    if (pm?.code !== 'paymaya') {
+      return { ok: false, error: 'Tips can only be recorded on a PAYMAYA payment' };
+    }
+  }
+
+  const { data: payment, error: pe } = await supabase
+    .from('payments')
+    .insert({
+      order_id: d.order_id,
+      order_customer_id: d.order_customer_id || null,
+      payment_method_id: d.payment_method_id,
+      amount_cents: amountCents,
+      payment_ref: d.payment_ref || null,
+      paid_at: new Date().toISOString(),
+    })
+    .select('id')
+    .single();
+  if (pe || !payment) return { ok: false, error: pe?.message ?? 'Payment insert failed' };
+
+  if (tips.length > 0) {
+    const { error: te } = await supabase.from('tips').insert(
+      tips.map((t) => ({
+        order_id: d.order_id,
+        order_item_id: t.order_item_id,
+        therapist_id: t.therapist_id,
+        payment_id: payment.id,
+        amount_cents: Math.round(t.amount * 100),
+        status: 'open',
+      })),
+    );
+    if (te) return { ok: false, error: te.message };
+  }
 
   const newPaid = order.paid_cents + amountCents;
   const patch: { paid_cents: number; status?: string } = { paid_cents: newPaid };
