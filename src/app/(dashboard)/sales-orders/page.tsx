@@ -117,7 +117,7 @@ export default async function SalesOrdersPage() {
               <TableHead className="w-28 font-bold">Type</TableHead>
               <TableHead className="w-16 font-bold">PAX</TableHead>
               <TableHead className="w-32 font-bold">Service Date</TableHead>
-              <TableHead className="w-32 font-bold">Total</TableHead>
+              <TableHead className="w-32 font-bold text-right">Total</TableHead>
               <TableHead className="w-28 font-bold">Status</TableHead>
             </TableRow>
           </TableHeader>
@@ -148,7 +148,7 @@ export default async function SalesOrdersPage() {
                     </TableCell>
                     <TableCell className="font-bold tabular">{pax}</TableCell>
                     <TableCell className="font-medium tabular">{o.service_date}</TableCell>
-                    <TableCell className="font-bold tabular">{peso(o.total_cents)}</TableCell>
+                    <TableCell className="font-bold tabular text-right">{peso(o.total_cents)}</TableCell>
                     <TableCell>
                       <Badge variant={STATUS_VARIANT[o.status] ?? 'secondary'} className="font-bold capitalize">
                         {o.status.replace('_', ' ')}

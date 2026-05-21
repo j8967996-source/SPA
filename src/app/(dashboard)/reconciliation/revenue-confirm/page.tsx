@@ -95,7 +95,7 @@ export default async function RevenueConfirmPage({
                   <TableHead className="font-bold">Order No</TableHead>
                   <TableHead className="font-bold">Type</TableHead>
                   <TableHead className="font-bold">Billing</TableHead>
-                  <TableHead className="w-32 font-bold">Total</TableHead>
+                  <TableHead className="w-32 font-bold text-right">Total</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -111,7 +111,7 @@ export default async function RevenueConfirmPage({
                         <Badge variant={o.isAR ? 'secondary' : 'default'} className="font-bold">{o.isAR ? 'AR' : 'Paid'}</Badge>
                       </TableCell>
                       <TableCell className="font-medium text-muted-foreground">{o.billing_label ?? 'Self-pay'}</TableCell>
-                      <TableCell className="font-bold tabular">{peso(o.total_cents)}</TableCell>
+                      <TableCell className="font-bold tabular text-right">{peso(o.total_cents)}</TableCell>
                     </TableRow>
                   ))
                 )}

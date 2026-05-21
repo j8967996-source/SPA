@@ -128,7 +128,7 @@ export default async function ServiceItemsPage() {
               <TableHead className="font-bold">Service Group</TableHead>
               <TableHead className="w-24 font-bold">Code</TableHead>
               <TableHead className="w-28 font-bold">Duration</TableHead>
-              <TableHead className="w-32 font-bold">Price</TableHead>
+              <TableHead className="w-32 font-bold text-right">Price</TableHead>
               <TableHead className="w-24 font-bold">Slot</TableHead>
               <TableHead className="font-bold">Station</TableHead>
               <TableHead className="w-28 font-bold">Status</TableHead>
@@ -157,7 +157,7 @@ export default async function ServiceItemsPage() {
                       )}
                       <TableCell className="font-mono font-bold">{r.i.code}</TableCell>
                       <TableCell className="font-bold tabular">{r.i.duration_minutes} min</TableCell>
-                      <TableCell className="font-bold tabular">
+                      <TableCell className="font-bold tabular text-right">
                         {r.priceCents != null ? `₱${(r.priceCents / 100).toLocaleString('en-PH')}` : <span className="text-muted-foreground">—</span>}
                       </TableCell>
                       <TableCell>

@@ -91,7 +91,7 @@ export default async function StoredValueCardsPage() {
             <TableRow>
               <TableHead className="font-bold">Card No</TableHead>
               <TableHead className="font-bold">Customer</TableHead>
-              <TableHead className="w-36 font-bold">Balance</TableHead>
+              <TableHead className="w-36 font-bold text-right">Balance</TableHead>
               <TableHead className="w-32 font-bold">Issued</TableHead>
               <TableHead className="w-32 font-bold">Expires</TableHead>
               <TableHead className="w-28 font-bold">Status</TableHead>
@@ -118,7 +118,7 @@ export default async function StoredValueCardsPage() {
                       {cust?.name ?? '—'}
                       {cust?.phone && <span className="ml-2 font-medium text-muted-foreground">{cust.phone}</span>}
                     </TableCell>
-                    <TableCell className="font-extrabold tabular">{peso(c.current_balance_cents)}</TableCell>
+                    <TableCell className="font-extrabold tabular text-right">{peso(c.current_balance_cents)}</TableCell>
                     <TableCell className="font-medium tabular text-sm">{c.issued_at.slice(0, 10)}</TableCell>
                     <TableCell className="font-medium tabular text-sm">{c.expires_at.slice(0, 10)}</TableCell>
                     <TableCell>
