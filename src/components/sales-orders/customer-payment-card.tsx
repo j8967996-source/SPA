@@ -141,30 +141,32 @@ export function CustomerPaymentCard({
           <Input value={ref} onChange={(e) => setRef(e.target.value)} placeholder="auth / ref" className="w-32" />
         </div>
         <Button size="sm" onClick={record} disabled={pending}>Record</Button>
+        {showTips && (
+          <div className="ml-auto flex flex-col gap-1">
+            <Label className="text-xs font-semibold text-muted-foreground">Tip (PAYMAYA)</Label>
+            {tipTargets.map((t) => (
+              <div key={t.orderItemId} className="flex items-center gap-2">
+                <span className="text-xs font-semibold whitespace-nowrap">
+                  {t.therapistName} <span className="font-medium text-muted-foreground">· {t.serviceName}</span>
+                </span>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={tips[t.orderItemId] ?? ''}
+                  onChange={(e) => setTip(t.orderItemId, e.target.value)}
+                  placeholder="0.00"
+                  className="w-24"
+                />
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       {showTips && (
-        <div className="border-t border-border pt-2 flex flex-col gap-1.5">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Tip (PAYMAYA)</p>
-          {tipTargets.map((t) => (
-            <div key={t.orderItemId} className="flex items-center gap-2">
-              <span className="text-xs font-semibold whitespace-nowrap">
-                {t.therapistName} <span className="font-medium text-muted-foreground">· {t.serviceName}</span>
-              </span>
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                value={tips[t.orderItemId] ?? ''}
-                onChange={(e) => setTip(t.orderItemId, e.target.value)}
-                placeholder="0.00"
-                className="w-24 ml-auto"
-              />
-            </div>
-          ))}
-          <p className="text-sm font-bold tabular text-right border-t border-border/60 pt-1.5">
-            Charge {peso(chargeTotalCents)}
-          </p>
-        </div>
+        <p className="text-sm font-bold tabular text-right border-t border-border/60 pt-1.5">
+          Charge {peso(chargeTotalCents)}
+        </p>
       )}
       {showCard && (
         <div className="flex flex-col gap-1">
