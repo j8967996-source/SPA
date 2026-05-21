@@ -65,7 +65,7 @@ export function OrderStatusActions({ orderId, status, canManage, itemCount }: Pr
         <span className="text-xs font-medium text-muted-foreground">Start each service below to begin</span>
       )}
       {status === 'in_service' && (
-        <Button size="sm" onClick={() => doStatus('completed')} disabled={pending}>Complete</Button>
+        <span className="text-xs font-medium text-muted-foreground">Completes when every service is finished or skipped</span>
       )}
       {status === 'paid' && (
         <span className="text-xs font-medium text-muted-foreground">Paid — closes at daily Revenue Confirm</span>

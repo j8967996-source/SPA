@@ -539,6 +539,8 @@ export async function interruptOrderItem(input: unknown): Promise<ActionResult> 
     .eq('id', d.item_id);
   if (error) return { ok: false, error: error.message };
   await recomputeTotals(d.order_id);
+  // Interrupting the last active service also wraps up the order.
+  await maybeAutoComplete(d.order_id);
   revalidatePath(`/sales-orders/${d.order_id}`);
   return { ok: true };
 }
