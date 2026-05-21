@@ -580,7 +580,7 @@ export async function submitFeedback(input: unknown): Promise<ActionResult> {
     comment: d.comment || null,
     language: 'en',
     status: 'submitted',
-    filled_via: 'counter',
+    filled_via: 'tablet',
     filled_at: new Date().toISOString(),
   });
   if (error) return { ok: false, error: error.message };
