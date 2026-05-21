@@ -106,15 +106,15 @@ async function fetchData(id: string) {
     homeBranchId: e.home_branch_id as string | null,
     homeBranchCode: one(e.home_branch)?.code ?? null,
   }));
-  // "At this branch" = home-branched here OR rostered here today. Everyone else is
-  // borrowable (manual cross-branch dispatch — auto-assign never reaches for them).
-  const belongsHere = (e: { homeBranchId: string | null; id: string }) =>
-    e.homeBranchId === order.branch_id || scheduledIds.has(e.id);
+  // Only therapists actually rostered here today are normally selectable —
+  // someone off-shift shouldn't be assignable. Other-branch staff not rostered
+  // here are offered separately as a manual "borrow" (auto-assign skips them).
+  const rosteredHere = (e: { id: string }) => scheduledIds.has(e.id);
   const thisBranchEmployees = allEmployees
-    .filter(belongsHere)
+    .filter(rosteredHere)
     .map((e) => ({ id: e.id, code: e.code, name: e.name }));
   const borrowableEmployees = allEmployees
-    .filter((e) => !belongsHere(e))
+    .filter((e) => !rosteredHere(e) && e.homeBranchId !== order.branch_id)
     .map((e) => ({ id: e.id, code: e.code, name: e.name, homeBranchCode: e.homeBranchCode }));
 
   return {
