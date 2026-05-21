@@ -514,7 +514,15 @@ export function OrderWorkspace({
                         </>
                       )}
                       {['service_completed', 'feedback_done'].includes(it.status) && it.feedback_score == null && (
-                        <Button size="sm" variant="outline" onClick={() => setFeedbackItem(it)} disabled={pending}>Feedback</Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-amber-500/60 text-amber-700 hover:text-amber-800 dark:text-amber-400"
+                          onClick={() => setFeedbackItem(it)}
+                          disabled={pending}
+                        >
+                          <Star className="size-3.5" /> Feedback
+                        </Button>
                       )}
                     </div>
                     <div className="flex items-center gap-2 justify-self-end">
