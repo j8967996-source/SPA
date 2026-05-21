@@ -134,7 +134,7 @@ export function CustomerPaymentCard({
         </div>
         <div className="flex flex-col gap-1">
           <Label className="text-xs font-semibold">Amount (₱)</Label>
-          <Input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-28" />
+          <Input type="number" min="0" step="0.01" value={amount} readOnly className="w-28 bg-muted/50 text-right" />
         </div>
         <div className="flex flex-col gap-1">
           <Label className="text-xs font-semibold">Reference {refRequired && <span className="text-destructive">*</span>}</Label>
@@ -156,7 +156,7 @@ export function CustomerPaymentCard({
                   value={tips[t.orderItemId] ?? ''}
                   onChange={(e) => setTip(t.orderItemId, e.target.value)}
                   placeholder="0.00"
-                  className="w-24"
+                  className="w-24 text-right"
                 />
               </div>
             ))}
