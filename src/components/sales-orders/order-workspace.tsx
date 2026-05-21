@@ -404,31 +404,35 @@ export function OrderWorkspace({
 
         <TabsContent value="guests" className="flex flex-col gap-4">
       {/* section header: pax count + add customer */}
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="flex items-center gap-2">
-          <h3 className="text-xl font-bold">Guests</h3>
-          <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-bold text-muted-foreground">{customers.length} pax</span>
-        </div>
-        {order.editable && (
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="flex flex-col gap-1">
-              <Label className="text-xs font-semibold">Customer name <span className="text-destructive">*</span></Label>
-              <Input value={custName} onChange={(e) => setCustName(e.target.value)} placeholder="Name" className="w-44" />
-            </div>
-            <div className="flex flex-col gap-1">
-              <Label className="text-xs font-semibold">Phone</Label>
-              <Input value={custPhone} onChange={(e) => setCustPhone(e.target.value)} placeholder="optional" className="w-36" />
-            </div>
-            <Button size="sm" onClick={doAddCustomer} disabled={pending}>
-              <UserPlus className="size-4" /> Add Customer
-            </Button>
+      {/* Same column grid as the service rows so "Start all" lands above the Action column. */}
+      <div className="grid grid-cols-[11rem_10rem_6rem_15rem_10rem_1fr] items-end gap-x-3 px-4">
+        <div className="col-span-4 flex flex-wrap items-end gap-3">
+          <div className="flex items-center gap-2">
+            <h3 className="text-xl font-bold">Guests</h3>
+            <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-bold text-muted-foreground">{customers.length} pax</span>
           </div>
-        )}
-        {canRunService && items.some((i) => i.status === 'scheduled') && (
-          <Button size="sm" variant="outline" className="ml-auto" onClick={doStartAll} disabled={pending}>
+          {order.editable && (
+            <div className="flex flex-wrap items-end gap-2">
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs font-semibold">Customer name <span className="text-destructive">*</span></Label>
+                <Input value={custName} onChange={(e) => setCustName(e.target.value)} placeholder="Name" className="w-44" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs font-semibold">Phone</Label>
+                <Input value={custPhone} onChange={(e) => setCustPhone(e.target.value)} placeholder="optional" className="w-36" />
+              </div>
+              <Button size="sm" onClick={doAddCustomer} disabled={pending}>
+                <UserPlus className="size-4" /> Add Customer
+              </Button>
+            </div>
+          )}
+        </div>
+        {canRunService && items.some((i) => i.status === 'scheduled') ? (
+          <Button size="sm" variant="outline" onClick={doStartAll} disabled={pending}>
             <Play className="size-4" /> Start all
           </Button>
-        )}
+        ) : <span />}
+        <span />
       </div>
 
       {/* customers + items */}
