@@ -291,7 +291,12 @@ export function OrderWorkspace({
     }));
   // Combined list drives the trigger's value→label lookup; the dropdown groups them.
   const empOptions = [{ value: NONE, label: 'Unassigned' }, ...thisBranchOptions, ...borrowOptions];
-  const resOptions = [{ value: NONE, label: 'None' }, ...resources.map((r) => ({ value: r.id, label: r.name }))];
+  // A station occupied by an in-service order can't take another — disable it.
+  const busyRes = new Set(busyResourceIds);
+  const resOptions = [
+    { value: NONE, label: 'None', disabled: false },
+    ...resources.map((r) => ({ value: r.id, label: `${r.name}${busyRes.has(r.id) ? ' · in use' : ''}`, disabled: busyRes.has(r.id) })),
+  ];
   const discOptions = discountClasses.map((d) => ({ value: d.id, label: `${d.code} — ${d.description}` }));
 
   const itemsByCustomer = (cid: string) => items.filter((i) => i.order_customer_id === cid);
@@ -501,7 +506,7 @@ export function OrderWorkspace({
                           <Select items={resOptions} value={resourceId} onValueChange={(v) => setResourceId(v ?? NONE)}>
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
-                              {resOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                              {resOptions.map((o) => <SelectItem key={o.value} value={o.value} disabled={o.disabled}>{o.label}</SelectItem>)}
                             </SelectContent>
                           </Select>
                         </div>
