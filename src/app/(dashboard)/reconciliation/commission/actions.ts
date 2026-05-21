@@ -19,7 +19,7 @@ async function loadEligible(from: string, to: string) {
   const { data, error } = await supabase
     .from('order_items')
     .select(`
-      id, list_price_cents, therapist_id, commission_settlement_id,
+      id, list_price_cents, therapist_id, commission_settlement_id, status,
       service:service_items!order_items_service_item_id_fkey ( commission_applicable ),
       order:orders!order_items_order_id_fkey ( status, service_date, branch_id ),
       therapist:employees!order_items_therapist_id_fkey (
@@ -42,6 +42,7 @@ async function loadEligible(from: string, to: string) {
     })
     .filter((r) =>
       r.ord && ['paid', 'closed'].includes(r.ord.status) &&
+      r.it.status !== 'cancelled' &&
       r.ord.service_date >= from && r.ord.service_date <= to &&
       r.svc?.commission_applicable && r.th,
     );

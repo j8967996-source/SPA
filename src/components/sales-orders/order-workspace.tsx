@@ -702,11 +702,13 @@ export function OrderWorkspace({
             <Card>
               <CardContent className="py-2 flex flex-col divide-y divide-border">
                 {items.map((it) => (
-                  <div key={it.id} className="flex items-center justify-between py-2 text-sm">
+                  <div key={it.id} className={`flex items-center justify-between py-2 text-sm ${it.status === 'cancelled' ? 'opacity-60' : ''}`}>
                     <span className="font-semibold">{it.service_name}<span className="ml-2 font-medium text-muted-foreground">{it.therapist_name ?? 'Unassigned'}</span></span>
-                    {it.feedback_score != null
-                      ? <span className="font-bold text-amber-600 dark:text-amber-400">★ {it.feedback_score}/10</span>
-                      : <span className="text-xs font-medium text-muted-foreground">Not submitted</span>}
+                    {it.status === 'cancelled'
+                      ? <span className="text-xs font-medium text-muted-foreground">Skipped</span>
+                      : it.feedback_score != null
+                        ? <span className="font-bold text-amber-600 dark:text-amber-400">★ {it.feedback_score}/10</span>
+                        : <span className="text-xs font-medium text-muted-foreground">Not submitted</span>}
                   </div>
                 ))}
               </CardContent>
