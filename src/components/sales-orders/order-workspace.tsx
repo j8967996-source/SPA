@@ -5,6 +5,16 @@ import { Plus, Trash2, UserPlus, CreditCard, Wand2, Users, Receipt, Star, Histor
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -183,6 +193,7 @@ export function OrderWorkspace({
   const [payMode, setPayMode] = useState<'split' | 'together'>('split');
   const [feedbackItem, setFeedbackItem] = useState<OrderItem | null>(null);
   const [interruptItem, setInterruptItem] = useState<OrderItem | null>(null);
+  const [concurrentItem, setConcurrentItem] = useState<OrderItem | null>(null);
 
   const due = Math.max(0, order.total_cents - order.paid_cents);
   const canRunService = ['open', 'in_service'].includes(order.status);
@@ -260,11 +271,20 @@ export function OrderWorkspace({
     });
   }
 
-  function doStartItem(id: string) {
+  function startItemNow(id: string, allowConcurrent: boolean) {
     startTransition(async () => {
-      const r = await startOrderItem(id, order.id);
+      const r = await startOrderItem(id, order.id, allowConcurrent);
       if (r.ok) toast.success('Service started'); else toast.error(r.error);
     });
+  }
+
+  function doStartItem(it: OrderItem) {
+    // Same guest already mid-service → confirm before running them in parallel.
+    const concurrent = items.some(
+      (x) => x.id !== it.id && x.order_customer_id === it.order_customer_id && x.status === 'in_service',
+    );
+    if (concurrent) { setConcurrentItem(it); return; }
+    startItemNow(it.id, false);
   }
 
   function doFinishItem(id: string) {
@@ -442,7 +462,7 @@ export function OrderWorkspace({
                     <div className="flex items-center gap-2 shrink-0">
                       {canRunService && it.status === 'scheduled' && (
                         <>
-                          <Button size="sm" variant="outline" onClick={() => doStartItem(it.id)} disabled={pending}>Start</Button>
+                          <Button size="sm" variant="outline" onClick={() => doStartItem(it)} disabled={pending}>Start</Button>
                           <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => doSkipItem(it.id)} disabled={pending}>Skip</Button>
                         </>
                       )}
@@ -765,6 +785,25 @@ export function OrderWorkspace({
           onOpenChange={(o) => { if (!o) setInterruptItem(null); }}
         />
       )}
+
+      <AlertDialog open={!!concurrentItem} onOpenChange={(o) => { if (!o) setConcurrentItem(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Start at the same time?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This guest already has a service in progress. Start <strong>{concurrentItem?.service_name}</strong> in parallel?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { if (concurrentItem) startItemNow(concurrentItem.id, true); setConcurrentItem(null); }}
+            >
+              Start in parallel
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

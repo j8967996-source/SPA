@@ -372,7 +372,11 @@ export async function removeOrderItem(itemId: string, orderId: string): Promise<
 }
 
 // Per-item service timing — drives real-time therapist availability.
-export async function startOrderItem(itemId: string, orderId: string): Promise<ActionResult> {
+export async function startOrderItem(
+  itemId: string,
+  orderId: string,
+  allowConcurrent = false,
+): Promise<ActionResult> {
   const supabase = createServiceClient();
   const now = new Date().toISOString();
 
@@ -380,9 +384,24 @@ export async function startOrderItem(itemId: string, orderId: string): Promise<A
   // on another line.
   const { data: item } = await supabase
     .from('order_items')
-    .select('therapist_id, resource_id')
+    .select('therapist_id, resource_id, order_customer_id')
     .eq('id', itemId)
     .single();
+
+  // One guest does one service at a time unless the operator confirms a parallel
+  // service (e.g. foot massage + scalp care together).
+  if (!allowConcurrent && item?.order_customer_id) {
+    const { data: sameGuest } = await supabase
+      .from('order_items')
+      .select('id')
+      .eq('order_customer_id', item.order_customer_id)
+      .eq('status', 'in_service')
+      .neq('id', itemId)
+      .limit(1);
+    if (sameGuest && sameGuest.length > 0) {
+      return { ok: false, error: 'This guest already has a service in progress' };
+    }
+  }
   if (item?.therapist_id) {
     const { data: busy } = await supabase
       .from('order_items')
