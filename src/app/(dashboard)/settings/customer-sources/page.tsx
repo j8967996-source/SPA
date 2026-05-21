@@ -1,5 +1,5 @@
 import Link from 'next/link';
-import { ChevronLeft, Plus } from 'lucide-react';
+import { ChevronLeft, Plus, Lock } from 'lucide-react';
 
 import { createServiceClient } from '@/lib/supabase/server';
 import { Button } from '@/components/ui/button';
@@ -34,7 +34,7 @@ async function fetchData() {
     supabase
       .from('customer_sources')
       .select(`
-        id, code, name, default_billing_to_id, default_discount_class_id, active,
+        id, code, name, default_billing_to_id, default_discount_class_id, discount_locked, active,
         billing:billing_destinations ( code, name ),
         discount:discount_classes ( code, description, discount_percent, discount_amount_cents )
       `)
@@ -115,6 +115,7 @@ export default async function CustomerSourcesPage() {
                   name: s.name,
                   default_billing_to_id: s.default_billing_to_id,
                   default_discount_class_id: s.default_discount_class_id,
+                  discount_locked: s.discount_locked,
                 };
                 return (
                   <TableRow key={s.id}>
@@ -128,11 +129,14 @@ export default async function CustomerSourcesPage() {
                       )}
                     </TableCell>
                     <TableCell className="font-medium">
-                      {formatDiscount(disc) ? (
-                        <Badge variant="secondary" className="font-bold">{formatDiscount(disc)}</Badge>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
+                      <div className="flex items-center gap-1.5">
+                        {formatDiscount(disc) ? (
+                          <Badge variant="secondary" className="font-bold">{formatDiscount(disc)}</Badge>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                        {s.discount_locked && <Lock className="size-3.5 text-muted-foreground" aria-label="Locked for all items" />}
+                      </div>
                     </TableCell>
                     <TableCell>
                       {s.active ? (

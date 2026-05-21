@@ -242,6 +242,18 @@ export async function addOrderItem(input: unknown): Promise<ActionResult> {
   const d = parsed.data;
   const supabase = createServiceClient();
 
+  // If the order's customer source locks the discount (group rate), force the
+  // source's default discount and ignore whatever the client sent.
+  const { data: ord } = await supabase
+    .from('orders')
+    .select('source:customer_sources ( discount_locked, default_discount_class_id )')
+    .eq('id', d.order_id)
+    .maybeSingle();
+  const ordSource = ord ? (Array.isArray(ord.source) ? ord.source[0] : ord.source) : null;
+  const discountClassId = ordSource?.discount_locked && ordSource.default_discount_class_id
+    ? ordSource.default_discount_class_id
+    : d.discount_class_id;
+
   // Service item → category, duration
   const { data: svc, error: se } = await supabase
     .from('service_items')
@@ -277,7 +289,7 @@ export async function addOrderItem(input: unknown): Promise<ActionResult> {
   const { data: disc, error: de } = await supabase
     .from('discount_classes')
     .select('code, discount_percent, discount_amount_cents')
-    .eq('id', d.discount_class_id)
+    .eq('id', discountClassId)
     .single();
   if (de || !disc) return { ok: false, error: 'Discount class not found' };
 
@@ -321,7 +333,7 @@ export async function addOrderItem(input: unknown): Promise<ActionResult> {
     resource_id: d.resource_id || null,
     duration_minutes: svc.duration_minutes,
     list_price_cents: listPrice,
-    discount_class_id: d.discount_class_id,
+    discount_class_id: discountClassId,
     discount_amount_cents: discountAmount,
     final_amount_cents: finalAmount,
     status: 'scheduled',

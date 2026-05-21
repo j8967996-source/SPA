@@ -99,6 +99,7 @@ interface Props {
   resources: ResourceOpt[];
   discountClasses: DiscountOpt[];
   sourceDefaultDiscountId: string | null;
+  sourceDiscountLocked: boolean;
   paymentMethods: { id: string; code: string; display_name: string }[];
   storedValueCards: { id: string; card_no: string; balance_cents: number; customer_name: string | null }[];
   capabilityByEmployee: Record<string, string[]>;
@@ -129,6 +130,7 @@ export function OrderWorkspace({
   resources,
   discountClasses,
   sourceDefaultDiscountId,
+  sourceDiscountLocked,
   paymentMethods,
   storedValueCards,
   paymentPolicy,
@@ -193,7 +195,7 @@ export function OrderWorkspace({
         service_item_id: svcId,
         therapist_id: therapistId === NONE ? null : therapistId,
         resource_id: resourceId === NONE ? null : resourceId,
-        discount_class_id: discountId,
+        discount_class_id: sourceDiscountLocked ? defaultDiscountId : discountId,
         discount_override: needsDiscountAmount ? Number(discountOverride || 0) : null,
       });
       if (r.ok) { setSvcId(''); setGroupSel(''); setDiscountId(defaultDiscountId); setDiscountOverride(''); setActiveCustomer(null); toast.success('Service added'); }
@@ -475,12 +477,15 @@ export function OrderWorkspace({
                     </div>
                     <div className="max-w-[15rem]">
                       <Label className="text-xs font-semibold">Discount</Label>
-                      <Select items={discOptions} value={discountId} onValueChange={(v) => v && setDiscountId(v)}>
+                      <Select items={discOptions} value={sourceDiscountLocked ? defaultDiscountId : discountId} onValueChange={(v) => v && setDiscountId(v)} disabled={sourceDiscountLocked}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {discOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
                         </SelectContent>
                       </Select>
+                      {sourceDiscountLocked && (
+                        <p className="text-[11px] font-medium text-muted-foreground mt-1">Set by customer source (group rate)</p>
+                      )}
                     </div>
                     {needsDiscountAmount && (
                       <div>

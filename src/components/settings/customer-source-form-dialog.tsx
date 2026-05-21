@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import {
   Select,
   SelectContent,
@@ -34,6 +35,7 @@ export interface CustomerSourceItem {
   name: string;
   default_billing_to_id: string | null;
   default_discount_class_id: string | null;
+  discount_locked: boolean;
 }
 
 interface BillingOption {
@@ -81,6 +83,7 @@ export function CustomerSourceFormDialog({
   const [name, setName] = useState(item?.name ?? '');
   const [billingId, setBillingId] = useState(item?.default_billing_to_id ?? NONE);
   const [discountId, setDiscountId] = useState(item?.default_discount_class_id ?? NONE);
+  const [discountLocked, setDiscountLocked] = useState(item?.discount_locked ?? false);
 
   const billingOptions = [
     { value: NONE, label: 'None (customer self-pays)' },
@@ -107,6 +110,7 @@ export function CustomerSourceFormDialog({
       name,
       default_billing_to_id: billingId === NONE ? null : billingId,
       default_discount_class_id: discountId === NONE ? null : discountId,
+      discount_locked: discountLocked,
     };
     startTransition(async () => {
       const r = isEdit
@@ -201,8 +205,19 @@ export function CustomerSourceFormDialog({
                 </SelectContent>
               </Select>
               <p className="text-xs font-medium text-muted-foreground">
-                Auto-applies to OrderItems when this source is used. (Can override per-item.)
+                Auto-applies to OrderItems when this source is used.
               </p>
+            </div>
+
+            <div className="flex items-start justify-between gap-3 rounded-lg border border-border p-3">
+              <div className="flex flex-col gap-0.5">
+                <Label className="font-semibold">Lock discount (group rate)</Label>
+                <p className="text-xs font-medium text-muted-foreground">
+                  On = every guest gets the default discount, no per-item changes (hotels / groups).
+                  Off = the default is just a starting point and can be changed per guest (walk-in).
+                </p>
+              </div>
+              <Switch checked={discountLocked} onCheckedChange={setDiscountLocked} />
             </div>
           </div>
 
