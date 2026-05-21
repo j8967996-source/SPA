@@ -277,14 +277,17 @@ export function OrderWorkspace({
   // A therapist is offered only if they can perform the chosen service group.
   // No group picked yet → show everyone (the picker is disabled until a group exists anyway).
   const canDoGroup = (id: string) => !groupSel || (capabilityByEmployee[id] ?? []).includes(groupSel);
+  // A therapist mid-service elsewhere can't take a new one — show them but
+  // disable so they can't be picked (auto-assign already skips them too).
   const thisBranchOptions = employees
     .filter((e) => canDoGroup(e.id))
-    .map((e) => ({ value: e.id, label: `${e.code} — ${e.name}${busy.has(e.id) ? ' · in service' : ''}` }));
+    .map((e) => ({ value: e.id, label: `${e.code} — ${e.name}${busy.has(e.id) ? ' · in service' : ''}`, disabled: busy.has(e.id) }));
   const borrowOptions = borrowableEmployees
     .filter((e) => canDoGroup(e.id))
     .map((e) => ({
       value: e.id,
       label: `${e.code} — ${e.name}${e.homeBranchCode ? ` · ${e.homeBranchCode}` : ''}${busy.has(e.id) ? ' · in service' : ''}`,
+      disabled: busy.has(e.id),
     }));
   // Combined list drives the trigger's value→label lookup; the dropdown groups them.
   const empOptions = [{ value: NONE, label: 'Unassigned' }, ...thisBranchOptions, ...borrowOptions];
@@ -478,7 +481,7 @@ export function OrderWorkspace({
                                 {thisBranchOptions.length === 0 ? (
                                   <SelectItem value="__nobody__" disabled>{groupSel ? `No therapist here can do ${groupSel}` : 'No therapist rostered here'}</SelectItem>
                                 ) : (
-                                  thisBranchOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)
+                                  thisBranchOptions.map((o) => <SelectItem key={o.value} value={o.value} disabled={o.disabled}>{o.label}</SelectItem>)
                                 )}
                               </SelectGroup>
                               {borrowOptions.length > 0 && (
@@ -486,7 +489,7 @@ export function OrderWorkspace({
                                   <SelectSeparator />
                                   <SelectGroup>
                                     <SelectLabel>Borrow from other branch</SelectLabel>
-                                    {borrowOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                                    {borrowOptions.map((o) => <SelectItem key={o.value} value={o.value} disabled={o.disabled}>{o.label}</SelectItem>)}
                                   </SelectGroup>
                                 </>
                               )}
