@@ -440,7 +440,7 @@ export function OrderWorkspace({
               {order.editable && (
                 activeCustomer === c.id ? (
                   <div className="mt-3 grid grid-cols-3 gap-2 rounded-lg border border-border p-3">
-                    <div>
+                    <div className="max-w-[15rem]">
                       <Label className="text-xs font-semibold">Service</Label>
                       <Select
                         items={groupOptions}
@@ -453,7 +453,7 @@ export function OrderWorkspace({
                         </SelectContent>
                       </Select>
                     </div>
-                    <div>
+                    <div className="max-w-[15rem]">
                       <Label className="text-xs font-semibold">Duration</Label>
                       <Select
                         items={variantOptions}
@@ -467,7 +467,7 @@ export function OrderWorkspace({
                         </SelectContent>
                       </Select>
                     </div>
-                    <div>
+                    <div className="max-w-[15rem]">
                       <Label className="text-xs font-semibold">Discount</Label>
                       <Select items={discOptions} value={discountId} onValueChange={(v) => v && setDiscountId(v)}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
@@ -490,7 +490,7 @@ export function OrderWorkspace({
                         </Button>
                       </div>
                       <div className="grid grid-cols-3 gap-2">
-                        <div>
+                        <div className="max-w-[15rem]">
                           <Label className="text-xs font-semibold">Therapist</Label>
                           <Select items={empOptions} value={therapistId} onValueChange={(v) => setTherapistId(v ?? NONE)}>
                             <SelectTrigger><SelectValue /></SelectTrigger>
@@ -516,7 +516,7 @@ export function OrderWorkspace({
                             </SelectContent>
                           </Select>
                         </div>
-                        <div>
+                        <div className="max-w-[15rem]">
                           <Label className="text-xs font-semibold">Station</Label>
                           <Select items={resOptions} value={resourceId} onValueChange={(v) => setResourceId(v ?? NONE)}>
                             <SelectTrigger><SelectValue /></SelectTrigger>
