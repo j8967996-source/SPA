@@ -61,7 +61,8 @@ const NONE = '__none__';
 const ORDER_TYPES = [
   { value: 'walk_in', label: 'Walk-in' },
   { value: 'reservation', label: 'Reservation' },
-  { value: 'package_use', label: 'Package Use' },
+  // 'package_use' hidden until the package/redemption module exists; the enum
+  // value is kept server-side so existing orders stay valid.
   { value: 'stored_value', label: 'Stored Value' },
   { value: 'external', label: 'External (Hotel)' },
 ];
