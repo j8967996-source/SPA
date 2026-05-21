@@ -46,7 +46,7 @@ async function fetchData(id: string) {
         id, order_customer_id, list_price_cents, discount_amount_cents, final_amount_cents, status,
         therapist_id, resource_id, duration_minutes, actual_start, actual_end,
         service:service_items ( name ),
-        therapist:employees ( name ),
+        therapist:employees ( name, home_branch:branches!employees_home_branch_id_fkey ( code ) ),
         resource:resources ( resource_name )
       )
     `)
@@ -210,6 +210,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       order_customer_id: it.order_customer_id,
       service_name: svc?.name ?? 'Service',
       therapist_name: th?.name ?? null,
+      therapist_home_branch_code: th ? one(th.home_branch)?.code ?? null : null,
       therapist_id: it.therapist_id,
       resource_id: it.resource_id,
       station_name: resource?.resource_name ?? null,

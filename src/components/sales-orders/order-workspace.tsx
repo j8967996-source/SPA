@@ -43,6 +43,7 @@ interface OrderItem {
   order_customer_id: string;
   service_name: string;
   therapist_name: string | null;
+  therapist_home_branch_code: string | null;
   therapist_id: string | null;
   resource_id: string | null;
   station_name: string | null;
@@ -412,7 +413,10 @@ export function OrderWorkspace({
                     <div className="min-w-0">
                       <div>
                         <span className="font-semibold">{it.service_name}</span>
-                        <span className="ml-2 font-medium text-muted-foreground">{it.therapist_name ?? 'Unassigned'}</span>
+                        <span className="ml-2 font-medium text-muted-foreground">
+                          {it.therapist_name ?? 'Unassigned'}
+                          {it.therapist_home_branch_code && ` · ${it.therapist_home_branch_code}`}
+                        </span>
                         {it.status === 'in_service' && (
                           <span className="ml-2 text-[10px] font-bold uppercase tracking-wide text-blue-600 dark:text-blue-400">In service</span>
                         )}

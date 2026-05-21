@@ -33,7 +33,7 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
   const supabase = createServiceClient();
   const { data: itemData } = await supabase
     .from('order_items')
-    .select('therapist_id, resource_id, actual_start, actual_end, duration_minutes, service:service_items ( name ), therapist:employees!order_items_therapist_id_fkey ( name ), order:orders!order_items_order_id_fkey ( branch_id, service_date )')
+    .select('therapist_id, resource_id, actual_start, actual_end, duration_minutes, service:service_items ( name ), therapist:employees!order_items_therapist_id_fkey ( name, employee_code ), order:orders!order_items_order_id_fkey ( branch_id, service_date )')
     .not('actual_start', 'is', null);
   const dayItems = (itemData ?? []).filter((it) => {
     const ord = one(it.order);
@@ -68,8 +68,11 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
     const shifts = shiftsRes.data;
     const resName = new Map((resRes.data ?? []).map((r) => [r.id, r.resource_name]));
     const byTherapist = new Map<string, { name: string; startMin: number; endMin: number; ongoing: boolean }[]>();
+    const empMeta = new Map<string, { name: string; code: string }>();
     for (const it of dayItems) {
       if (!it.therapist_id) continue;
+      const th = one(it.therapist);
+      empMeta.set(it.therapist_id, { name: th?.name ?? '—', code: th?.employee_code ?? '' });
       const startMin = tsToMin(it.actual_start!);
       const endMin = it.actual_end ? tsToMin(it.actual_end) : Math.min(1439, startMin + (it.duration_minutes ?? 60));
       const svc = one(it.service)?.name ?? 'Service';
@@ -78,6 +81,7 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
       arr.push({ name: bed ? `${svc} · ${bed}` : svc, startMin, endMin, ongoing: !it.actual_end });
       byTherapist.set(it.therapist_id, arr);
     }
+    const shiftEmpIds = new Set((shifts ?? []).map((s) => s.employee_id));
     rows = (shifts ?? []).map((s) => {
       const emp = one(s.employees);
       return {
@@ -85,7 +89,18 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
         shiftStartMin: timeToMin(s.shift_start), shiftEndMin: timeToMin(s.shift_end),
         services: byTherapist.get(s.employee_id) ?? [],
       };
-    }).sort((a, b) => a.code.localeCompare(b.code));
+    });
+    // Therapists serving today without a rostered shift (e.g. borrowed, or shift
+    // never set) still appear, with no shift bar but their service blocks.
+    for (const [tid, blocks] of byTherapist) {
+      if (shiftEmpIds.has(tid)) continue;
+      const meta = empMeta.get(tid);
+      rows.push({
+        id: tid, name: meta?.name ?? '—', code: meta?.code ?? '', shiftType: 'regular',
+        shiftStartMin: null, shiftEndMin: null, services: blocks,
+      });
+    }
+    rows.sort((a, b) => a.code.localeCompare(b.code));
   }
 
   const allMins: number[] = [];
