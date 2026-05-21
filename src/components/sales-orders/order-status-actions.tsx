@@ -62,7 +62,7 @@ export function OrderStatusActions({ orderId, status, canManage, itemCount }: Pr
         <Button size="sm" onClick={() => doStatus('open')} disabled={pending || itemCount === 0}>Open Order</Button>
       )}
       {status === 'open' && (
-        <Button size="sm" onClick={() => doStatus('in_service')} disabled={pending}>Start Service</Button>
+        <span className="text-xs font-medium text-muted-foreground">Start each service below to begin</span>
       )}
       {status === 'in_service' && (
         <Button size="sm" onClick={() => doStatus('completed')} disabled={pending}>Complete</Button>

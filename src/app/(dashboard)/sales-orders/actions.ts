@@ -391,6 +391,15 @@ export async function startOrderItem(itemId: string, orderId: string): Promise<A
     .update({ status: 'in_service', actual_start: now, service_start: now })
     .eq('id', itemId);
   if (error) return { ok: false, error: error.message };
+
+  // Starting the first service moves the order into service automatically —
+  // no separate "Start Service" step. Per-line starts still stamp each time.
+  const { data: ord } = await supabase.from('orders').select('status').eq('id', orderId).single();
+  if (ord?.status === 'open') {
+    await supabase.from('orders').update({ status: 'in_service' }).eq('id', orderId);
+    await logStatus(orderId, 'open', 'in_service', 'First service started', null);
+  }
+
   revalidatePath(`/sales-orders/${orderId}`);
   return { ok: true };
 }
@@ -413,6 +422,23 @@ export async function finishOrderItem(itemId: string, orderId: string): Promise<
   }
   const { error } = await supabase.from('order_items').update(patch).eq('id', itemId);
   if (error) return { ok: false, error: error.message };
+
+  // When no service is still scheduled or running, complete the order
+  // automatically — the counterpart to auto-starting on the first line.
+  const { data: remaining } = await supabase
+    .from('order_items')
+    .select('id')
+    .eq('order_id', orderId)
+    .in('status', ['scheduled', 'in_service'])
+    .limit(1);
+  if (!remaining || remaining.length === 0) {
+    const { data: ord } = await supabase.from('orders').select('status').eq('id', orderId).single();
+    if (ord?.status === 'in_service') {
+      await supabase.from('orders').update({ status: 'completed' }).eq('id', orderId);
+      await logStatus(orderId, 'in_service', 'completed', 'All services finished', null);
+    }
+  }
+
   revalidatePath(`/sales-orders/${orderId}`);
   return { ok: true };
 }
