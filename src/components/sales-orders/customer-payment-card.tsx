@@ -59,6 +59,20 @@ export function CustomerPaymentCard({
   const [tips, setTips] = useState<Record<string, string>>({});
   const [cardId, setCardId] = useState('');
 
+  // Switching method clears any tip and resets the amount to the plain due.
+  function pickMethod(v: string) {
+    setMethod(v);
+    setAmount((dueCents / 100).toFixed(2));
+    setTips({});
+  }
+  // Amount auto-tracks Due + total tip (the full PAYMAYA charge).
+  function setTip(itemId: string, value: string) {
+    const next = { ...tips, [itemId]: value };
+    setTips(next);
+    const totalTip = Object.values(next).reduce((s, v) => s + (Number(v) || 0), 0);
+    setAmount((dueCents / 100 + totalTip).toFixed(2));
+  }
+
   const payOptions = paymentMethods.map((p) => ({ value: p.id, label: p.display_name }));
   const paymayaId = paymentMethods.find((p) => p.code === 'paymaya')?.id ?? null;
   const svcId = paymentMethods.find((p) => p.code === 'stored_value_card')?.id ?? null;
@@ -79,12 +93,16 @@ export function CustomerPaymentCard({
           .map((t) => ({ order_item_id: t.orderItemId, therapist_id: t.therapistId, amount: Number(tips[t.orderItemId] || 0) }))
           .filter((t) => t.amount > 0)
       : [];
+    // Amount shown includes the tip; the order payment is the service portion.
+    const totalTip = tipRows.reduce((s, t) => s + t.amount, 0);
+    const serviceAmount = Number((amt - totalTip).toFixed(2));
+    if (serviceAmount < 0) return toast.error('Tip exceeds the amount');
     startTransition(async () => {
       const r = await takePayment({
         order_id: orderId,
         order_customer_id: orderCustomerId,
         payment_method_id: method,
-        amount: amt,
+        amount: serviceAmount,
         payment_ref: ref || null,
         stored_value_card_id: showCard ? cardId : null,
         tips: tipRows,
@@ -109,7 +127,7 @@ export function CustomerPaymentCard({
       <div className="flex flex-wrap items-end gap-2">
         <div className="flex flex-col gap-1">
           <Label className="text-xs font-semibold">Method</Label>
-          <Select items={payOptions} value={method} onValueChange={(v) => v && setMethod(v)} disabled={locked}>
+          <Select items={payOptions} value={method} onValueChange={(v) => v && pickMethod(v)} disabled={locked}>
             <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
             <SelectContent>
               {payOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
@@ -143,11 +161,11 @@ export function CustomerPaymentCard({
       )}
       {locked && <p className="text-[11px] font-medium text-muted-foreground">Intercompany — AR only</p>}
       {showTips && (
-        <div className="mt-1 rounded-md bg-muted/40 p-2 flex flex-col gap-2">
-          <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Tip (PAYMAYA)</p>
+        <div className="self-end w-fit rounded-md bg-muted/40 p-2 flex flex-col gap-1.5">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-right">Tip (PAYMAYA)</p>
           {tipTargets.map((t) => (
-            <div key={t.orderItemId} className="flex items-center justify-between gap-2">
-              <span className="text-xs font-semibold min-w-0 truncate">
+            <div key={t.orderItemId} className="flex items-center justify-end gap-3">
+              <span className="text-xs font-semibold whitespace-nowrap">
                 {t.therapistName} <span className="font-medium text-muted-foreground">· {t.serviceName}</span>
               </span>
               <Input
@@ -155,7 +173,7 @@ export function CustomerPaymentCard({
                 min="0"
                 step="0.01"
                 value={tips[t.orderItemId] ?? ''}
-                onChange={(e) => setTips((prev) => ({ ...prev, [t.orderItemId]: e.target.value }))}
+                onChange={(e) => setTip(t.orderItemId, e.target.value)}
                 placeholder="0.00"
                 className="w-24"
               />
