@@ -459,7 +459,7 @@ export function OrderWorkspace({
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="col-span-2 rounded-lg border border-border bg-muted/30 p-3 flex flex-col gap-2">
+                    <div className="col-span-2 -mx-3 px-3 py-3 bg-muted/40 border-y border-border flex flex-col gap-2">
                       <div className="flex items-center gap-2">
                         <Label className="text-xs font-semibold text-muted-foreground">Therapist &amp; Station</Label>
                         <Button type="button" size="sm" variant="outline" onClick={autoAssign} disabled={pending}>
