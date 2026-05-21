@@ -209,7 +209,7 @@ export function CustomerSourceFormDialog({
                 <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
                 <SelectContent>
                   {discountOptions.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value} className="tabular">{opt.label}</SelectItem>
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
