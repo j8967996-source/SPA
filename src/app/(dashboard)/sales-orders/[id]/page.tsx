@@ -33,7 +33,7 @@ async function fetchData(id: string) {
       id, order_no, status, order_type, service_date, note, branch_id,
       subtotal_cents, discount_cents, total_cents, paid_cents,
       branch:branches!orders_branch_id_fkey ( code, name ),
-      source:customer_sources ( code, name ),
+      source:customer_sources ( code, name, default_discount_class_id ),
       billing:billing_destinations!orders_billing_to_id_fkey ( code, name, settlement_type, default_payment_method_id ),
       order_customers ( id, customer_name, customer_phone, seq_no ),
       payments (
@@ -328,6 +328,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         busyResourceIds={busyResourceIds}
         resources={resources}
         discountClasses={discountClasses}
+        sourceDefaultDiscountId={source?.default_discount_class_id ?? null}
         paymentMethods={paymentMethods}
         storedValueCards={storedValueCards}
         capabilityByEmployee={capabilityByEmployee}

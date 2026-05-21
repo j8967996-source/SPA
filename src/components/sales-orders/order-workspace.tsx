@@ -98,6 +98,7 @@ interface Props {
   busyResourceIds: string[];
   resources: ResourceOpt[];
   discountClasses: DiscountOpt[];
+  sourceDefaultDiscountId: string | null;
   paymentMethods: { id: string; code: string; display_name: string }[];
   storedValueCards: { id: string; card_no: string; balance_cents: number; customer_name: string | null }[];
   capabilityByEmployee: Record<string, string[]>;
@@ -127,6 +128,7 @@ export function OrderWorkspace({
   busyResourceIds,
   resources,
   discountClasses,
+  sourceDefaultDiscountId,
   paymentMethods,
   storedValueCards,
   paymentPolicy,
@@ -145,7 +147,11 @@ export function OrderWorkspace({
   const [therapistId, setTherapistId] = useState(NONE);
   const [resourceId, setResourceId] = useState(NONE);
   const noDiscount = discountClasses.find((d) => d.code === 'DIS-00');
-  const [discountId, setDiscountId] = useState(noDiscount?.id ?? discountClasses[0]?.id ?? '');
+  // New service lines default to the customer source's discount class (if it
+  // still exists), else No Discount. Always overridable per line.
+  const sourceDefaultValid = !!sourceDefaultDiscountId && discountClasses.some((d) => d.id === sourceDefaultDiscountId);
+  const defaultDiscountId = (sourceDefaultValid ? sourceDefaultDiscountId! : null) ?? noDiscount?.id ?? discountClasses[0]?.id ?? '';
+  const [discountId, setDiscountId] = useState(defaultDiscountId);
   const [discountOverride, setDiscountOverride] = useState('');
   const selectedDiscountCode = discountClasses.find((d) => d.id === discountId)?.code ?? '';
   const needsDiscountAmount = ['DIS-91', 'DIS-99'].includes(selectedDiscountCode);
@@ -190,7 +196,7 @@ export function OrderWorkspace({
         discount_class_id: discountId,
         discount_override: needsDiscountAmount ? Number(discountOverride || 0) : null,
       });
-      if (r.ok) { setSvcId(''); setGroupSel(''); setDiscountOverride(''); setActiveCustomer(null); toast.success('Service added'); }
+      if (r.ok) { setSvcId(''); setGroupSel(''); setDiscountId(defaultDiscountId); setDiscountOverride(''); setActiveCustomer(null); toast.success('Service added'); }
       else toast.error(r.error);
     });
   }
