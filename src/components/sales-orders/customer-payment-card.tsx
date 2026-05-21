@@ -65,12 +65,8 @@ export function CustomerPaymentCard({
     setAmount((dueCents / 100).toFixed(2));
     setTips({});
   }
-  // Amount auto-tracks Due + total tip (the full PAYMAYA charge).
   function setTip(itemId: string, value: string) {
-    const next = { ...tips, [itemId]: value };
-    setTips(next);
-    const totalTip = Object.values(next).reduce((s, v) => s + (Number(v) || 0), 0);
-    setAmount((dueCents / 100 + totalTip).toFixed(2));
+    setTips((prev) => ({ ...prev, [itemId]: value }));
   }
 
   const payOptions = paymentMethods.map((p) => ({ value: p.id, label: p.display_name }));
@@ -82,6 +78,8 @@ export function CustomerPaymentCard({
     value: c.id,
     label: `${c.card_no}${c.customer_name ? ` · ${c.customer_name}` : ''} · ₱${(c.balance_cents / 100).toLocaleString('en-PH')}`,
   }));
+  const tipTotalPesos = tipTargets.reduce((s, t) => s + (Number(tips[t.orderItemId]) || 0), 0);
+  const chargeTotalCents = Math.round((Number(amount) || 0) * 100) + Math.round(tipTotalPesos * 100);
 
   function record() {
     const amt = Number(amount);
@@ -93,16 +91,14 @@ export function CustomerPaymentCard({
           .map((t) => ({ order_item_id: t.orderItemId, therapist_id: t.therapistId, amount: Number(tips[t.orderItemId] || 0) }))
           .filter((t) => t.amount > 0)
       : [];
-    // Amount shown includes the tip; the order payment is the service portion.
-    const totalTip = tipRows.reduce((s, t) => s + t.amount, 0);
-    const serviceAmount = Number((amt - totalTip).toFixed(2));
-    if (serviceAmount < 0) return toast.error('Tip exceeds the amount');
+    // Bill amount pays the order; the tip is recorded separately and charged on
+    // top (PAYMAYA total = bill + tip).
     startTransition(async () => {
       const r = await takePayment({
         order_id: orderId,
         order_customer_id: orderCustomerId,
         payment_method_id: method,
-        amount: serviceAmount,
+        amount: amt,
         payment_ref: ref || null,
         stored_value_card_id: showCard ? cardId : null,
         tips: tipRows,
@@ -143,6 +139,30 @@ export function CustomerPaymentCard({
           <Input value={ref} onChange={(e) => setRef(e.target.value)} placeholder="auth / ref" className="w-32" />
         </div>
         <Button size="sm" onClick={record} disabled={pending}>Record</Button>
+        {showTips && (
+          <div className="rounded-md bg-muted/40 p-2 flex flex-col gap-1.5">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Tip (PAYMAYA)</p>
+            {tipTargets.map((t) => (
+              <div key={t.orderItemId} className="flex items-center gap-2">
+                <span className="text-xs font-semibold whitespace-nowrap">
+                  {t.therapistName} <span className="font-medium text-muted-foreground">· {t.serviceName}</span>
+                </span>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={tips[t.orderItemId] ?? ''}
+                  onChange={(e) => setTip(t.orderItemId, e.target.value)}
+                  placeholder="0.00"
+                  className="w-24 ml-auto"
+                />
+              </div>
+            ))}
+            <p className="text-[11px] font-bold tabular text-right border-t border-border/60 pt-1">
+              Charge {peso(chargeTotalCents)}
+            </p>
+          </div>
+        )}
       </div>
       {showCard && (
         <div className="flex flex-col gap-1">
@@ -160,27 +180,6 @@ export function CustomerPaymentCard({
         </div>
       )}
       {locked && <p className="text-[11px] font-medium text-muted-foreground">Intercompany — AR only</p>}
-      {showTips && (
-        <div className="self-end w-fit rounded-md bg-muted/40 p-2 flex flex-col gap-1.5">
-          <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground text-right">Tip (PAYMAYA)</p>
-          {tipTargets.map((t) => (
-            <div key={t.orderItemId} className="flex items-center justify-end gap-3">
-              <span className="text-xs font-semibold whitespace-nowrap">
-                {t.therapistName} <span className="font-medium text-muted-foreground">· {t.serviceName}</span>
-              </span>
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                value={tips[t.orderItemId] ?? ''}
-                onChange={(e) => setTip(t.orderItemId, e.target.value)}
-                placeholder="0.00"
-                className="w-24"
-              />
-            </div>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
