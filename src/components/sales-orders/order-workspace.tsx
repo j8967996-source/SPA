@@ -330,7 +330,7 @@ export function OrderWorkspace({
 
         <TabsContent value="guests" className="flex flex-col gap-4">
       {/* section header: pax count + add customer */}
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="flex flex-wrap items-end gap-4">
         <div className="flex items-center gap-2">
           <h3 className="text-base font-bold">Guests</h3>
           <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-bold text-muted-foreground">{customers.length} pax</span>
