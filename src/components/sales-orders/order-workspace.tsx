@@ -105,6 +105,7 @@ interface Props {
   discountClasses: DiscountOpt[];
   paymentMethods: { id: string; code: string; display_name: string }[];
   storedValueCards: { id: string; card_no: string; balance_cents: number; customer_name: string | null }[];
+  capabilityByEmployee: Record<string, string[]>;
   paymentPolicy: { arBilled: boolean; defaultMethodId: string | null; arBillingLabel: string | null };
   canManage: boolean;
 }
@@ -135,6 +136,7 @@ export function OrderWorkspace({
   paymentMethods,
   storedValueCards,
   paymentPolicy,
+  capabilityByEmployee,
   canManage,
 }: Props) {
   const [pending, startTransition] = useTransition();
@@ -216,7 +218,10 @@ export function OrderWorkspace({
         if (i.resource_id) takenStations.add(i.resource_id);
       });
 
-    const freeTherapist = employees.find((e) => !takenTherapists.has(e.id));
+    const neededGroup = serviceItems.find((s) => s.id === svcId)?.group ?? groupSel;
+    const freeTherapist = employees.find(
+      (e) => !takenTherapists.has(e.id) && (!neededGroup || (capabilityByEmployee[e.id] ?? []).includes(neededGroup)),
+    );
     const neededType = serviceItems.find((s) => s.id === svcId)?.required_resource_type ?? null;
     const freeStation = resources.find(
       (r) => !takenStations.has(r.id) && (!neededType || r.resource_type === neededType),
@@ -311,11 +316,18 @@ export function OrderWorkspace({
     .filter((s) => s.group === groupSel)
     .map((s) => ({ value: s.id, label: `${s.duration_minutes} min · ${peso0(s.price_cents)}` }));
   const busy = new Set(busyTherapistIds);
-  const thisBranchOptions = employees.map((e) => ({ value: e.id, label: `${e.code} — ${e.name}${busy.has(e.id) ? ' · in service' : ''}` }));
-  const borrowOptions = borrowableEmployees.map((e) => ({
-    value: e.id,
-    label: `${e.code} — ${e.name}${e.homeBranchCode ? ` · ${e.homeBranchCode}` : ''}${busy.has(e.id) ? ' · in service' : ''}`,
-  }));
+  // A therapist is offered only if they can perform the chosen service group.
+  // No group picked yet → show everyone (the picker is disabled until a group exists anyway).
+  const canDoGroup = (id: string) => !groupSel || (capabilityByEmployee[id] ?? []).includes(groupSel);
+  const thisBranchOptions = employees
+    .filter((e) => canDoGroup(e.id))
+    .map((e) => ({ value: e.id, label: `${e.code} — ${e.name}${busy.has(e.id) ? ' · in service' : ''}` }));
+  const borrowOptions = borrowableEmployees
+    .filter((e) => canDoGroup(e.id))
+    .map((e) => ({
+      value: e.id,
+      label: `${e.code} — ${e.name}${e.homeBranchCode ? ` · ${e.homeBranchCode}` : ''}${busy.has(e.id) ? ' · in service' : ''}`,
+    }));
   // Combined list drives the trigger's value→label lookup; the dropdown groups them.
   const empOptions = [{ value: NONE, label: 'Unassigned' }, ...thisBranchOptions, ...borrowOptions];
   const resOptions = [{ value: NONE, label: 'None' }, ...resources.map((r) => ({ value: r.id, label: r.name }))];
@@ -489,7 +501,7 @@ export function OrderWorkspace({
                       <Select
                         items={groupOptions}
                         value={groupSel}
-                        onValueChange={(v) => { if (v) { setGroupSel(v); setSvcId(''); } }}
+                        onValueChange={(v) => { if (v) { setGroupSel(v); setSvcId(''); setTherapistId(NONE); } }}
                       >
                         <SelectTrigger><SelectValue placeholder="Pick a service" /></SelectTrigger>
                         <SelectContent>
@@ -526,7 +538,7 @@ export function OrderWorkspace({
                           <SelectGroup>
                             <SelectLabel>At this branch</SelectLabel>
                             {thisBranchOptions.length === 0 ? (
-                              <SelectItem value="__nobody__" disabled>No therapist rostered here</SelectItem>
+                              <SelectItem value="__nobody__" disabled>{groupSel ? `No therapist here can do ${groupSel}` : 'No therapist rostered here'}</SelectItem>
                             ) : (
                               thisBranchOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)
                             )}

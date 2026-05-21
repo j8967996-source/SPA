@@ -36,6 +36,7 @@ export interface EmployeeItem {
   commission_class_id: string | null;
   position_id: string | null;
   status: 'active' | 'inactive' | 'on_leave';
+  service_groups?: string[];
 }
 
 interface BranchOption {
@@ -62,6 +63,7 @@ interface Props {
   branches: BranchOption[];
   classes: ClassOption[];
   positions: PositionOption[];
+  serviceGroups?: string[];
   nextCodeByBranch?: Record<string, string>;
   trigger?: React.ReactNode;
   open?: boolean;
@@ -76,6 +78,7 @@ export function EmployeeFormDialog({
   branches,
   classes,
   positions,
+  serviceGroups = [],
   nextCodeByBranch,
   trigger,
   open: controlledOpen,
@@ -94,6 +97,8 @@ export function EmployeeFormDialog({
   const [classId, setClassId] = useState(employee?.commission_class_id ?? NONE);
   const [positionId, setPositionId] = useState(employee?.position_id ?? NONE);
   const [status, setStatus] = useState<EmployeeItem['status']>(employee?.status ?? 'active');
+  const [groups, setGroups] = useState<string[]>(employee?.service_groups ?? []);
+  const toggleGroup = (g: string) => setGroups((p) => (p.includes(g) ? p.filter((x) => x !== g) : [...p, g]));
 
   const isEdit = mode === 'edit';
   // Code is system-assigned per home branch. Edit shows the immutable code;
@@ -127,6 +132,7 @@ export function EmployeeFormDialog({
       commission_class_id: classId === NONE ? null : classId,
       position_id: positionId === NONE ? null : positionId,
       status,
+      service_groups: groups,
     };
     startTransition(async () => {
       const r = isEdit
@@ -261,6 +267,27 @@ export function EmployeeFormDialog({
                 </SelectContent>
               </Select>
             </div>
+
+            {serviceGroups.length > 0 && (
+              <div className="flex flex-col gap-2 col-span-2">
+                <Label className="font-semibold">Services this therapist can perform</Label>
+                <div className="flex flex-wrap gap-2">
+                  {serviceGroups.map((g) => (
+                    <button
+                      key={g}
+                      type="button"
+                      onClick={() => toggleGroup(g)}
+                      className={`rounded-lg px-3 py-1.5 text-sm font-bold transition-colors ${groups.includes(g) ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-accent'}`}
+                    >
+                      {g}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] font-medium text-muted-foreground">
+                  Only selected services let this therapist be assigned/auto-assigned to that service.
+                </p>
+              </div>
+            )}
           </div>
 
           <DialogFooter>

@@ -39,11 +39,25 @@ async function fetchData() {
   if (brRes.error) throw new Error(brRes.error.message);
   if (ccRes.error) throw new Error(ccRes.error.message);
   if (posRes.error) throw new Error(posRes.error.message);
+
+  const [sgRes, capRes] = await Promise.all([
+    supabase.from('service_items').select('service_group').eq('active', true).not('service_group', 'is', null),
+    supabase.from('employee_service_groups').select('employee_id, service_group'),
+  ]);
+  const serviceGroups = [...new Set((sgRes.data ?? []).map((r) => r.service_group as string).filter(Boolean))].sort();
+  const capByEmployee = new Map<string, string[]>();
+  for (const c of capRes.data ?? []) {
+    const arr = capByEmployee.get(c.employee_id) ?? [];
+    arr.push(c.service_group);
+    capByEmployee.set(c.employee_id, arr);
+  }
   return {
     employees: empRes.data ?? [],
     branches: brRes.data ?? [],
     classes: ccRes.data ?? [],
     positions: posRes.data ?? [],
+    serviceGroups,
+    capByEmployee,
   };
 }
 
@@ -83,7 +97,7 @@ function nextCodeByBranch(
 }
 
 export default async function EmployeesPage() {
-  const { employees, branches, classes, positions } = await fetchData();
+  const { employees, branches, classes, positions, serviceGroups, capByEmployee } = await fetchData();
   const activeCount = employees.filter((e) => e.status === 'active').length;
   const codePreview = nextCodeByBranch(employees.map((e) => e.employee_code), branches);
 
@@ -107,6 +121,7 @@ export default async function EmployeesPage() {
           branches={branches}
           classes={classes}
           positions={positions}
+          serviceGroups={serviceGroups}
           nextCodeByBranch={codePreview}
           trigger={
             <Button>
@@ -158,6 +173,7 @@ export default async function EmployeesPage() {
                   commission_class_id: e.commission_class_id,
                   position_id: e.position_id,
                   status: e.status as EmployeeItem['status'],
+                  service_groups: capByEmployee.get(e.id) ?? [],
                 };
                 return (
                   <TableRow key={e.id}>
@@ -199,6 +215,7 @@ export default async function EmployeesPage() {
                         branches={branches}
                         classes={classes}
                         positions={positions}
+                        serviceGroups={serviceGroups}
                       />
                     </TableCell>
                   </TableRow>

@@ -759,6 +759,35 @@ export type Database = {
           },
         ]
       }
+      employee_service_groups: {
+        Row: {
+          created_at: string
+          employee_id: string
+          id: string
+          service_group: string
+        }
+        Insert: {
+          created_at?: string
+          employee_id: string
+          id?: string
+          service_group: string
+        }
+        Update: {
+          created_at?: string
+          employee_id?: string
+          id?: string
+          service_group?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "employee_service_groups_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       employee_shift_templates: {
         Row: {
           active: boolean

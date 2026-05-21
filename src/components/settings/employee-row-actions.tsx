@@ -21,9 +21,10 @@ interface Props {
   branches: { id: string; code: string; name: string }[];
   classes: { id: string; class_code: string; name: string }[];
   positions: { id: string; code: string; name: string }[];
+  serviceGroups?: string[];
 }
 
-export function EmployeeRowActions({ employee, branches, classes, positions }: Props) {
+export function EmployeeRowActions({ employee, branches, classes, positions, serviceGroups }: Props) {
   const [pending, startTransition] = useTransition();
   const [editOpen, setEditOpen] = useState(false);
 
@@ -80,6 +81,7 @@ export function EmployeeRowActions({ employee, branches, classes, positions }: P
         branches={branches}
         classes={classes}
         positions={positions}
+        serviceGroups={serviceGroups}
         open={editOpen}
         onOpenChange={setEditOpen}
       />

@@ -19,6 +19,7 @@ const baseSchema = z.object({
   commission_class_id: z.string().uuid().optional().nullable(),
   position_id: z.string().uuid().optional().nullable(),
   status: z.enum(['active', 'inactive', 'on_leave']).default('active'),
+  service_groups: z.array(z.string().min(1).max(80)).optional(),
 });
 
 const updateSchema = baseSchema.partial({ employee_code: true }).extend({
@@ -26,6 +27,20 @@ const updateSchema = baseSchema.partial({ employee_code: true }).extend({
 });
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
+
+// Replace an employee's service-group skill set (delete then insert).
+async function syncServiceGroups(employeeId: string, groups: string[] | undefined) {
+  if (!groups) return null;
+  const supabase = createServiceClient();
+  const del = await supabase.from('employee_service_groups').delete().eq('employee_id', employeeId);
+  if (del.error) return del.error;
+  const unique = [...new Set(groups.map((g) => g.trim()).filter(Boolean))];
+  if (unique.length === 0) return null;
+  const ins = await supabase
+    .from('employee_service_groups')
+    .insert(unique.map((service_group) => ({ employee_id: employeeId, service_group })));
+  return ins.error;
+}
 
 function normalize(input: z.infer<typeof baseSchema>) {
   return {
@@ -70,16 +85,18 @@ export async function createEmployee(input: unknown): Promise<ActionResult> {
   // Retry on the off chance two managers grab the same number simultaneously.
   for (let attempt = 0; attempt < 5; attempt++) {
     const employee_code = await nextEmployeeCode(base.home_branch_id);
-    const { error } = await supabase.from('employees').insert({ ...base, employee_code });
-    if (!error) {
+    const { data, error } = await supabase.from('employees').insert({ ...base, employee_code }).select('id').single();
+    if (!error && data) {
+      const sgErr = await syncServiceGroups(data.id, parsed.data.service_groups);
+      if (sgErr) return { ok: false, error: sgErr.message };
       revalidatePath('/settings/employees');
       return { ok: true };
     }
-    if (error.code === '23505') {
+    if (error?.code === '23505') {
       if (/employees_phone_key/.test(error.message)) return { ok: false, error: 'phone already exists' };
       continue; // employee_code collision — recompute and retry
     }
-    return { ok: false, error: error.message };
+    return { ok: false, error: error?.message ?? 'Insert failed' };
   }
   return { ok: false, error: 'Could not assign an employee code, please retry' };
 }
@@ -98,11 +115,15 @@ export async function updateEmployee(input: unknown): Promise<ActionResult> {
   if (d.position_id !== undefined) patch.position_id = d.position_id || null;
   if (d.status !== undefined) patch.status = d.status;
   const supabase = createServiceClient();
-  const { error } = await supabase.from('employees').update(patch).eq('id', d.id);
-  if (error) {
-    if (error.code === '23505') return { ok: false, error: 'phone already exists' };
-    return { ok: false, error: error.message };
+  if (Object.keys(patch).length > 0) {
+    const { error } = await supabase.from('employees').update(patch).eq('id', d.id);
+    if (error) {
+      if (error.code === '23505') return { ok: false, error: 'phone already exists' };
+      return { ok: false, error: error.message };
+    }
   }
+  const sgErr = await syncServiceGroups(d.id, d.service_groups);
+  if (sgErr) return { ok: false, error: sgErr.message };
   revalidatePath('/settings/employees');
   return { ok: true };
 }

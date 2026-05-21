@@ -82,6 +82,13 @@ async function fetchData(id: string) {
     .gt('current_balance_cents', 0)
     .order('card_no');
 
+  // Therapist skills: employee → service groups they can perform.
+  const capRes = await supabase.from('employee_service_groups').select('employee_id, service_group');
+  const capabilityByEmployee: Record<string, string[]> = {};
+  for (const c of capRes.data ?? []) {
+    (capabilityByEmployee[c.employee_id] ??= []).push(c.service_group);
+  }
+
   // Therapists / stations currently mid-service anywhere (started, not finished).
   const busy = await supabase
     .from('order_items')
@@ -135,6 +142,7 @@ async function fetchData(id: string) {
       balance_cents: c.current_balance_cents,
       customer_name: one(c.customer)?.name ?? null,
     })),
+    capabilityByEmployee,
   };
 }
 
@@ -143,7 +151,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const canManage = isManager(await currentSession());
   const result = await fetchData(id);
   if (!result) notFound();
-  const { order, serviceItems, employees, borrowableEmployees, busyTherapistIds, busyResourceIds, resources, discountClasses, paymentMethods, storedValueCards } = result;
+  const { order, serviceItems, employees, borrowableEmployees, busyTherapistIds, busyResourceIds, resources, discountClasses, paymentMethods, storedValueCards, capabilityByEmployee } = result;
 
   const branch = one(order.branch);
   const source = one(order.source);
@@ -320,6 +328,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         discountClasses={discountClasses}
         paymentMethods={paymentMethods}
         storedValueCards={storedValueCards}
+        capabilityByEmployee={capabilityByEmployee}
         paymentPolicy={paymentPolicy}
         canManage={canManage}
       />
