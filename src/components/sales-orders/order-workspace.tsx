@@ -338,8 +338,8 @@ export function OrderWorkspace({
         {order.editable && (
           <div className="flex flex-wrap items-end gap-2">
             <div className="flex flex-col gap-1">
-              <Label className="text-xs font-semibold">Name</Label>
-              <Input value={custName} onChange={(e) => setCustName(e.target.value)} placeholder="Walk-in guest" className="w-44" />
+              <Label className="text-xs font-semibold">Customer name <span className="text-destructive">*</span></Label>
+              <Input value={custName} onChange={(e) => setCustName(e.target.value)} placeholder="Name" className="w-44" />
             </div>
             <div className="flex flex-col gap-1">
               <Label className="text-xs font-semibold">Phone</Label>
