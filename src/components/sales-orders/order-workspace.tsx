@@ -441,6 +441,15 @@ export function OrderWorkspace({
               </div>
             </CardHeader>
             <CardContent>
+              {itemsByCustomer(c.id).length > 0 && (
+                <div className="grid grid-cols-[11rem_10rem_6rem_1fr_auto] items-center gap-x-3 border-b border-border pb-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                  <span>Service</span>
+                  <span>Therapist</span>
+                  <span>Status</span>
+                  <span>Duration · Station</span>
+                  <span className="justify-self-end">Amount</span>
+                </div>
+              )}
               <ul className="flex flex-col divide-y divide-border">
                 {itemsByCustomer(c.id).map((it) => {
                   const detailParts = [
