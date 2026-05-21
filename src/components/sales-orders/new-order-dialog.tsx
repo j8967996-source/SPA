@@ -116,8 +116,16 @@ export function NewOrderDialog({ branches, sources, billingDestinations, trigger
   function pickSource(v: string) {
     setSourceId(v);
     const src = sources.find((s) => s.id === v);
-    if (src?.default_billing_to_id) setBillingId(src.default_billing_to_id);
+    // Billing is locked to the source's destination; clearing the source
+    // (None) unlocks manual billing again.
+    setBillingId(src?.default_billing_to_id ?? NONE);
   }
+
+  const selectedSource = sources.find((s) => s.id === sourceId);
+  const billingLocked = !!selectedSource?.default_billing_to_id;
+  const lockedBillingLabel = billingLocked
+    ? billingDestinations.find((b) => b.id === selectedSource!.default_billing_to_id)?.code ?? ''
+    : '';
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -210,7 +218,7 @@ export function NewOrderDialog({ branches, sources, billingDestinations, trigger
 
             <div className="flex flex-col gap-2">
               <Label className="font-semibold">Billing To</Label>
-              <Select items={billingOptions} value={billingId} onValueChange={(v) => setBillingId(v ?? NONE)}>
+              <Select items={billingOptions} value={billingId} onValueChange={(v) => setBillingId(v ?? NONE)} disabled={billingLocked}>
                 <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
                 <SelectContent>
                   {billingOptions.map((opt) => (
@@ -218,6 +226,11 @@ export function NewOrderDialog({ branches, sources, billingDestinations, trigger
                   ))}
                 </SelectContent>
               </Select>
+              {billingLocked && (
+                <p className="text-[11px] font-medium text-muted-foreground">
+                  Set by customer source — billed to {lockedBillingLabel}
+                </p>
+              )}
             </div>
 
             <div className="flex flex-col gap-2 col-span-2">

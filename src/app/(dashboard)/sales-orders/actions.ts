@@ -73,6 +73,21 @@ export async function createDraftOrder(input: unknown): Promise<ActionResult<{ i
   // Branch hosts exactly one unit → attribute automatically.
   const businessUnitId = d.business_unit_id ?? (branchUnitIds.length === 1 ? branchUnitIds[0] : null);
 
+  // Billing follows the customer source. The source's default billing
+  // destination is authoritative and overrides whatever the client sends, so a
+  // hotel-sourced order is always billed to that hotel (intercompany) — the
+  // guest pays the hotel, and we collect from the hotel. Never SELF.
+  let billingToId = d.billing_to_id || null;
+  if (d.source_id) {
+    const { data: src } = await supabase
+      .from('customer_sources')
+      .select('default_billing_to_id')
+      .eq('id', d.source_id)
+      .maybeSingle();
+    if (!src) return { ok: false, error: 'Customer source not found' };
+    if (src.default_billing_to_id) billingToId = src.default_billing_to_id;
+  }
+
   const order_no = await nextOrderNo(branch.code, d.service_date);
 
   const { data, error } = await supabase
@@ -82,7 +97,7 @@ export async function createDraftOrder(input: unknown): Promise<ActionResult<{ i
       branch_id: d.branch_id,
       business_unit_id: businessUnitId,
       source_id: d.source_id || null,
-      billing_to_id: d.billing_to_id || null,
+      billing_to_id: billingToId,
       order_type: d.order_type,
       service_date: d.service_date,
       note: d.note || null,
