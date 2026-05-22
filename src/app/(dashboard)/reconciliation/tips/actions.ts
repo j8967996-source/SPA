@@ -18,15 +18,15 @@ export interface OpenTip {
   service_date: string;
 }
 
-/** Open (unsettled) PAYMAYA tips whose order falls in the period. */
-export async function loadOpenTips(from: string, to: string): Promise<OpenTip[]> {
+/** Open (unsettled) PAYMAYA tips for a branch whose order falls in the period. */
+export async function loadOpenTips(from: string, to: string, branchId: string): Promise<OpenTip[]> {
   const supabase = createServiceClient();
   const { data } = await supabase
     .from('tips')
     .select(`
       id, amount_cents, therapist_id, status, settlement_id,
       therapist:employees!tips_therapist_id_fkey ( name ),
-      order:orders!tips_order_id_fkey ( service_date, status )
+      order:orders!tips_order_id_fkey ( service_date, status, branch_id )
     `)
     .is('settlement_id', null)
     .eq('status', 'open');
@@ -41,29 +41,35 @@ export async function loadOpenTips(from: string, to: string): Promise<OpenTip[]>
         therapist_name: th?.name ?? '—',
         service_date: ord?.service_date ?? '',
         status: ord?.status ?? '',
+        branch_id: ord?.branch_id ?? '',
       };
     })
-    .filter((t) => t.service_date >= from && t.service_date <= to && t.status !== 'void')
-    .map(({ status: _status, ...t }) => t);
+    .filter((t) => t.branch_id === branchId && t.service_date >= from && t.service_date <= to && t.status !== 'void')
+    .map(({ status: _status, branch_id: _branch_id, ...t }) => t);
 }
 
-const createSchema = z.object({ period_from: z.string().min(1), period_to: z.string().min(1) });
+const createSchema = z.object({
+  branch_id: z.string().uuid(),
+  period_from: z.string().min(1),
+  period_to: z.string().min(1),
+});
 
 export async function createTipSettlement(input: unknown): Promise<ActionResult<{ id: string }>> {
   const session = await currentSession();
   if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
   const parsed = createSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
-  const { period_from, period_to } = parsed.data;
+  const { branch_id, period_from, period_to } = parsed.data;
   if (period_to < period_from) return { ok: false, error: 'End date must be on/after start date' };
 
-  const tips = await loadOpenTips(period_from, period_to);
-  if (tips.length === 0) return { ok: false, error: 'No open tips in this range' };
+  const tips = await loadOpenTips(period_from, period_to, branch_id);
+  if (tips.length === 0) return { ok: false, error: 'No open tips for this branch in this range' };
   const subtotal = tips.reduce((s, t) => s + t.amount_cents, 0);
 
   const supabase = createServiceClient();
+  const { data: branch } = await supabase.from('branches').select('code').eq('id', branch_id).single();
   const ym = period_from.replace(/-/g, '').slice(0, 6);
-  const prefix = `TS-${ym}-`;
+  const prefix = `TS-${branch?.code ?? 'X'}-${ym}-`;
   const { data: last } = await supabase
     .from('tip_settlements').select('settlement_no').like('settlement_no', `${prefix}%`).order('settlement_no', { ascending: false }).limit(1);
   const seq = last?.[0]?.settlement_no ? Number(last[0].settlement_no.slice(prefix.length)) : 0;
@@ -71,7 +77,7 @@ export async function createTipSettlement(input: unknown): Promise<ActionResult<
 
   const { data, error } = await supabase
     .from('tip_settlements')
-    .insert({ settlement_no, period_from, period_to, subtotal_cents: subtotal, status: 'draft' })
+    .insert({ settlement_no, branch_id, period_from, period_to, subtotal_cents: subtotal, status: 'draft' })
     .select('id')
     .single();
   if (error || !data) return { ok: false, error: error?.message ?? 'Could not create settlement' };
@@ -84,12 +90,13 @@ export async function confirmTipSettlement(id: string): Promise<ActionResult> {
   const session = await currentSession();
   if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
   const supabase = createServiceClient();
-  const { data: s } = await supabase.from('tip_settlements').select('period_from, period_to, status').eq('id', id).single();
+  const { data: s } = await supabase.from('tip_settlements').select('period_from, period_to, status, branch_id').eq('id', id).single();
   if (!s) return { ok: false, error: 'Settlement not found' };
   if (s.status !== 'draft') return { ok: false, error: 'Only draft settlements can be confirmed' };
+  if (!s.branch_id) return { ok: false, error: 'Settlement has no branch' };
 
   // NOTE: ERP/AP posting deferred — this only closes the tips for now.
-  const tips = await loadOpenTips(s.period_from, s.period_to);
+  const tips = await loadOpenTips(s.period_from, s.period_to, s.branch_id);
   const ids = tips.map((t) => t.id);
   if (ids.length > 0) {
     const { error } = await supabase.from('tips').update({ settlement_id: id, status: 'closed' }).in('id', ids);
