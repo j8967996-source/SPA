@@ -36,6 +36,7 @@ export interface CustomerSourceItem {
   default_billing_to_id: string | null;
   default_discount_class_id: string | null;
   discount_locked: boolean;
+  phone_required: boolean;
 }
 
 interface BillingOption {
@@ -84,6 +85,7 @@ export function CustomerSourceFormDialog({
   const [billingId, setBillingId] = useState(item?.default_billing_to_id ?? NONE);
   const [discountId, setDiscountId] = useState(item?.default_discount_class_id ?? NONE);
   const [discountLocked, setDiscountLocked] = useState(item?.discount_locked ?? false);
+  const [phoneRequired, setPhoneRequired] = useState(item?.phone_required ?? true);
 
   const billingOptions = [
     { value: NONE, label: 'None (customer self-pays)' },
@@ -115,6 +117,7 @@ export function CustomerSourceFormDialog({
       default_billing_to_id: billingId === NONE ? null : billingId,
       default_discount_class_id: discountId === NONE ? null : discountId,
       discount_locked: discountLocked,
+      phone_required: phoneRequired,
     };
     startTransition(async () => {
       const r = isEdit
@@ -228,6 +231,17 @@ export function CustomerSourceFormDialog({
                 </p>
               </div>
               <Switch checked={discountLocked && !isVariableDiscount} onCheckedChange={setDiscountLocked} disabled={isVariableDiscount} />
+            </div>
+
+            <div className="flex items-start justify-between gap-3 rounded-lg border border-border p-3">
+              <div className="flex flex-col gap-0.5">
+                <Label className="font-semibold">Require guest phone</Label>
+                <p className="text-xs font-medium text-muted-foreground">
+                  On = a phone number is required so we can reach the guest (direct customers).
+                  Off = no phone needed because the booking comes through this partner (hotels / ENGO).
+                </p>
+              </div>
+              <Switch checked={phoneRequired} onCheckedChange={setPhoneRequired} />
             </div>
           </div>
 

@@ -14,6 +14,7 @@ const schema = z.object({
   default_billing_to_id: z.string().uuid().optional().nullable(),
   default_discount_class_id: z.string().uuid().optional().nullable(),
   discount_locked: z.boolean().optional(),
+  phone_required: z.boolean().optional(),
 });
 
 const updateSchema = schema.partial({ code: true }).extend({ id: z.string().uuid() });
@@ -49,6 +50,7 @@ export async function createCustomerSource(input: unknown): Promise<ActionResult
     default_billing_to_id: parsed.data.default_billing_to_id || null,
     default_discount_class_id: parsed.data.default_discount_class_id || null,
     discount_locked: parsed.data.discount_locked ?? false,
+    phone_required: parsed.data.phone_required ?? true,
     active: true,
   });
   if (error) {
@@ -72,6 +74,7 @@ export async function updateCustomerSource(input: unknown): Promise<ActionResult
   if (d.default_discount_class_id !== undefined)
     patch.default_discount_class_id = d.default_discount_class_id || null;
   if (d.discount_locked !== undefined) patch.discount_locked = d.discount_locked;
+  if (d.phone_required !== undefined) patch.phone_required = d.phone_required;
   const supabase = createServiceClient();
   const { error } = await supabase.from('customer_sources').update(patch).eq('id', d.id);
   if (error) return { ok: false, error: error.message };

@@ -7,9 +7,10 @@ import { createServiceClient } from '@/lib/supabase/server';
 
 const schema = z.object({
   branch_id: z.string().uuid(),
-  source_type: z.enum(['hotel_proxy', 'online_self', 'phone', 'walkin']).default('phone'),
-  source_id: z.string().uuid().optional().nullable(),
-  billing_to_id: z.string().uuid().optional().nullable(),
+  // The reservation's customer source (WALK-IN, a hotel, ENGO, …). Drives the
+  // billing destination and whether a guest phone is required.
+  source_id: z.string().uuid(),
+  service_category_id: z.string().uuid(),
   guest_name: z.string().min(1).max(120),
   guest_phone: z.string().max(40).optional().nullable(),
   pax: z.coerce.number().int().min(1).max(50).default(1),
@@ -47,14 +48,28 @@ export async function createReservation(input: unknown): Promise<ActionResult> {
   const supabase = createServiceClient();
   const { data: branch, error: be } = await supabase.from('branches').select('code').eq('id', d.branch_id).single();
   if (be || !branch) return { ok: false, error: 'Branch not found' };
+
+  // The source decides the billing destination and the contact-phone policy.
+  const { data: source } = await supabase
+    .from('customer_sources')
+    .select('phone_required, default_billing_to_id')
+    .eq('id', d.source_id)
+    .maybeSingle();
+  if (!source) return { ok: false, error: 'Customer source not found' };
+  if (source.phone_required && !d.guest_phone?.trim()) {
+    return { ok: false, error: 'A guest phone is required for this source' };
+  }
+
   const reservation_no = await nextReservationNo(branch.code, d.desired_service_start);
 
   const { error } = await supabase.from('reservations').insert({
     reservation_no,
     branch_id: d.branch_id,
-    source_type: d.source_type,
-    source_id: d.source_id || null,
-    billing_to_id: d.billing_to_id || null,
+    // Channel kept for schema compatibility; the source master is authoritative.
+    source_type: 'phone',
+    source_id: d.source_id,
+    service_category_id: d.service_category_id,
+    billing_to_id: source.default_billing_to_id ?? null,
     guest_name: d.guest_name,
     guest_phone: d.guest_phone || null,
     pax: d.pax,

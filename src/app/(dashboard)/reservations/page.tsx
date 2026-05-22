@@ -34,24 +34,28 @@ function fmt(ts: string): string {
 
 async function fetchData() {
   const supabase = createServiceClient();
-  const [resv, br, src] = await Promise.all([
+  const [resv, br, src, cat] = await Promise.all([
     supabase
       .from('reservations')
       .select(`
         id, reservation_no, guest_name, guest_phone, pax, status,
-        desired_service_start, desired_service_end, source_type,
-        branch:branches ( code )
+        desired_service_start, desired_service_end,
+        branch:branches ( code ),
+        source:customer_sources ( code ),
+        category:service_categories ( code, name )
       `)
       .is('deleted_at', null)
       .order('desired_service_start', { ascending: false })
       .limit(200),
     supabase.from('branches').select('id, code, name').eq('active', true).order('code'),
-    supabase.from('customer_sources').select('id, code, name').eq('active', true).order('code'),
+    supabase.from('customer_sources').select('id, code, name, phone_required').eq('active', true).order('code'),
+    supabase.from('service_categories').select('id, code, name').eq('active', true).order('code'),
   ]);
   if (resv.error) throw new Error(resv.error.message);
   if (br.error) throw new Error(br.error.message);
   if (src.error) throw new Error(src.error.message);
-  return { reservations: resv.data ?? [], branches: br.data ?? [], sources: src.data ?? [] };
+  if (cat.error) throw new Error(cat.error.message);
+  return { reservations: resv.data ?? [], branches: br.data ?? [], sources: src.data ?? [], serviceCategories: cat.data ?? [] };
 }
 
 function one<T>(v: T | T[] | null): T | null {
@@ -59,7 +63,7 @@ function one<T>(v: T | T[] | null): T | null {
 }
 
 export default async function ReservationsPage() {
-  const { reservations, branches, sources } = await fetchData();
+  const { reservations, branches, sources, serviceCategories } = await fetchData();
   const upcoming = reservations.filter((r) => ['reserved', 'confirmed'].includes(r.status)).length;
 
   return (
@@ -74,6 +78,7 @@ export default async function ReservationsPage() {
         <NewReservationDialog
           branches={branches}
           sources={sources}
+          serviceCategories={serviceCategories}
           trigger={
             <Button disabled={branches.length === 0}>
               <Plus className="size-4" />
@@ -90,6 +95,8 @@ export default async function ReservationsPage() {
               <TableHead className="font-bold">Reservation No</TableHead>
               <TableHead className="w-20 font-bold">Branch</TableHead>
               <TableHead className="font-bold">Guest</TableHead>
+              <TableHead className="font-bold">Service</TableHead>
+              <TableHead className="font-bold">Source</TableHead>
               <TableHead className="w-14 font-bold">PAX</TableHead>
               <TableHead className="font-bold">Desired Time</TableHead>
               <TableHead className="w-28 font-bold">Status</TableHead>
@@ -99,7 +106,7 @@ export default async function ReservationsPage() {
           <TableBody>
             {reservations.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-16">
+                <TableCell colSpan={9} className="text-center py-16">
                   <CalendarDays className="size-8 mx-auto text-muted-foreground/50" />
                   <p className="text-sm font-semibold text-muted-foreground mt-3">
                     No reservations yet. Click &ldquo;New Reservation&rdquo; to book one.
@@ -109,6 +116,8 @@ export default async function ReservationsPage() {
             ) : (
               reservations.map((r) => {
                 const branch = one(r.branch);
+                const source = one(r.source);
+                const category = one(r.category);
                 return (
                   <TableRow key={r.id}>
                     <TableCell className="font-mono font-bold">{r.reservation_no}</TableCell>
@@ -117,6 +126,8 @@ export default async function ReservationsPage() {
                       {r.guest_name}
                       {r.guest_phone && <span className="ml-2 font-medium text-muted-foreground">{r.guest_phone}</span>}
                     </TableCell>
+                    <TableCell className="font-medium">{category?.name ?? '—'}</TableCell>
+                    <TableCell className="font-mono font-semibold text-sm">{source?.code ?? '—'}</TableCell>
                     <TableCell className="font-bold tabular">{r.pax}</TableCell>
                     <TableCell className="font-medium tabular text-sm">
                       {fmt(r.desired_service_start)} – {new Date(r.desired_service_end).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' })}

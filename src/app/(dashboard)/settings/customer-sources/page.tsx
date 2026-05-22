@@ -34,7 +34,7 @@ async function fetchData() {
     supabase
       .from('customer_sources')
       .select(`
-        id, code, name, default_billing_to_id, default_discount_class_id, discount_locked, active,
+        id, code, name, default_billing_to_id, default_discount_class_id, discount_locked, phone_required, active,
         billing:billing_destinations ( code, name ),
         discount:discount_classes ( code, description, discount_percent, discount_amount_cents )
       `)
@@ -92,6 +92,7 @@ export default async function CustomerSourcesPage() {
               <TableHead className="font-bold">Name</TableHead>
               <TableHead className="font-bold">Default Billing To</TableHead>
               <TableHead className="font-bold">Default Discount</TableHead>
+              <TableHead className="w-28 font-bold">Guest Phone</TableHead>
               <TableHead className="w-24 font-bold">Status</TableHead>
               <TableHead className="w-12" />
             </TableRow>
@@ -99,7 +100,7 @@ export default async function CustomerSourcesPage() {
           <TableBody>
             {sources.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-12">
+                <TableCell colSpan={7} className="text-center py-12">
                   <p className="text-sm font-semibold text-muted-foreground">
                     No customer sources yet.
                   </p>
@@ -116,6 +117,7 @@ export default async function CustomerSourcesPage() {
                   default_billing_to_id: s.default_billing_to_id,
                   default_discount_class_id: s.default_discount_class_id,
                   discount_locked: s.discount_locked,
+                  phone_required: s.phone_required,
                 };
                 return (
                   <TableRow key={s.id}>
@@ -137,6 +139,13 @@ export default async function CustomerSourcesPage() {
                         )}
                         {s.discount_locked && <Lock className="size-3.5 text-muted-foreground" aria-label="Locked for all items" />}
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      {s.phone_required ? (
+                        <Badge variant="secondary" className="font-bold">Required</Badge>
+                      ) : (
+                        <span className="text-xs font-semibold text-muted-foreground">Optional</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       {s.active ? (

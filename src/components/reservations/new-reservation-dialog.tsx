@@ -27,56 +27,62 @@ import {
 import { createReservation } from '@/app/(dashboard)/reservations/actions';
 
 interface Opt { id: string; code: string; name: string }
+interface SourceOpt { id: string; code: string; name: string; phone_required: boolean }
 
 interface Props {
   branches: Opt[];
-  sources: Opt[];
+  sources: SourceOpt[];
+  serviceCategories: Opt[];
   trigger: React.ReactNode;
 }
 
-const NONE = '__none__';
-const SOURCE_TYPES = [
-  { value: 'phone', label: 'Phone' },
-  { value: 'hotel_proxy', label: 'Hotel Front Desk' },
-  { value: 'online_self', label: 'Online (self)' },
-  { value: 'walkin', label: 'Walk-in' },
-];
 const LOCATION_TYPES = [
   { value: 'on_site', label: 'On-site (branch)' },
   { value: 'external_hotel', label: 'External (hotel room)' },
 ];
 
-export function NewReservationDialog({ branches, sources, trigger }: Props) {
+export function NewReservationDialog({ branches, sources, serviceCategories, trigger }: Props) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
+  // Default to WALK-IN if present, else the first source.
+  const defaultSourceId = sources.find((s) => s.code === 'WALK-IN')?.id ?? sources[0]?.id ?? '';
+
   const [branchId, setBranchId] = useState(branches[0]?.id ?? '');
-  const [sourceType, setSourceType] = useState('phone');
-  const [sourceId, setSourceId] = useState(NONE);
+  const [sourceId, setSourceId] = useState(defaultSourceId);
+  const [serviceCategoryId, setServiceCategoryId] = useState('');
   const [guestName, setGuestName] = useState('');
   const [guestPhone, setGuestPhone] = useState('');
   const [pax, setPax] = useState('1');
-  const [genderPref, setGenderPref] = useState(NONE);
+  const [genderPref, setGenderPref] = useState('__none__');
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
   const [locationType, setLocationType] = useState('on_site');
   const [note, setNote] = useState('');
 
   const branchOptions = branches.map((b) => ({ value: b.id, label: `${b.code} — ${b.name}` }));
-  const sourceOptions = [{ value: NONE, label: 'None' }, ...sources.map((s) => ({ value: s.id, label: `${s.code} — ${s.name}` }))];
+  const sourceOptions = sources.map((s) => ({ value: s.id, label: `${s.code} — ${s.name}` }));
+  const categoryOptions = serviceCategories.map((c) => ({ value: c.id, label: `${c.code} — ${c.name}` }));
+
+  // Phone is required unless the chosen source handles contact itself (hotels / ENGO).
+  const selectedSource = sources.find((s) => s.id === sourceId) ?? null;
+  const phoneRequired = selectedSource ? selectedSource.phone_required : true;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!sourceId) return toast.error('Pick a customer source');
+    if (!serviceCategoryId) return toast.error('Pick a service type');
     if (!start || !end) return toast.error('Pick start and end time');
+    if (phoneRequired && !guestPhone.trim()) return toast.error('Phone is required for this source');
     startTransition(async () => {
       const r = await createReservation({
         branch_id: branchId,
-        source_type: sourceType,
-        source_id: sourceId === NONE ? null : sourceId,
+        source_id: sourceId,
+        service_category_id: serviceCategoryId,
         guest_name: guestName,
         guest_phone: guestPhone || null,
         pax: Number(pax),
-        gender_preference: genderPref === NONE ? null : genderPref,
+        gender_preference: genderPref === '__none__' ? null : genderPref,
         desired_service_start: new Date(start).toISOString(),
         desired_service_end: new Date(end).toISOString(),
         service_location_type: locationType,
@@ -85,7 +91,7 @@ export function NewReservationDialog({ branches, sources, trigger }: Props) {
       if (r.ok) {
         toast.success('Reservation created');
         setOpen(false);
-        setGuestName(''); setGuestPhone(''); setStart(''); setEnd(''); setNote('');
+        setGuestName(''); setGuestPhone(''); setStart(''); setEnd(''); setNote(''); setServiceCategoryId('');
       } else toast.error(r.error);
     });
   }
@@ -110,9 +116,16 @@ export function NewReservationDialog({ branches, sources, trigger }: Props) {
             </div>
             <div className="flex flex-col gap-2">
               <Label className="font-semibold">Source *</Label>
-              <Select items={SOURCE_TYPES} value={sourceType} onValueChange={(v) => v && setSourceType(v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{SOURCE_TYPES.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+              <Select items={sourceOptions} value={sourceId} onValueChange={(v) => v && setSourceId(v)}>
+                <SelectTrigger><SelectValue placeholder="Pick a source" /></SelectTrigger>
+                <SelectContent>{sourceOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label className="font-semibold">Service Type *</Label>
+              <Select items={categoryOptions} value={serviceCategoryId} onValueChange={(v) => v && setServiceCategoryId(v)}>
+                <SelectTrigger><SelectValue placeholder="Massage / Nail / …" /></SelectTrigger>
+                <SelectContent>{categoryOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="flex flex-col gap-2">
@@ -120,8 +133,10 @@ export function NewReservationDialog({ branches, sources, trigger }: Props) {
               <Input id="r-name" value={guestName} onChange={(e) => setGuestName(e.target.value)} required maxLength={120} />
             </div>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="r-phone" className="font-semibold">Phone</Label>
-              <Input id="r-phone" value={guestPhone} onChange={(e) => setGuestPhone(e.target.value)} maxLength={40} />
+              <Label htmlFor="r-phone" className="font-semibold">
+                Phone {phoneRequired ? <span className="text-destructive">*</span> : <span className="font-medium text-muted-foreground">(optional)</span>}
+              </Label>
+              <Input id="r-phone" value={guestPhone} onChange={(e) => setGuestPhone(e.target.value)} maxLength={40} required={phoneRequired} />
             </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="r-pax" className="font-semibold">PAX *</Label>
@@ -129,10 +144,10 @@ export function NewReservationDialog({ branches, sources, trigger }: Props) {
             </div>
             <div className="flex flex-col gap-2">
               <Label className="font-semibold">Gender Preference</Label>
-              <Select value={genderPref} onValueChange={(v) => setGenderPref(v ?? NONE)}>
+              <Select value={genderPref} onValueChange={(v) => setGenderPref(v ?? '__none__')}>
                 <SelectTrigger><SelectValue placeholder="Any" /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={NONE}>Any</SelectItem>
+                  <SelectItem value="__none__">Any</SelectItem>
                   <SelectItem value="M">Male therapist</SelectItem>
                   <SelectItem value="F">Female therapist</SelectItem>
                 </SelectContent>
