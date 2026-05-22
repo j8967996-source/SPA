@@ -20,7 +20,7 @@ export const dynamic = 'force-dynamic';
 
 async function fetchData() {
   const supabase = createServiceClient();
-  const [brRes, buRes, polRes] = await Promise.all([
+  const [brRes, buRes, polRes, ccRes, bcrRes] = await Promise.all([
     supabase
       .from('branches')
       .select(`
@@ -30,15 +30,25 @@ async function fetchData() {
       .order('code'),
     supabase.from('business_units').select('id, code, name').eq('active', true).order('code'),
     supabase.from('commission_policies').select('id, code, name').eq('active', true).order('code'),
+    supabase.from('commission_classes').select('id, class_code, name, commission_rate').eq('active', true).order('commission_rate', { ascending: false }),
+    supabase.from('branch_commission_rates').select('branch_id, commission_class_id, commission_rate'),
   ]);
   if (brRes.error) throw new Error(brRes.error.message);
   if (buRes.error) throw new Error(buRes.error.message);
   if (polRes.error) throw new Error(polRes.error.message);
-  return { branches: brRes.data ?? [], businessUnits: buRes.data ?? [], commissionPolicies: polRes.data ?? [] };
+  if (ccRes.error) throw new Error(ccRes.error.message);
+  if (bcrRes.error) throw new Error(bcrRes.error.message);
+  const ratesByBranch = new Map<string, { commission_class_id: string; rate: number }[]>();
+  for (const r of bcrRes.data ?? []) {
+    const arr = ratesByBranch.get(r.branch_id) ?? [];
+    arr.push({ commission_class_id: r.commission_class_id, rate: r.commission_rate });
+    ratesByBranch.set(r.branch_id, arr);
+  }
+  return { branches: brRes.data ?? [], businessUnits: buRes.data ?? [], commissionPolicies: polRes.data ?? [], commissionClasses: ccRes.data ?? [], ratesByBranch };
 }
 
 export default async function BranchesPage() {
-  const { branches, businessUnits, commissionPolicies } = await fetchData();
+  const { branches, businessUnits, commissionPolicies, commissionClasses, ratesByBranch } = await fetchData();
   const activeCount = branches.filter((b) => b.active).length;
 
   return (
@@ -61,6 +71,7 @@ export default async function BranchesPage() {
         <BranchFormDialog
           businessUnits={businessUnits}
           commissionPolicies={commissionPolicies}
+          commissionClasses={commissionClasses}
           trigger={
             <Button>
               <Plus className="size-4" />
@@ -105,6 +116,7 @@ export default async function BranchesPage() {
                   business_unit_ids: units.map((u) => u.id),
                   reservation_enabled: b.reservation_enabled,
                   commission_policy_id: b.commission_policy_id,
+                  commission_rate_overrides: ratesByBranch.get(b.id) ?? [],
                   active: b.active,
                 };
                 return (
@@ -145,7 +157,7 @@ export default async function BranchesPage() {
                       })}
                     </TableCell>
                     <TableCell>
-                      <BranchRowActions branch={branchItem} businessUnits={businessUnits} commissionPolicies={commissionPolicies} />
+                      <BranchRowActions branch={branchItem} businessUnits={businessUnits} commissionPolicies={commissionPolicies} commissionClasses={commissionClasses} />
                     </TableCell>
                   </TableRow>
                 );

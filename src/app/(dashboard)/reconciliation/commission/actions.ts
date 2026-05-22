@@ -57,20 +57,21 @@ async function computeCommission(branchId: string, from: string, to: string): Pr
 
   const therapistIds = [...new Set(eligible.map((r) => r.it.therapist_id as string))];
 
-  // Per-branch class override → employee default class → rate (rate is global
-  // per class for now; resolveRate is the single hook for a future per-branch %).
-  const [ovr, emps, classes, br] = await Promise.all([
-    supabase.from('employee_branch_commission_class').select('employee_id, commission_class_id').eq('branch_id', branchId),
+  // The therapist's class (fixed) → its rate. The rate is per-branch: a branch
+  // can override the % for a class, else the global commission_classes rate.
+  const [emps, classes, brates, br] = await Promise.all([
     supabase.from('employees').select('id, commission_class_id').in('id', therapistIds),
     supabase.from('commission_classes').select('id, commission_rate'),
+    supabase.from('branch_commission_rates').select('commission_class_id, commission_rate').eq('branch_id', branchId),
     supabase.from('branches').select('commission_policy_id').eq('id', branchId).maybeSingle(),
   ]);
-  const overrideClass = new Map((ovr.data ?? []).map((o) => [o.employee_id, o.commission_class_id]));
   const defaultClass = new Map((emps.data ?? []).map((e) => [e.id, e.commission_class_id]));
-  const classRate = new Map((classes.data ?? []).map((c) => [c.id, c.commission_rate]));
+  const globalRate = new Map((classes.data ?? []).map((c) => [c.id, c.commission_rate]));
+  const branchRate = new Map((brates.data ?? []).map((r) => [r.commission_class_id, r.commission_rate]));
   const resolveRate = (therapistId: string): number => {
-    const classId = overrideClass.get(therapistId) ?? defaultClass.get(therapistId) ?? null;
-    return classId ? (classRate.get(classId) ?? 0) : 0;
+    const classId = defaultClass.get(therapistId) ?? null;
+    if (!classId) return 0;
+    return branchRate.get(classId) ?? globalRate.get(classId) ?? 0;
   };
 
   let warmupEnabled = false;

@@ -11,6 +11,9 @@ const branchSchema = z.object({
   business_unit_ids: z.array(z.string().uuid()).min(1, 'Pick at least one business unit'),
   reservation_enabled: z.boolean().optional(),
   commission_policy_id: z.string().uuid().optional().nullable(),
+  // Per-branch class-rate overrides (this store's own % for a class). Branches
+  // without an override use the global commission_classes rate.
+  commission_rate_overrides: z.array(z.object({ commission_class_id: z.string().uuid(), rate: z.number().min(0).max(1) })).optional(),
 });
 
 const updateSchema = branchSchema.partial({ code: true }).extend({
@@ -20,6 +23,19 @@ const updateSchema = branchSchema.partial({ code: true }).extend({
 export type ActionResult<T = unknown> =
   | { ok: true; data?: T }
   | { ok: false; error: string };
+
+// Replace a branch's per-class rate overrides (delete then insert).
+async function syncRateOverrides(branchId: string, overrides: { commission_class_id: string; rate: number }[] | undefined) {
+  if (!overrides) return null;
+  const supabase = createServiceClient();
+  const del = await supabase.from('branch_commission_rates').delete().eq('branch_id', branchId);
+  if (del.error) return del.error;
+  if (overrides.length === 0) return null;
+  const ins = await supabase.from('branch_commission_rates').insert(
+    overrides.map((o) => ({ branch_id: branchId, commission_class_id: o.commission_class_id, commission_rate: o.rate })),
+  );
+  return ins.error;
+}
 
 async function syncJunction(branchId: string, businessUnitIds: string[]) {
   const supabase = createServiceClient();
@@ -55,6 +71,8 @@ export async function createBranch(input: unknown): Promise<ActionResult> {
 
   const linkErr = await syncJunction(data.id, parsed.data.business_unit_ids);
   if (linkErr) return { ok: false, error: linkErr.message };
+  const rateErr = await syncRateOverrides(data.id, parsed.data.commission_rate_overrides);
+  if (rateErr) return { ok: false, error: rateErr.message };
 
   revalidatePath('/settings/branches');
   return { ok: true };
@@ -79,6 +97,8 @@ export async function updateBranch(input: unknown): Promise<ActionResult> {
     const linkErr = await syncJunction(parsed.data.id, parsed.data.business_unit_ids);
     if (linkErr) return { ok: false, error: linkErr.message };
   }
+  const rateErr = await syncRateOverrides(parsed.data.id, parsed.data.commission_rate_overrides);
+  if (rateErr) return { ok: false, error: rateErr.message };
 
   revalidatePath('/settings/branches');
   return { ok: true };

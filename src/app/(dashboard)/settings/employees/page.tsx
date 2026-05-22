@@ -40,10 +40,9 @@ async function fetchData() {
   if (ccRes.error) throw new Error(ccRes.error.message);
   if (posRes.error) throw new Error(posRes.error.message);
 
-  const [sgRes, capRes, bccRes] = await Promise.all([
+  const [sgRes, capRes] = await Promise.all([
     supabase.from('service_items').select('service_group').eq('active', true).not('service_group', 'is', null),
     supabase.from('employee_service_groups').select('employee_id, service_group'),
-    supabase.from('employee_branch_commission_class').select('employee_id, branch_id, commission_class_id'),
   ]);
   const serviceGroups = [...new Set((sgRes.data ?? []).map((r) => r.service_group as string).filter(Boolean))].sort();
   const capByEmployee = new Map<string, string[]>();
@@ -52,12 +51,6 @@ async function fetchData() {
     arr.push(c.service_group);
     capByEmployee.set(c.employee_id, arr);
   }
-  const overridesByEmployee = new Map<string, { branch_id: string; commission_class_id: string }[]>();
-  for (const o of bccRes.data ?? []) {
-    const arr = overridesByEmployee.get(o.employee_id) ?? [];
-    arr.push({ branch_id: o.branch_id, commission_class_id: o.commission_class_id });
-    overridesByEmployee.set(o.employee_id, arr);
-  }
   return {
     employees: empRes.data ?? [],
     branches: brRes.data ?? [],
@@ -65,7 +58,6 @@ async function fetchData() {
     positions: posRes.data ?? [],
     serviceGroups,
     capByEmployee,
-    overridesByEmployee,
   };
 }
 
@@ -105,7 +97,7 @@ function nextCodeByBranch(
 }
 
 export default async function EmployeesPage() {
-  const { employees, branches, classes, positions, serviceGroups, capByEmployee, overridesByEmployee } = await fetchData();
+  const { employees, branches, classes, positions, serviceGroups, capByEmployee } = await fetchData();
   const activeCount = employees.filter((e) => e.status === 'active').length;
   const codePreview = nextCodeByBranch(employees.map((e) => e.employee_code), branches);
 
@@ -182,7 +174,6 @@ export default async function EmployeesPage() {
                   position_id: e.position_id,
                   status: e.status as EmployeeItem['status'],
                   service_groups: capByEmployee.get(e.id) ?? [],
-                  branch_class_overrides: overridesByEmployee.get(e.id) ?? [],
                 };
                 return (
                   <TableRow key={e.id}>

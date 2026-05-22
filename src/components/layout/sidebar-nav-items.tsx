@@ -72,6 +72,7 @@ export const mainNavItems: NavItem[] = [
           { label: 'Branches', href: '/settings/branches' },
           { label: 'Positions', href: '/settings/positions' },
           { label: 'Commission Classes', href: '/settings/commission-classes' },
+          { label: 'Commission Policies', href: '/settings/commission-policies' },
           { label: 'Employees', href: '/settings/employees' },
         ],
       },
