@@ -1,7 +1,7 @@
 import Link from 'next/link';
 
 import { createServiceClient } from '@/lib/supabase/server';
-import { currentSession, isAdmin } from '@/lib/auth';
+import { currentSession, isAdmin, isManager } from '@/lib/auth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { CashReconForm } from '@/components/reconciliation/cash-recon-form';
@@ -21,7 +21,9 @@ export default async function CashReconciliationPage({
 }) {
   const sp = await searchParams;
   const supabase = createServiceClient();
-  const admin = isAdmin(await currentSession());
+  const session = await currentSession();
+  const admin = isAdmin(session);
+  const canReopen = isManager(session);
   const { data: branches } = await supabase.from('branches').select('id, code, name').eq('active', true).order('code');
   const list = branches ?? [];
   const branchId = sp.branch && list.some((b) => b.id === sp.branch) ? sp.branch : list[0]?.id;
@@ -67,7 +69,7 @@ export default async function CashReconciliationPage({
           </CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
             {shifts.map((s) => (
-              <CashReconForm key={s.label} branchId={branchId} date={date} shift={s} />
+              <CashReconForm key={s.label} branchId={branchId} date={date} shift={s} canReopen={canReopen} />
             ))}
           </CardContent>
         </Card>

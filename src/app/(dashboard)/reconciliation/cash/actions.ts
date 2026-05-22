@@ -128,6 +128,40 @@ const schema = z.object({
   variance_reason: z.string().max(300).optional().nullable(),
 });
 
+const reopenSchema = z.object({
+  branch_id: z.string().uuid(),
+  date: z.string().min(1),
+  shift_label: z.enum(SHIFT_LABELS),
+  reason: z.string().min(3, 'A reason is required').max(300),
+});
+
+// Reopen a closed shift (cash came in after counting, miscounted, etc.). Manager
+// only; sets status back to 'open' so it can be recounted, keeping an audit trail.
+export async function reopenCashReconciliation(input: unknown): Promise<ActionResult> {
+  const session = await currentSession();
+  if (!isManager(session)) return { ok: false, error: 'Manager permission required to reopen' };
+  const parsed = reopenSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
+  const d = parsed.data;
+  const supabase = createServiceClient();
+  const { error } = await supabase
+    .from('cash_reconciliations')
+    .update({
+      status: 'open',
+      reopened_at: new Date().toISOString(),
+      reopened_by_staff_id: session!.staffUserId,
+      reopen_reason: d.reason.trim(),
+    })
+    .eq('branch_id', d.branch_id)
+    .eq('reconciliation_date', d.date)
+    .eq('shift_label', d.shift_label)
+    .eq('status', 'closed');
+  if (error) return { ok: false, error: error.message };
+  revalidatePath('/reconciliation/cash');
+  revalidatePath('/reconciliation/revenue-confirm');
+  return { ok: true };
+}
+
 export async function closeCashReconciliation(input: unknown): Promise<ActionResult> {
   const session = await currentSession();
   if (!isManager(session)) return { ok: false, error: 'Manager permission required' };

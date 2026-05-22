@@ -8,8 +8,18 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
-import { closeCashReconciliation } from '@/app/(dashboard)/reconciliation/cash/actions';
+import { closeCashReconciliation, reopenCashReconciliation } from '@/app/(dashboard)/reconciliation/cash/actions';
 import { type ShiftStatus } from '@/app/(dashboard)/reconciliation/cash/shifts';
 
 function peso(cents: number): string {
@@ -20,12 +30,23 @@ interface Props {
   branchId: string;
   date: string;
   shift: ShiftStatus;
+  canReopen?: boolean;
 }
 
-export function CashReconForm({ branchId, date, shift }: Props) {
+export function CashReconForm({ branchId, date, shift, canReopen }: Props) {
   const [actual, setActual] = useState(shift.closed ? String((shift.closed.actualCents) / 100) : '');
   const [reason, setReason] = useState(shift.closed?.reason ?? '');
+  const [reopenOpen, setReopenOpen] = useState(false);
+  const [reopenReason, setReopenReason] = useState('');
   const [pending, startTransition] = useTransition();
+
+  function reopen() {
+    startTransition(async () => {
+      const r = await reopenCashReconciliation({ branch_id: branchId, date, shift_label: shift.label, reason: reopenReason });
+      if (r.ok) { toast.success(`${shift.label} reopened`); setReopenOpen(false); setReopenReason(''); }
+      else toast.error(r.error);
+    });
+  }
 
   const actualCents = Math.round(Number(actual || 0) * 100);
   const variance = actualCents - shift.expectedCents;
@@ -74,6 +95,27 @@ export function CashReconForm({ branchId, date, shift }: Props) {
           <span className={`font-bold tabular ${shift.closed.varianceCents === 0 ? 'text-primary' : 'text-destructive'}`}>{peso(shift.closed.varianceCents)}</span>
         </div>
         {shift.closed.reason && <p className="text-xs font-medium text-muted-foreground">Reason: {shift.closed.reason}</p>}
+        {canReopen && (
+          <Button size="sm" variant="outline" className="self-start mt-1" onClick={() => setReopenOpen(true)} disabled={pending}>
+            Reopen
+          </Button>
+        )}
+
+        <AlertDialog open={reopenOpen} onOpenChange={setReopenOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Reopen {shift.label}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This unlocks the shift for recounting (e.g. cash came in after closing) and re-locks Revenue Confirm. A reason is required.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <Textarea value={reopenReason} onChange={(e) => setReopenReason(e.target.value)} rows={2} placeholder="Why is this being reopened?" />
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={reopen} disabled={pending || reopenReason.trim().length < 3}>Reopen</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     );
   }
