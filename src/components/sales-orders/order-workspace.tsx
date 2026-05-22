@@ -39,6 +39,7 @@ import {
   startAllServices,
   finishOrderItem,
   skipOrderItem,
+  releaseBed,
   voidPayment,
 } from '@/app/(dashboard)/sales-orders/actions';
 import { CustomerPaymentCard, type TipTarget } from '@/components/sales-orders/customer-payment-card';
@@ -60,8 +61,10 @@ interface OrderItem {
   station_name: string | null;
   duration_minutes: number | null;
   prep_minutes: number;
+  cleanup_minutes: number;
   actual_start: string | null;
   actual_end: string | null;
+  bed_released_at: string | null;
   list_price_cents: number;
   discount_amount_cents: number;
   final_amount_cents: number;
@@ -329,6 +332,13 @@ export function OrderWorkspace({
     });
   }
 
+  function doReleaseBed(id: string) {
+    startTransition(async () => {
+      const r = await releaseBed(id);
+      if (r.ok) toast.success('Bed marked ready'); else toast.error(r.error);
+    });
+  }
+
   function doRemoveCustomer(id: string) {
     startTransition(async () => {
       const r = await removeOrderCustomer(id, order.id);
@@ -479,13 +489,23 @@ export function OrderWorkspace({
               )}
               <ul className="flex flex-col divide-y divide-border">
                 {itemsByCustomer(c.id).map((it) => {
+                  // A finished line keeps its bed for the cleanup buffer, unless
+                  // released early. While cleaning, surface "free ~HH:MM" + Ready now.
+                  const cleaningUntil =
+                    ['service_completed', 'feedback_done', 'interrupted'].includes(it.status)
+                    && it.actual_end && it.resource_id && it.cleanup_minutes > 0 && !it.bed_released_at
+                      ? new Date(new Date(it.actual_end).getTime() + it.cleanup_minutes * 60000)
+                      : null;
+                  const isCleaning = cleaningUntil != null && cleaningUntil.getTime() > Date.now();
                   const detailParts = [
                     it.duration_minutes ? `${it.duration_minutes} min` : null,
                     it.station_name,
                     timeWindow(it.actual_start, it.actual_end, it.duration_minutes, it.prep_minutes),
+                    isCleaning ? `cleaning · free ~${hm(cleaningUntil!.toISOString())}` : null,
                   ].filter(Boolean) as string[];
                   const statusTag =
                     it.status === 'in_service' ? { t: 'In service', c: 'text-blue-600 dark:text-blue-400' }
+                    : isCleaning ? { t: 'Cleaning', c: 'text-amber-600 dark:text-amber-400' }
                     : (it.status === 'service_completed' || it.status === 'feedback_done') ? { t: 'Done', c: 'text-primary' }
                     : it.status === 'interrupted' ? { t: 'Interrupted', c: 'text-destructive' }
                     : it.status === 'cancelled' ? { t: 'Skipped', c: 'text-muted-foreground' }
@@ -515,6 +535,17 @@ export function OrderWorkspace({
                           <Button size="sm" onClick={() => doFinishItem(it)} disabled={pending}>Finish</Button>
                           <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setInterruptItem(it)} disabled={pending}>Interrupt</Button>
                         </>
+                      )}
+                      {isCleaning && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="border-amber-500/60 text-amber-700 hover:text-amber-800 dark:text-amber-400"
+                          onClick={() => doReleaseBed(it.id)}
+                          disabled={pending}
+                        >
+                          Ready now
+                        </Button>
                       )}
                       {['service_completed', 'feedback_done'].includes(it.status) && it.feedback_score == null && (
                         <Button

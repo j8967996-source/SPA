@@ -499,6 +499,30 @@ export async function finishOrderItem(itemId: string, orderId: string): Promise<
   return { ok: true };
 }
 
+// "Ready now" — free a bed before its post-service cleanup buffer has elapsed.
+// A finished line holds its bed for the service's cleanup_after_minutes (the bed
+// auto-frees when that window passes); stamping bed_released_at frees it at once.
+export async function releaseBed(itemId: string): Promise<ActionResult> {
+  const supabase = createServiceClient();
+  const { data: item } = await supabase
+    .from('order_items')
+    .select('order_id, actual_end, resource_id, bed_released_at')
+    .eq('id', itemId)
+    .single();
+  if (!item) return { ok: false, error: 'Service line not found' };
+  if (item.bed_released_at) return { ok: true }; // already released — no-op
+  if (!item.resource_id) return { ok: false, error: 'This line has no bed to release' };
+  if (!item.actual_end) return { ok: false, error: 'Service is still running — finish it first' };
+  const { error } = await supabase
+    .from('order_items')
+    .update({ bed_released_at: new Date().toISOString() })
+    .eq('id', itemId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/sales-orders/${item.order_id}`);
+  revalidatePath('/shift-schedule');
+  return { ok: true };
+}
+
 // Skip a not-yet-started service line (guest decides not to do it). It's marked
 // cancelled, drops out of the totals, and no longer blocks auto-completion.
 export async function skipOrderItem(itemId: string, orderId: string): Promise<ActionResult> {

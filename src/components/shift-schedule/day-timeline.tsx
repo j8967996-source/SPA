@@ -1,10 +1,16 @@
 import { Card } from '@/components/ui/card';
+import { CleanupSegment } from '@/components/shift-schedule/cleanup-segment';
 
 export interface DayServiceBlock {
   name: string;
   startMin: number;
   endMin: number;
   ongoing: boolean;
+  // End of the post-service bed-cleanup window (minute-of-day), when the bed is
+  // still being held for cleanup. Drawn as a separate, distinct-colour block.
+  cleanupEndMin?: number;
+  // The order line, so the cleanup block can offer "Ready now".
+  itemId?: string;
 }
 export interface DayRow {
   id: string;
@@ -85,15 +91,24 @@ export function DayTimeline({
                     title={`${hhmm(r.shiftStartMin)}–${hhmm(r.shiftEndMin)}`}
                   />
                 )}
-                {/* service blocks */}
+                {/* service blocks (+ trailing cleanup block in a distinct colour) */}
                 {r.services.map((s, i) => (
-                  <div
-                    key={i}
-                    className={`absolute top-2 bottom-2 rounded px-1 overflow-hidden text-[10px] font-bold leading-tight ${s.ongoing ? 'bg-blue-500/70 text-white' : 'bg-primary/70 text-white'}`}
-                    style={{ left: `${pct(s.startMin)}%`, width: `${Math.max(2, pct(s.endMin) - pct(s.startMin))}%` }}
-                    title={`${s.name} · ${hhmm(s.startMin)}–${hhmm(s.endMin)}`}
-                  >
-                    {s.name}
+                  <div key={i} className="contents">
+                    <div
+                      className={`absolute top-2 bottom-2 rounded px-1 overflow-hidden text-[10px] font-bold leading-tight ${s.ongoing ? 'bg-blue-500/70 text-white' : 'bg-primary/70 text-white'}`}
+                      style={{ left: `${pct(s.startMin)}%`, width: `${Math.max(2, pct(s.endMin) - pct(s.startMin))}%` }}
+                      title={`${s.name} · ${hhmm(s.startMin)}–${hhmm(s.endMin)}`}
+                    >
+                      {s.name}
+                    </div>
+                    {s.cleanupEndMin != null && (
+                      <CleanupSegment
+                        itemId={s.itemId}
+                        left={pct(s.endMin)}
+                        width={Math.max(1.5, pct(s.cleanupEndMin) - pct(s.endMin))}
+                        label={`Cleanup ${hhmm(s.endMin)}–${hhmm(s.cleanupEndMin)}`}
+                      />
+                    )}
                   </div>
                 ))}
               </div>

@@ -33,7 +33,7 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
   const supabase = createServiceClient();
   const { data: itemData } = await supabase
     .from('order_items')
-    .select('therapist_id, resource_id, actual_start, actual_end, duration_minutes, service:service_items ( name, prep_before_minutes ), therapist:employees!order_items_therapist_id_fkey ( name, employee_code ), order:orders!order_items_order_id_fkey ( branch_id, service_date )')
+    .select('id, therapist_id, resource_id, actual_start, actual_end, bed_released_at, duration_minutes, service:service_items ( name, prep_before_minutes, cleanup_after_minutes ), therapist:employees!order_items_therapist_id_fkey ( name, employee_code ), order:orders!order_items_order_id_fkey ( branch_id, service_date )')
     .not('actual_start', 'is', null);
   const dayItems = (itemData ?? []).filter((it) => {
     const ord = one(it.order);
@@ -44,13 +44,24 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
   if (subject === 'station') {
     const { data: stations } = await supabase
       .from('resources').select('id, resource_name').eq('branch_id', branchId).eq('status', 'active').order('resource_name');
-    const byStation = new Map<string, { name: string; startMin: number; endMin: number; ongoing: boolean }[]>();
+    const byStation = new Map<string, { name: string; startMin: number; endMin: number; ongoing: boolean; cleanupEndMin?: number; itemId?: string }[]>();
+    const nowMs = Date.now();
     for (const it of dayItems) {
       if (!it.resource_id) continue;
       const startMin = tsToMin(it.actual_start!);
       const endMin = it.actual_end ? tsToMin(it.actual_end) : Math.min(1439, startMin + (it.duration_minutes ?? 60) + (one(it.service)?.prep_before_minutes ?? 0));
+      // A finished line still holds the bed for cleanup_after_minutes (unless
+      // released early). Only show it while the buffer hasn't elapsed.
+      const cleanupMin = one(it.service)?.cleanup_after_minutes ?? 0;
+      let cleanupEndMin: number | undefined;
+      let itemId: string | undefined;
+      if (it.actual_end && cleanupMin > 0 && !it.bed_released_at
+          && Date.parse(it.actual_end) + cleanupMin * 60000 > nowMs) {
+        cleanupEndMin = Math.min(1439, endMin + cleanupMin);
+        itemId = it.id;
+      }
       const arr = byStation.get(it.resource_id) ?? [];
-      arr.push({ name: one(it.therapist)?.name ?? one(it.service)?.name ?? 'Service', startMin, endMin, ongoing: !it.actual_end });
+      arr.push({ name: one(it.therapist)?.name ?? one(it.service)?.name ?? 'Service', startMin, endMin, ongoing: !it.actual_end, cleanupEndMin, itemId });
       byStation.set(it.resource_id, arr);
     }
     rows = (stations ?? []).map((s) => ({
@@ -107,7 +118,10 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
   for (const r of rows) {
     if (r.shiftStartMin != null) allMins.push(r.shiftStartMin);
     if (r.shiftEndMin != null) allMins.push(r.shiftEndMin);
-    for (const s of r.services) allMins.push(s.startMin, s.endMin);
+    for (const s of r.services) {
+      allMins.push(s.startMin, s.endMin);
+      if (s.cleanupEndMin != null) allMins.push(s.cleanupEndMin);
+    }
   }
   const windowStartMin = allMins.length ? Math.min(540, Math.floor(Math.min(...allMins) / 60) * 60) : 540;
   const windowEndMin = allMins.length ? Math.max(1320, Math.ceil(Math.max(...allMins) / 60) * 60) : 1320;
@@ -265,6 +279,9 @@ export default async function ShiftSchedulePage({
         <span className="inline-flex items-center gap-1"><span className="size-3 rounded bg-blue-500/15" /> On-call</span>
         <span className="inline-flex items-center gap-1"><span className="size-3 rounded bg-muted" /> Off</span>
         <span className="inline-flex items-center gap-1"><span className="size-3 rounded bg-destructive/15" /> Leave</span>
+        {view === 'station' && (
+          <span className="inline-flex items-center gap-1"><span className="size-3 rounded border border-dashed border-zinc-500/50 bg-zinc-400/75" /> Bed cleanup</span>
+        )}
       </div>
     </div>
   );

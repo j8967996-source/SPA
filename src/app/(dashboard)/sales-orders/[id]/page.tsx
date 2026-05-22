@@ -44,8 +44,8 @@ async function fetchData(id: string) {
       feedback ( order_item_id, score ),
       order_items (
         id, order_customer_id, list_price_cents, discount_amount_cents, final_amount_cents, status,
-        therapist_id, resource_id, duration_minutes, actual_start, actual_end,
-        service:service_items ( name, prep_before_minutes ),
+        therapist_id, resource_id, duration_minutes, actual_start, actual_end, bed_released_at,
+        service:service_items ( name, prep_before_minutes, cleanup_after_minutes ),
         therapist:employees ( name, home_branch:branches!employees_home_branch_id_fkey ( code ) ),
         resource:resources ( resource_name )
       )
@@ -96,7 +96,28 @@ async function fetchData(id: string) {
     .select('therapist_id, resource_id')
     .eq('status', 'in_service');
   const busyTherapistIds = [...new Set((busy.data ?? []).map((b) => b.therapist_id).filter(Boolean) as string[])];
-  const busyResourceIds = [...new Set((busy.data ?? []).map((b) => b.resource_id).filter(Boolean) as string[])];
+
+  // Beds still inside their post-service cleanup buffer are occupied too — a
+  // finished line holds its bed for cleanup_after_minutes unless released early.
+  // (The therapist is free during cleanup, so this only blocks the station.)
+  const cleaning = await supabase
+    .from('order_items')
+    .select('resource_id, actual_end, service:service_items ( cleanup_after_minutes )')
+    .in('status', ['service_completed', 'feedback_done', 'interrupted'])
+    .not('resource_id', 'is', null)
+    .not('actual_end', 'is', null)
+    .is('bed_released_at', null);
+  const nowMs = Date.now();
+  const cleaningResourceIds = (cleaning.data ?? [])
+    .filter((r) => {
+      const mins = one(r.service)?.cleanup_after_minutes ?? 0;
+      return mins > 0 && Date.parse(r.actual_end!) + mins * 60000 > nowMs;
+    })
+    .map((r) => r.resource_id as string);
+  const busyResourceIds = [...new Set([
+    ...((busy.data ?? []).map((b) => b.resource_id).filter(Boolean) as string[]),
+    ...cleaningResourceIds,
+  ])];
 
   const scheduledIds = new Set((shifts.data ?? []).map((s) => s.employee_id));
   const allEmployees = (emp.data ?? []).map((e) => ({
@@ -216,8 +237,10 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       station_name: resource?.resource_name ?? null,
       duration_minutes: it.duration_minutes,
       prep_minutes: svc?.prep_before_minutes ?? 0,
+      cleanup_minutes: svc?.cleanup_after_minutes ?? 0,
       actual_start: it.actual_start,
       actual_end: it.actual_end,
+      bed_released_at: it.bed_released_at,
       list_price_cents: it.list_price_cents,
       discount_amount_cents: it.discount_amount_cents,
       final_amount_cents: it.final_amount_cents,
