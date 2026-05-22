@@ -57,7 +57,7 @@ export default async function RevenueConfirmPage({
             href={`/reconciliation/revenue-confirm?branch=${b.id}&date=${date}`}
             className={cn(
               'rounded-lg px-3 py-1.5 text-sm font-bold transition-colors',
-              b.id === branchId ? 'bg-sidebar-primary/15 text-sidebar-primary' : 'bg-muted text-muted-foreground hover:bg-accent',
+              b.id === branchId ? 'bg-primary text-primary-foreground shadow-sm' : 'bg-muted text-muted-foreground hover:bg-accent',
             )}
           >
             {b.code}
