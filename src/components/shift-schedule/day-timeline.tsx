@@ -103,11 +103,11 @@ export function DayTimeline({
                 {r.services.map((s, i) => (
                   <div key={i} className="contents">
                     <div
-                      className={`absolute top-2 bottom-2 rounded px-1 overflow-hidden text-[10px] font-bold leading-tight ${s.ongoing ? 'bg-blue-500/70 text-white' : 'bg-primary/70 text-white'}`}
+                      className={`absolute top-2 bottom-2 rounded px-1.5 flex items-center overflow-hidden text-[10px] font-bold leading-tight ${s.ongoing ? 'bg-blue-500/70 text-white' : 'bg-primary/70 text-white'}`}
                       style={{ left: `${pct(s.startMin)}%`, width: `${Math.max(2, pct(s.endMin) - pct(s.startMin))}%` }}
                       title={`${s.name} · ${hhmm(s.startMin)}–${hhmm(s.endMin)}`}
                     >
-                      {s.name}
+                      <span className="truncate">{s.name}</span>
                     </div>
                     {s.cleanupEndMin != null && (
                       <CleanupSegment

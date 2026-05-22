@@ -33,7 +33,7 @@ export function CleanupSegment({
       onClick={release}
       disabled={pending || !itemId}
       title={`${label} — click to mark the bed ready now`}
-      className="absolute top-2 bottom-2 rounded border border-dashed border-zinc-500/50 bg-zinc-400/75 px-1 overflow-hidden text-[10px] font-bold leading-tight text-zinc-900 hover:bg-zinc-400 disabled:cursor-default dark:text-zinc-950"
+      className="absolute top-2 bottom-2 flex items-center justify-center rounded border border-dashed border-zinc-500/50 bg-zinc-400/75 px-1 overflow-hidden whitespace-nowrap text-[10px] font-bold leading-tight text-zinc-900 hover:bg-zinc-400 disabled:cursor-default dark:text-zinc-950"
       style={{ left: `${left}%`, width: `${width}%` }}
     >
       clean
