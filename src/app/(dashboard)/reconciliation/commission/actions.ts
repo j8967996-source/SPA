@@ -8,13 +8,14 @@ import { createServiceClient } from '@/lib/supabase/server';
 export type ActionResult<T = unknown> = { ok: true; data?: T } | { ok: false; error: string };
 
 const createSchema = z.object({
+  branch_id: z.string().uuid(),
   period_from: z.string().min(1),
   period_to: z.string().min(1),
 });
 
-// Eligible order_items: parent order paid/closed, within range, has a therapist,
-// the service is commission-applicable, and not yet settled.
-async function loadEligible(from: string, to: string) {
+// Eligible order_items at a branch: parent order paid/closed, within range, has
+// a therapist, the service is commission-applicable, and not yet settled.
+async function loadEligible(from: string, to: string, branchId: string) {
   const supabase = createServiceClient();
   const { data, error } = await supabase
     .from('order_items')
@@ -41,7 +42,7 @@ async function loadEligible(from: string, to: string) {
       return { it, ord, svc, th, rate: cc?.commission_rate ?? 0 };
     })
     .filter((r) =>
-      r.ord && ['paid', 'closed'].includes(r.ord.status) &&
+      r.ord && r.ord.branch_id === branchId && ['paid', 'closed'].includes(r.ord.status) &&
       r.it.status !== 'cancelled' &&
       r.ord.service_date >= from && r.ord.service_date <= to &&
       r.svc?.commission_applicable && r.th,
@@ -51,11 +52,11 @@ async function loadEligible(from: string, to: string) {
 export async function createCommissionPeriod(input: unknown): Promise<ActionResult<{ id: string }>> {
   const parsed = createSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
-  const { period_from, period_to } = parsed.data;
+  const { branch_id, period_from, period_to } = parsed.data;
   if (period_to < period_from) return { ok: false, error: 'End date must be on/after start date' };
 
-  const eligible = await loadEligible(period_from, period_to);
-  if (eligible.length === 0) return { ok: false, error: 'No eligible commission items in this range' };
+  const eligible = await loadEligible(period_from, period_to, branch_id);
+  if (eligible.length === 0) return { ok: false, error: 'No eligible commission items for this branch in this range' };
 
   // group by therapist + service-location branch
   type Agg = { therapist_id: string; branch_id: string; sessions: number; gross: number; commission: number };
@@ -71,8 +72,9 @@ export async function createCommissionPeriod(input: unknown): Promise<ActionResu
   }
 
   const supabase = createServiceClient();
+  const { data: branch } = await supabase.from('branches').select('code').eq('id', branch_id).single();
   const ymd = period_from.replace(/-/g, '').slice(0, 6);
-  const prefix = `CP-${ymd}-`;
+  const prefix = `CP-${branch?.code ?? 'X'}-${ymd}-`;
   const { data: last } = await supabase
     .from('commission_periods').select('period_no').like('period_no', `${prefix}%`).order('period_no', { ascending: false }).limit(1);
   const seq = last?.[0]?.period_no ? Number(last[0].period_no.slice(prefix.length)) : 0;
@@ -86,7 +88,7 @@ export async function createCommissionPeriod(input: unknown): Promise<ActionResu
   const { data: period, error: pe } = await supabase
     .from('commission_periods')
     .insert({
-      period_no, period_from, period_to, status: 'draft',
+      period_no, branch_id, period_from, period_to, status: 'draft',
       total_sessions: totals.sessions,
       total_gross_sales_cents: totals.gross,
       total_commission_cents: totals.commission,
@@ -115,12 +117,13 @@ export async function createCommissionPeriod(input: unknown): Promise<ActionResu
 export async function confirmCommissionPeriod(id: string): Promise<ActionResult> {
   const supabase = createServiceClient();
   const { data: period, error: pe } = await supabase
-    .from('commission_periods').select('period_from, period_to, status').eq('id', id).single();
+    .from('commission_periods').select('period_from, period_to, status, branch_id').eq('id', id).single();
   if (pe || !period) return { ok: false, error: 'Period not found' };
   if (period.status !== 'draft') return { ok: false, error: 'Only draft periods can be confirmed' };
+  if (!period.branch_id) return { ok: false, error: 'Period has no branch' };
 
   // Re-resolve eligible items and stamp them with this period.
-  const eligible = await loadEligible(period.period_from, period.period_to);
+  const eligible = await loadEligible(period.period_from, period.period_to, period.branch_id);
   const ids = eligible.map((r) => r.it.id);
   if (ids.length > 0) {
     const { error: ue } = await supabase

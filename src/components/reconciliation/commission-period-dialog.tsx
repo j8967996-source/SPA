@@ -15,6 +15,13 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 import { createCommissionPeriod } from '@/app/(dashboard)/reconciliation/commission/actions';
 
@@ -28,17 +35,29 @@ function halfMonthDefault(): { from: string; to: string } {
   return { from: `${y}-${mm}-16`, to: `${y}-${mm}-${String(lastDay).padStart(2, '0')}` };
 }
 
-export function CommissionPeriodDialog({ trigger }: { trigger: React.ReactNode }) {
+interface BranchOpt { id: string; code: string; name: string }
+
+export function CommissionPeriodDialog({
+  trigger,
+  branches,
+  defaultBranchId,
+}: {
+  trigger: React.ReactNode;
+  branches: BranchOpt[];
+  defaultBranchId: string;
+}) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const def = halfMonthDefault();
+  const [branchId, setBranchId] = useState(defaultBranchId || branches[0]?.id || '');
   const [from, setFrom] = useState(def.from);
   const [to, setTo] = useState(def.to);
+  const branchOptions = branches.map((b) => ({ value: b.id, label: `${b.code} — ${b.name}` }));
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     startTransition(async () => {
-      const r = await createCommissionPeriod({ period_from: from, period_to: to });
+      const r = await createCommissionPeriod({ branch_id: branchId, period_from: from, period_to: to });
       if (r.ok) { toast.success('Draft period created'); setOpen(false); }
       else toast.error(r.error);
     });
@@ -56,6 +75,13 @@ export function CommissionPeriodDialog({ trigger }: { trigger: React.ReactNode }
             </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-2 gap-4 py-4">
+            <div className="flex flex-col gap-2 col-span-2">
+              <Label className="font-semibold">Branch *</Label>
+              <Select items={branchOptions} value={branchId} onValueChange={(v) => v && setBranchId(v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{branchOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
             <div className="flex flex-col gap-2">
               <Label htmlFor="cp-from" className="font-semibold">From *</Label>
               <Input id="cp-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} required />
