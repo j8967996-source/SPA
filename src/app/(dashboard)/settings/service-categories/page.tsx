@@ -52,7 +52,7 @@ export default async function ServiceCategoriesPage() {
   const activeCount = categories.filter((i) => i.active).length;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 max-w-5xl">
       <div className="flex items-start justify-between gap-4">
         <div>
           <Link
