@@ -55,6 +55,7 @@ interface Props {
   mode?: 'create' | 'edit';
   resource?: ResourceItem;
   branches: BranchOption[];
+  allBusinessUnits?: BusinessUnitOption[];
   trigger?: React.ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -65,6 +66,7 @@ export function ResourceFormDialog({
   mode = 'create',
   resource,
   branches,
+  allBusinessUnits = [],
   trigger,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
@@ -86,7 +88,16 @@ export function ResourceFormDialog({
 
   const branchOptions = branches.map((b) => ({ value: b.id, label: `${b.code} — ${b.name}` }));
   const selectedBranch = branches.find((b) => b.id === branchId);
-  const businessUnitOptions = (selectedBranch?.businessUnits ?? []).map((b) => ({ value: b.id, label: `${b.code} — ${b.name}` }));
+  const branchUnitOptions = (selectedBranch?.businessUnits ?? []).map((b) => ({ value: b.id, label: `${b.code} — ${b.name}` }));
+  // If the saved unit isn't one of this branch's units (stale assignment), keep
+  // it listed by its real name so the trigger never shows a bare UUID.
+  const orphanUnit =
+    businessUnitId && !branchUnitOptions.some((o) => o.value === businessUnitId)
+      ? allBusinessUnits.find((b) => b.id === businessUnitId)
+      : null;
+  const businessUnitOptions = orphanUnit
+    ? [...branchUnitOptions, { value: orphanUnit.id, label: `${orphanUnit.code} — ${orphanUnit.name} (not in this branch)` }]
+    : branchUnitOptions;
 
   function handleBranchChange(v: string) {
     if (!v) return;
@@ -176,7 +187,7 @@ export function ResourceFormDialog({
 
             <div className="flex flex-col gap-2">
               <Label className="font-semibold">Type *</Label>
-              <Select value={resourceType} onValueChange={(v) => v && setResourceType(v as ResourceType)}>
+              <Select items={RESOURCE_TYPES} value={resourceType} onValueChange={(v) => v && setResourceType(v as ResourceType)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   {RESOURCE_TYPES.map((t) => (
