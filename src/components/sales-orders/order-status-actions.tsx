@@ -17,11 +17,12 @@ interface Props {
   status: string;
   canManage: boolean;
   itemCount: number;
+  hasPayments: boolean;
 }
 
 // The order's primary status-advance action plus Void, lifted into the page
 // header next to the status badge. Reason-gated transitions keep their dialogs.
-export function OrderStatusActions({ orderId, status, canManage, itemCount }: Props) {
+export function OrderStatusActions({ orderId, status, canManage, itemCount, hasPayments }: Props) {
   const [pending, startTransition] = useTransition();
   const [voidOpen, setVoidOpen] = useState(false);
   const [reopenOpen, setReopenOpen] = useState(false);
@@ -84,7 +85,11 @@ export function OrderStatusActions({ orderId, status, canManage, itemCount }: Pr
         open={voidOpen}
         onOpenChange={setVoidOpen}
         title="Void this order?"
-        description="The order is cancelled and locked. Past activity is kept."
+        description={
+          hasPayments
+            ? 'This order already has recorded payment(s) — voiding cancels them too. The order is then locked; past activity is kept.'
+            : 'The order is cancelled and locked. Past activity is kept.'
+        }
         confirmLabel="Void order"
         destructive
         pending={pending}

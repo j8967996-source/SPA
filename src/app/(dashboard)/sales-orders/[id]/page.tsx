@@ -266,7 +266,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           <Badge variant={STATUS_VARIANT[order.status] ?? 'secondary'} className="font-bold capitalize">
             {order.status.replace('_', ' ')}
           </Badge>
-          <OrderStatusActions orderId={order.id} status={order.status} canManage={canManage} itemCount={items.length} />
+          <OrderStatusActions orderId={order.id} status={order.status} canManage={canManage} itemCount={items.length} hasPayments={payments.length > 0} />
           <div className="ml-auto">
             <ReportIncidentDialog orderId={order.id} defaultCustomerName={customers[0]?.customer_name ?? ''} />
           </div>
