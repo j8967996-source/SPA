@@ -16,6 +16,7 @@ function one<T>(v: T | T[] | null): T | null {
 
 interface ItemRow {
   list_price_cents: number;
+  commission_cents: number;
   status: string;
   commission_settlement_id: string | null;
   service_name: string;
@@ -25,7 +26,6 @@ interface ItemRow {
   order_status: string;
   branch_id: string;
   therapist: string;
-  rate: number;
 }
 
 async function fetchData(branchId: string) {
@@ -45,10 +45,10 @@ async function fetchData(branchId: string) {
     supabase
       .from('order_items')
       .select(`
-        list_price_cents, status, commission_settlement_id,
+        list_price_cents, commission_amount_cents, status, commission_settlement_id,
         service:service_items!order_items_service_item_id_fkey ( name, commission_applicable ),
         order:orders!order_items_order_id_fkey ( order_no, service_date, status, branch_id ),
-        therapist:employees!order_items_therapist_id_fkey ( name, commission_class:commission_classes ( commission_rate ) )
+        therapist:employees!order_items_therapist_id_fkey ( name )
       `)
       .not('therapist_id', 'is', null),
   ]);
@@ -57,9 +57,9 @@ async function fetchData(branchId: string) {
     const ord = one(it.order);
     const svc = one(it.service);
     const th = one(it.therapist);
-    const cc = th ? one(th.commission_class) : null;
     return {
       list_price_cents: it.list_price_cents,
+      commission_cents: it.commission_amount_cents ?? 0,
       status: it.status,
       commission_settlement_id: it.commission_settlement_id,
       service_name: svc?.name ?? 'Service',
@@ -69,7 +69,6 @@ async function fetchData(branchId: string) {
       order_status: ord?.status ?? '',
       branch_id: ord?.branch_id ?? '',
       therapist: th?.name ?? '—',
-      rate: cc?.commission_rate ?? 0,
     };
   }).filter((it) => it.branch_id === branchId);
 
@@ -108,7 +107,7 @@ function buildView(
       .sort((a, b) => (a.service_date < b.service_date ? 1 : -1))
       .map((it) => ({
         date: it.service_date, orderNo: it.order_no, therapist: it.therapist, service: it.service_name,
-        gross: it.list_price_cents, commission: Math.round(it.list_price_cents * it.rate),
+        gross: it.list_price_cents, commission: it.commission_cents,
       })),
   };
 }
