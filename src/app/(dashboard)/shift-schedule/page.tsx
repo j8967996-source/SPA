@@ -44,7 +44,7 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
   if (subject === 'station') {
     const { data: stations } = await supabase
       .from('resources').select('id, resource_name').eq('branch_id', branchId).eq('status', 'active').order('resource_name');
-    const byStation = new Map<string, { name: string; startMin: number; endMin: number; ongoing: boolean; cleanupEndMin?: number; itemId?: string }[]>();
+    const byStation = new Map<string, { line1: string; line2?: string; startMin: number; endMin: number; ongoing: boolean; cleanupEndMin?: number; itemId?: string }[]>();
     const nowMs = Date.now();
     for (const it of dayItems) {
       if (!it.resource_id) continue;
@@ -60,8 +60,11 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
         cleanupEndMin = Math.min(1439, endMin + cleanupMin);
         itemId = it.id;
       }
+      // Station rows: who is on the bed (line 1) + which service (line 2).
+      const svcName = one(it.service)?.name ?? 'Service';
+      const thName = one(it.therapist)?.name ?? null;
       const arr = byStation.get(it.resource_id) ?? [];
-      arr.push({ name: one(it.therapist)?.name ?? one(it.service)?.name ?? 'Service', startMin, endMin, ongoing: !it.actual_end, cleanupEndMin, itemId });
+      arr.push({ line1: thName ?? svcName, line2: thName ? svcName : undefined, startMin, endMin, ongoing: !it.actual_end, cleanupEndMin, itemId });
       byStation.set(it.resource_id, arr);
     }
     rows = (stations ?? []).map((s) => ({
@@ -78,7 +81,7 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
     ]);
     const shifts = shiftsRes.data;
     const resName = new Map((resRes.data ?? []).map((r) => [r.id, r.resource_name]));
-    const byTherapist = new Map<string, { name: string; startMin: number; endMin: number; ongoing: boolean }[]>();
+    const byTherapist = new Map<string, { line1: string; line2?: string; startMin: number; endMin: number; ongoing: boolean }[]>();
     const empMeta = new Map<string, { name: string; code: string }>();
     for (const it of dayItems) {
       if (!it.therapist_id) continue;
@@ -86,10 +89,12 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
       empMeta.set(it.therapist_id, { name: th?.name ?? '—', code: th?.employee_code ?? '' });
       const startMin = tsToMin(it.actual_start!);
       const endMin = it.actual_end ? tsToMin(it.actual_end) : Math.min(1439, startMin + (it.duration_minutes ?? 60) + (one(it.service)?.prep_before_minutes ?? 0));
+      // Therapist rows already name the therapist, so the block leads with the
+      // service (line 1) and the bed it is on (line 2).
       const svc = one(it.service)?.name ?? 'Service';
       const bed = it.resource_id ? resName.get(it.resource_id) : null;
       const arr = byTherapist.get(it.therapist_id) ?? [];
-      arr.push({ name: bed ? `${svc} · ${bed}` : svc, startMin, endMin, ongoing: !it.actual_end });
+      arr.push({ line1: svc, line2: bed ?? undefined, startMin, endMin, ongoing: !it.actual_end });
       byTherapist.set(it.therapist_id, arr);
     }
     const shiftEmpIds = new Set((shifts ?? []).map((s) => s.employee_id));

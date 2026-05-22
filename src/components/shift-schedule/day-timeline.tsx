@@ -2,7 +2,9 @@ import { Card } from '@/components/ui/card';
 import { CleanupSegment } from '@/components/shift-schedule/cleanup-segment';
 
 export interface DayServiceBlock {
-  name: string;
+  // Three stacked lines: primary name, service category, time range.
+  line1: string;
+  line2?: string;
   startMin: number;
   endMin: number;
   ongoing: boolean;
@@ -86,7 +88,7 @@ export function DayTimeline({
                 <div className="font-semibold text-sm">{r.name}</div>
                 <div className="font-mono font-bold text-xs text-muted-foreground">{r.code}</div>
               </div>
-              <div className="relative flex-1 h-12 my-1">
+              <div className="relative flex-1 h-16 my-1">
                 {/* hour gridlines */}
                 {hours.map((h) => (
                   <div key={h} className="absolute top-0 bottom-0 border-l border-border/40" style={{ left: `${pct(h * 60)}%` }} />
@@ -103,11 +105,15 @@ export function DayTimeline({
                 {r.services.map((s, i) => (
                   <div key={i} className="contents">
                     <div
-                      className={`absolute top-2 bottom-2 rounded px-1.5 flex items-center overflow-hidden text-[10px] font-bold leading-tight ${s.ongoing ? 'bg-blue-500/70 text-white' : 'bg-primary/70 text-white'}`}
+                      className={`absolute top-1 bottom-1 rounded px-1.5 flex flex-col justify-center overflow-hidden text-[10px] leading-tight ${s.ongoing ? 'bg-blue-500/70 text-white' : 'bg-primary/70 text-white'}`}
                       style={{ left: `${pct(s.startMin)}%`, width: `${Math.max(2, pct(s.endMin) - pct(s.startMin))}%` }}
-                      title={`${s.name} · ${hhmm(s.startMin)}–${hhmm(s.endMin)}`}
+                      title={`${s.line1}${s.line2 ? ` · ${s.line2}` : ''} · ${hhmm(s.startMin)}–${hhmm(s.endMin)}`}
                     >
-                      <span className="truncate">{s.name}</span>
+                      <span className="truncate font-bold">{s.line1}</span>
+                      {s.line2 && <span className="truncate font-semibold opacity-90">{s.line2}</span>}
+                      <span className="truncate font-semibold tabular-nums opacity-80">
+                        {hhmm(s.startMin)}{s.ongoing ? '–~' : '–'}{hhmm(s.endMin)}
+                      </span>
                     </div>
                     {s.cleanupEndMin != null && (
                       <CleanupSegment
