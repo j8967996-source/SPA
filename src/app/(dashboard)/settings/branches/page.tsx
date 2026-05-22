@@ -40,7 +40,7 @@ export default async function BranchesPage() {
   const activeCount = branches.filter((b) => b.active).length;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 max-w-5xl">
       <div className="flex items-start justify-between gap-4">
         <div>
           <Link
