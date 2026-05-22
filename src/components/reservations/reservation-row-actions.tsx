@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { MoreVertical, Check, X, CalendarX, ArrowRightCircle, Pencil } from 'lucide-react';
+import { MoreVertical, Check, X, CalendarX, ArrowRightCircle, Pencil, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
@@ -38,10 +38,10 @@ export function ReservationRowActions({ reservation, branches, sources, serviceC
   const { id, status } = reservation;
   const terminal = ['converted', 'cancelled', 'no_show'].includes(status);
 
-  function set(next: 'confirmed' | 'cancelled' | 'no_show') {
+  function set(next: 'reserved' | 'confirmed' | 'cancelled' | 'no_show') {
     startTransition(async () => {
       const r = await setReservationStatus(id, next);
-      if (r.ok) toast.success(`Marked ${next.replace('_', ' ')}`);
+      if (r.ok) toast.success(next === 'reserved' ? 'Reopened' : `Marked ${next.replace('_', ' ')}`);
       else toast.error(r.error);
     });
   }
@@ -65,6 +65,14 @@ export function ReservationRowActions({ reservation, branches, sources, serviceC
           }
         />
         <DropdownMenuContent align="end">
+          {/* A mistaken No-show / Cancel can be reopened back to reserved.
+              Converted stays terminal — it already became an order. */}
+          {(status === 'no_show' || status === 'cancelled') && (
+            <DropdownMenuItem onClick={() => set('reserved')}>
+              <RotateCcw className="size-4" />
+              Reopen
+            </DropdownMenuItem>
+          )}
           {!terminal && (
             <DropdownMenuItem onClick={() => setTimeout(() => setEditOpen(true))}>
               <Pencil className="size-4" />
