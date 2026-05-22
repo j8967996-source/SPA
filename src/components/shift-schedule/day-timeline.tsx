@@ -50,9 +50,15 @@ export function DayTimeline({
   const hours: number[] = [];
   for (let h = firstHour; h <= lastHour; h++) hours.push(h);
 
+  // Give every hour a generous fixed width so the service + cleanup blocks
+  // aren't cramped; the timeline scrolls horizontally when it overflows.
+  const PX_PER_HOUR = 130;
+  const LABEL_W = 160; // matches the w-40 name column
+  const trackMinWidth = Math.round((total / 60) * PX_PER_HOUR);
+
   return (
     <Card className="p-0 overflow-x-auto">
-      <div className="min-w-[820px]">
+      <div style={{ minWidth: LABEL_W + trackMinWidth }}>
         {/* hour axis */}
         <div className="flex border-b border-border">
           <div className="w-40 shrink-0 p-2 text-xs font-bold text-muted-foreground">Therapist</div>
