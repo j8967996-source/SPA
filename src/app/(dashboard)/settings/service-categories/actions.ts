@@ -15,6 +15,7 @@ const schema = z.object({
   commission_applicable: z.boolean().default(true),
   tip_applicable: z.boolean().default(true),
   revenue_account: z.string().max(20).optional().nullable(),
+  required_resource_type: z.string().max(40).optional().nullable(),
 });
 
 const updateSchema = schema.partial({ code: true }).extend({ id: z.string().uuid() });
@@ -50,6 +51,7 @@ export async function createServiceCategory(input: unknown): Promise<ActionResul
       commission_applicable: parsed.data.commission_applicable,
       tip_applicable: parsed.data.tip_applicable,
       revenue_account: parsed.data.revenue_account || null,
+      required_resource_type: parsed.data.required_resource_type || null,
       active: true,
     })
     .select('id')
@@ -75,6 +77,7 @@ export async function updateServiceCategory(input: unknown): Promise<ActionResul
   if (d.commission_applicable !== undefined) patch.commission_applicable = d.commission_applicable;
   if (d.tip_applicable !== undefined) patch.tip_applicable = d.tip_applicable;
   if (d.revenue_account !== undefined) patch.revenue_account = d.revenue_account || null;
+  if (d.required_resource_type !== undefined) patch.required_resource_type = d.required_resource_type || null;
   const supabase = createServiceClient();
   if (Object.keys(patch).length > 0) {
     const { error } = await supabase.from('service_categories').update(patch).eq('id', d.id);

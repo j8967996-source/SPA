@@ -16,6 +16,13 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 import {
   createServiceCategory,
@@ -30,7 +37,18 @@ export interface CategoryItem {
   commission_applicable: boolean;
   tip_applicable: boolean;
   revenue_account: string | null;
+  required_resource_type: string | null;
 }
+
+// Standard resource types a category can consume. Drives reservation bed/station
+// capacity planning.
+const RESOURCE_TYPES = [
+  { value: 'massage_bed', label: 'Massage bed' },
+  { value: 'hair_chair', label: 'Hair chair' },
+  { value: 'nail_station', label: 'Nail station' },
+  { value: 'rest_room', label: 'Rest room' },
+];
+const RT_NONE = '__none__';
 
 interface BusinessUnitOption {
   id: string;
@@ -64,6 +82,7 @@ export function ServiceCategoryFormDialog({
   const [commissionApplicable, setCommissionApplicable] = useState(item?.commission_applicable ?? true);
   const [tipApplicable, setTipApplicable] = useState(item?.tip_applicable ?? true);
   const [revenueAccount, setRevenueAccount] = useState(item?.revenue_account ?? '');
+  const [resourceType, setResourceType] = useState(item?.required_resource_type ?? RT_NONE);
   const [pending, startTransition] = useTransition();
 
   const isEdit = mode === 'edit';
@@ -87,6 +106,7 @@ export function ServiceCategoryFormDialog({
       commission_applicable: commissionApplicable,
       tip_applicable: tipApplicable,
       revenue_account: revenueAccount || null,
+      required_resource_type: resourceType === RT_NONE ? null : resourceType,
     };
     startTransition(async () => {
       const r = isEdit
@@ -182,6 +202,20 @@ export function ServiceCategoryFormDialog({
 
             {/* Revenue Account hidden for now (ERP posting deferred). State +
                 payload kept so existing values are preserved on edit. */}
+
+            <div className="flex flex-col gap-2">
+              <Label className="font-semibold">Resource Type</Label>
+              <Select items={[{ value: RT_NONE, label: 'None' }, ...RESOURCE_TYPES]} value={resourceType} onValueChange={(v) => setResourceType(v ?? RT_NONE)}>
+                <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={RT_NONE}>None</SelectItem>
+                  {RESOURCE_TYPES.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <p className="text-xs font-medium text-muted-foreground">
+                Which station this category uses — drives reservation bed/station capacity checks.
+              </p>
+            </div>
 
             <div className="flex items-center justify-between rounded-lg border border-border px-3 py-2">
               <div>

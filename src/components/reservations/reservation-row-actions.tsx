@@ -22,7 +22,7 @@ import { NewReservationDialog, type ReservationItem } from './new-reservation-di
 
 interface SourceOpt { id: string; code: string; name: string; phone_required: boolean }
 interface BranchOpt { id: string; code: string; name: string; businessUnitIds: string[] }
-interface CategoryOpt { id: string; code: string; name: string; businessUnitIds: string[] }
+interface CategoryOpt { id: string; code: string; name: string; businessUnitIds: string[]; requiredResourceType: string | null }
 
 interface Props {
   reservation: ReservationItem & { status: string };

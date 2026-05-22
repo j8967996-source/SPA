@@ -5,12 +5,15 @@ import { z } from 'zod';
 
 import { createServiceClient } from '@/lib/supabase/server';
 
+const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
+
 const schema = z.object({
   branch_id: z.string().uuid(),
   // The reservation's customer source (WALK-IN, a hotel, ENGO, …). Drives the
   // billing destination and whether a guest phone is required.
   source_id: z.string().uuid(),
-  service_category_id: z.string().uuid(),
+  // One reservation can need several service types (e.g. hair + massage).
+  service_category_ids: z.array(z.string().uuid()).min(1, 'Pick at least one service type'),
   guest_name: z.string().min(1).max(120),
   guest_phone: z.string().max(40).optional().nullable(),
   pax: z.coerce.number().int().min(1).max(50).default(1),
@@ -22,6 +25,17 @@ const schema = z.object({
 });
 
 export type ActionResult<T = unknown> = { ok: true; data?: T } | { ok: false; error: string };
+
+// Replace a reservation's service-category set (the multi-select source of truth).
+async function syncReservationCategories(reservationId: string, categoryIds: string[]) {
+  const supabase = createServiceClient();
+  await supabase.from('reservation_service_categories').delete().eq('reservation_id', reservationId);
+  if (categoryIds.length === 0) return null;
+  const { error } = await supabase.from('reservation_service_categories').insert(
+    categoryIds.map((service_category_id) => ({ reservation_id: reservationId, service_category_id })),
+  );
+  return error;
+}
 
 async function nextReservationNo(branchCode: string, dateIso: string): Promise<string> {
   const supabase = createServiceClient();
@@ -62,13 +76,14 @@ export async function createReservation(input: unknown): Promise<ActionResult> {
 
   const reservation_no = await nextReservationNo(branch.code, d.desired_service_start);
 
-  const { error } = await supabase.from('reservations').insert({
+  const { data: created, error } = await supabase.from('reservations').insert({
     reservation_no,
     branch_id: d.branch_id,
     // Channel kept for schema compatibility; the source master is authoritative.
     source_type: 'phone',
     source_id: d.source_id,
-    service_category_id: d.service_category_id,
+    // Single column kept for back-compat; the junction is the source of truth.
+    service_category_id: d.service_category_ids[0],
     billing_to_id: source.default_billing_to_id ?? null,
     guest_name: d.guest_name,
     guest_phone: d.guest_phone || null,
@@ -79,8 +94,10 @@ export async function createReservation(input: unknown): Promise<ActionResult> {
     service_location_type: d.service_location_type,
     note: d.note || null,
     status: 'reserved',
-  });
-  if (error) return { ok: false, error: error.message };
+  }).select('id').single();
+  if (error || !created) return { ok: false, error: error?.message ?? 'Insert failed' };
+  const linkErr = await syncReservationCategories(created.id, d.service_category_ids);
+  if (linkErr) return { ok: false, error: linkErr.message };
   revalidatePath('/reservations');
   return { ok: true };
 }
@@ -89,7 +106,7 @@ const updateSchema = z.object({
   id: z.string().uuid(),
   branch_id: z.string().uuid(),
   source_id: z.string().uuid(),
-  service_category_id: z.string().uuid(),
+  service_category_ids: z.array(z.string().uuid()).min(1, 'Pick at least one service type'),
   guest_name: z.string().min(1).max(120),
   guest_phone: z.string().max(40).optional().nullable(),
   pax: z.coerce.number().int().min(1).max(50),
@@ -126,7 +143,7 @@ export async function updateReservation(input: unknown): Promise<ActionResult> {
   const { error } = await supabase.from('reservations').update({
     branch_id: d.branch_id,
     source_id: d.source_id,
-    service_category_id: d.service_category_id,
+    service_category_id: d.service_category_ids[0],
     billing_to_id: source.default_billing_to_id ?? null,
     guest_name: d.guest_name,
     guest_phone: d.guest_phone || null,
@@ -138,8 +155,61 @@ export async function updateReservation(input: unknown): Promise<ActionResult> {
     note: d.note || null,
   }).eq('id', d.id);
   if (error) return { ok: false, error: error.message };
+  const linkErr = await syncReservationCategories(d.id, d.service_category_ids);
+  if (linkErr) return { ok: false, error: linkErr.message };
   revalidatePath('/reservations');
   return { ok: true };
+}
+
+// Bed/station capacity for a branch + time window, per resource type. Demand is
+// PAX-based and concurrent: each overlapping reservation contributes its pax to
+// every resource type it needs (conservative for sequential flows). Used by the
+// reservation form to warn before overbooking. Soft check — never blocks.
+export async function getReservationAvailability(input: {
+  branch_id: string;
+  start: string;
+  end: string;
+  exclude_id?: string | null;
+}): Promise<ActionResult<{ byType: Record<string, { capacity: number; used: number }> }>> {
+  if (!input.branch_id || !input.start || !input.end) return { ok: false, error: 'Missing input' };
+  const supabase = createServiceClient();
+
+  // Capacity = active resources of each type at the branch.
+  const { data: resources } = await supabase
+    .from('resources')
+    .select('resource_type')
+    .eq('branch_id', input.branch_id)
+    .eq('status', 'active');
+  const capacity: Record<string, number> = {};
+  for (const r of resources ?? []) {
+    if (r.resource_type) capacity[r.resource_type] = (capacity[r.resource_type] ?? 0) + 1;
+  }
+
+  // Overlapping reservations (still live) → demand per resource type.
+  const { data: overlapping } = await supabase
+    .from('reservations')
+    .select('id, pax, reservation_service_categories ( service_categories ( required_resource_type ) )')
+    .eq('branch_id', input.branch_id)
+    .in('status', ['reserved', 'confirmed'])
+    .is('deleted_at', null)
+    .lt('desired_service_start', input.end)
+    .gt('desired_service_end', input.start);
+  const used: Record<string, number> = {};
+  for (const r of overlapping ?? []) {
+    if (input.exclude_id && r.id === input.exclude_id) continue;
+    const types = new Set<string>();
+    for (const link of r.reservation_service_categories ?? []) {
+      const cat = one(link.service_categories);
+      if (cat?.required_resource_type) types.add(cat.required_resource_type);
+    }
+    for (const t of types) used[t] = (used[t] ?? 0) + (r.pax ?? 1);
+  }
+
+  const byType: Record<string, { capacity: number; used: number }> = {};
+  for (const t of new Set([...Object.keys(capacity), ...Object.keys(used)])) {
+    byType[t] = { capacity: capacity[t] ?? 0, used: used[t] ?? 0 };
+  }
+  return { ok: true, data: { byType } };
 }
 
 export async function setReservationStatus(

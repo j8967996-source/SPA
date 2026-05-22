@@ -40,17 +40,17 @@ async function fetchData() {
       .select(`
         id, reservation_no, guest_name, guest_phone, pax, status,
         desired_service_start, desired_service_end,
-        branch_id, source_id, service_category_id, gender_preference, service_location_type, note,
+        branch_id, source_id, gender_preference, service_location_type, note,
         branch:branches ( code ),
         source:customer_sources ( code ),
-        category:service_categories ( code, name )
+        reservation_service_categories ( service_categories ( id, code, name ) )
       `)
       .is('deleted_at', null)
       .order('desired_service_start', { ascending: false })
       .limit(200),
     supabase.from('branches').select('id, code, name, branch_business_units ( business_unit_id )').eq('active', true).eq('reservation_enabled', true).order('code'),
     supabase.from('customer_sources').select('id, code, name, phone_required').eq('active', true).order('code'),
-    supabase.from('service_categories').select('id, code, name, service_category_business_units ( business_unit_id )').eq('active', true).order('code'),
+    supabase.from('service_categories').select('id, code, name, required_resource_type, service_category_business_units ( business_unit_id )').eq('active', true).order('code'),
   ]);
   if (resv.error) throw new Error(resv.error.message);
   if (br.error) throw new Error(br.error.message);
@@ -63,6 +63,7 @@ async function fetchData() {
   const serviceCategories = (cat.data ?? []).map((c) => ({
     id: c.id, code: c.code, name: c.name,
     businessUnitIds: (c.service_category_business_units ?? []).map((x) => x.business_unit_id),
+    requiredResourceType: c.required_resource_type,
   }));
   return { reservations: resv.data ?? [], branches, sources: src.data ?? [], serviceCategories };
 }
@@ -126,7 +127,9 @@ export default async function ReservationsPage() {
               reservations.map((r) => {
                 const branch = one(r.branch);
                 const source = one(r.source);
-                const category = one(r.category);
+                const cats = (r.reservation_service_categories ?? [])
+                  .map((link) => one(link.service_categories))
+                  .filter(Boolean) as { id: string; code: string; name: string }[];
                 return (
                   <TableRow key={r.id}>
                     <TableCell className="font-mono font-bold">{r.reservation_no}</TableCell>
@@ -135,7 +138,7 @@ export default async function ReservationsPage() {
                       {r.guest_name}
                       {r.guest_phone && <span className="ml-2 font-medium text-muted-foreground">{r.guest_phone}</span>}
                     </TableCell>
-                    <TableCell className="font-medium">{category?.name ?? '—'}</TableCell>
+                    <TableCell className="font-medium">{cats.length ? cats.map((c) => c.name).join(', ') : '—'}</TableCell>
                     <TableCell className="font-mono font-semibold text-sm">{source?.code ?? '—'}</TableCell>
                     <TableCell className="font-bold tabular">{r.pax}</TableCell>
                     <TableCell className="font-medium tabular text-sm">
@@ -153,7 +156,7 @@ export default async function ReservationsPage() {
                           status: r.status,
                           branch_id: r.branch_id,
                           source_id: r.source_id,
-                          service_category_id: r.service_category_id,
+                          service_category_ids: cats.map((c) => c.id),
                           guest_name: r.guest_name,
                           guest_phone: r.guest_phone,
                           pax: r.pax,
