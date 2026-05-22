@@ -16,13 +16,23 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 import { createBranch, updateBranch } from '@/app/(dashboard)/settings/branches/actions';
 
+const NONE = '__none__';
+
 interface BranchFormDialogProps {
   mode?: 'create' | 'edit';
-  branch?: { id: string; code: string; name: string; business_unit_ids: string[]; reservation_enabled?: boolean };
+  branch?: { id: string; code: string; name: string; business_unit_ids: string[]; reservation_enabled?: boolean; commission_policy_id?: string | null };
   businessUnits: { id: string; code: string; name: string }[];
+  commissionPolicies?: { id: string; code: string; name: string }[];
   trigger?: React.ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -32,6 +42,7 @@ export function BranchFormDialog({
   mode = 'create',
   branch,
   businessUnits,
+  commissionPolicies = [],
   trigger,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
@@ -43,7 +54,9 @@ export function BranchFormDialog({
   const [name, setName] = useState(branch?.name ?? '');
   const [unitIds, setUnitIds] = useState<string[]>(branch?.business_unit_ids ?? []);
   const [reservationEnabled, setReservationEnabled] = useState(branch?.reservation_enabled ?? true);
+  const [policyId, setPolicyId] = useState(branch?.commission_policy_id ?? NONE);
   const [pending, startTransition] = useTransition();
+  const policyOptions = [{ value: NONE, label: 'None (default rate, no warm-up)' }, ...commissionPolicies.map((p) => ({ value: p.id, label: `${p.code} — ${p.name}` }))];
 
   const isEdit = mode === 'edit';
 
@@ -60,9 +73,10 @@ export function BranchFormDialog({
       return;
     }
     startTransition(async () => {
+      const commission_policy_id = policyId === NONE ? null : policyId;
       const result = isEdit
-        ? await updateBranch({ id: branch!.id, name, business_unit_ids: unitIds, reservation_enabled: reservationEnabled })
-        : await createBranch({ code, name, business_unit_ids: unitIds, reservation_enabled: reservationEnabled });
+        ? await updateBranch({ id: branch!.id, name, business_unit_ids: unitIds, reservation_enabled: reservationEnabled, commission_policy_id })
+        : await createBranch({ code, name, business_unit_ids: unitIds, reservation_enabled: reservationEnabled, commission_policy_id });
       if (result.ok) {
         toast.success(isEdit ? 'Branch updated' : 'Branch created');
         setOpen(false);
@@ -168,6 +182,19 @@ export function BranchFormDialog({
                 </p>
               </div>
               <Switch checked={reservationEnabled} onCheckedChange={setReservationEnabled} />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <Label className="font-semibold">Commission Policy</Label>
+              <Select items={policyOptions} value={policyId} onValueChange={(v) => v && setPolicyId(v)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {policyOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <p className="text-xs font-medium text-muted-foreground">
+                First-session warm-up rule for this branch&apos;s commission. None = full class rate every session.
+              </p>
             </div>
           </div>
 

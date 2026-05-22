@@ -27,11 +27,12 @@ import { setBranchActive } from '@/app/(dashboard)/settings/branches/actions';
 import { BranchFormDialog } from './branch-form-dialog';
 
 interface Props {
-  branch: { id: string; code: string; name: string; business_unit_ids: string[]; reservation_enabled: boolean; active: boolean };
+  branch: { id: string; code: string; name: string; business_unit_ids: string[]; reservation_enabled: boolean; commission_policy_id: string | null; active: boolean };
   businessUnits: { id: string; code: string; name: string }[];
+  commissionPolicies?: { id: string; code: string; name: string }[];
 }
 
-export function BranchRowActions({ branch, businessUnits }: Props) {
+export function BranchRowActions({ branch, businessUnits, commissionPolicies }: Props) {
   const [pending, startTransition] = useTransition();
   const [editOpen, setEditOpen] = useState(false);
   const [confirmDeactivate, setConfirmDeactivate] = useState(false);
@@ -84,8 +85,9 @@ export function BranchRowActions({ branch, businessUnits }: Props) {
 
       <BranchFormDialog
         mode="edit"
-        branch={{ id: branch.id, code: branch.code, name: branch.name, business_unit_ids: branch.business_unit_ids, reservation_enabled: branch.reservation_enabled }}
+        branch={{ id: branch.id, code: branch.code, name: branch.name, business_unit_ids: branch.business_unit_ids, reservation_enabled: branch.reservation_enabled, commission_policy_id: branch.commission_policy_id }}
         businessUnits={businessUnits}
+        commissionPolicies={commissionPolicies}
         open={editOpen}
         onOpenChange={setEditOpen}
       />

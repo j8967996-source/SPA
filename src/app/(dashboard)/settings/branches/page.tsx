@@ -20,23 +20,25 @@ export const dynamic = 'force-dynamic';
 
 async function fetchData() {
   const supabase = createServiceClient();
-  const [brRes, buRes] = await Promise.all([
+  const [brRes, buRes, polRes] = await Promise.all([
     supabase
       .from('branches')
       .select(`
-        id, code, name, active, reservation_enabled, created_at, updated_at,
+        id, code, name, active, reservation_enabled, commission_policy_id, created_at, updated_at,
         branch_business_units ( business_unit_id, business_units ( id, code, name ) )
       `)
       .order('code'),
     supabase.from('business_units').select('id, code, name').eq('active', true).order('code'),
+    supabase.from('commission_policies').select('id, code, name').eq('active', true).order('code'),
   ]);
   if (brRes.error) throw new Error(brRes.error.message);
   if (buRes.error) throw new Error(buRes.error.message);
-  return { branches: brRes.data ?? [], businessUnits: buRes.data ?? [] };
+  if (polRes.error) throw new Error(polRes.error.message);
+  return { branches: brRes.data ?? [], businessUnits: buRes.data ?? [], commissionPolicies: polRes.data ?? [] };
 }
 
 export default async function BranchesPage() {
-  const { branches, businessUnits } = await fetchData();
+  const { branches, businessUnits, commissionPolicies } = await fetchData();
   const activeCount = branches.filter((b) => b.active).length;
 
   return (
@@ -58,6 +60,7 @@ export default async function BranchesPage() {
 
         <BranchFormDialog
           businessUnits={businessUnits}
+          commissionPolicies={commissionPolicies}
           trigger={
             <Button>
               <Plus className="size-4" />
@@ -101,6 +104,7 @@ export default async function BranchesPage() {
                   name: b.name,
                   business_unit_ids: units.map((u) => u.id),
                   reservation_enabled: b.reservation_enabled,
+                  commission_policy_id: b.commission_policy_id,
                   active: b.active,
                 };
                 return (
@@ -141,7 +145,7 @@ export default async function BranchesPage() {
                       })}
                     </TableCell>
                     <TableCell>
-                      <BranchRowActions branch={branchItem} businessUnits={businessUnits} />
+                      <BranchRowActions branch={branchItem} businessUnits={businessUnits} commissionPolicies={commissionPolicies} />
                     </TableCell>
                   </TableRow>
                 );
