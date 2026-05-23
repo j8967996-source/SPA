@@ -89,9 +89,9 @@ export function DayTimeline({
     <Card className="p-0 overflow-x-auto">
       <div style={{ minWidth: LABEL_W + trackMinWidth }}>
         {/* hour axis */}
-        <div className="flex border-b border-border">
+        <div className="flex border-b border-border bg-muted/40">
           <div className="w-40 shrink-0 p-2 flex items-center justify-center text-center text-xs font-bold text-muted-foreground">{subjectLabel}</div>
-          <div className="relative flex-1 h-8">
+          <div className="relative flex-1 h-9">
             {/* hour ticks */}
             {hours.map((h) => (
               <div key={`t${h}`} className="absolute top-0 bottom-0 border-l border-border/50" style={{ left: `${pct(h * 60)}%` }} />
@@ -104,7 +104,7 @@ export function DayTimeline({
             {hours.slice(0, -1).map((h) => (
               <div
                 key={`l${h}`}
-                className="absolute top-0 bottom-0 flex items-center justify-center text-[10px] font-bold text-muted-foreground"
+                className="absolute top-0 bottom-0 flex items-center justify-center text-xs font-bold text-foreground tabular-nums"
                 style={{ left: `${pct(h * 60)}%`, width: `${pct((h + 1) * 60) - pct(h * 60)}%` }}
               >
                 {String(h).padStart(2, '0')}:00
