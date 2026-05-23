@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { CashReconForm } from '@/components/reconciliation/cash-recon-form';
 import { CashShiftConfig } from '@/components/reconciliation/cash-shift-config';
-import { CashDatePicker } from '@/components/reconciliation/cash-date-picker';
+import { ReconDatePicker } from '@/components/reconciliation/recon-date-picker';
 import { loadDayShifts, getBranchShifts } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -54,7 +54,7 @@ export default async function CashReconciliationPage({
           </Link>
         ))}
         <div className="ml-auto">
-          <CashDatePicker branchId={branchId} date={date} />
+          <ReconDatePicker basePath="/reconciliation/cash" branchId={branchId} date={date} />
         </div>
         {branchId && admin && <CashShiftConfig branchId={branchId} current={configured} />}
       </div>

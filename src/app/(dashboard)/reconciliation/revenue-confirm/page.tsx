@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import { ConfirmRevenueButton } from '@/components/reconciliation/confirm-revenue-button';
+import { ReconDatePicker } from '@/components/reconciliation/recon-date-picker';
 import { loadConfirmable, isCashClosed } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -63,10 +64,9 @@ export default async function RevenueConfirmPage({
             {b.code}
           </Link>
         ))}
-        <form className="ml-auto">
-          {branchId && <input type="hidden" name="branch" value={branchId} />}
-          <input type="date" name="date" defaultValue={date} className="rounded-lg border border-input bg-transparent px-3 py-1.5 text-sm" />
-        </form>
+        <div className="ml-auto">
+          <ReconDatePicker basePath="/reconciliation/revenue-confirm" branchId={branchId} date={date} />
+        </div>
       </div>
 
       {!branchId ? (
