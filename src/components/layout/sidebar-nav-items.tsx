@@ -40,9 +40,9 @@ export interface NavItem {
 export const mainNavItems: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { label: 'Sales Orders', href: '/sales-orders', icon: Receipt },
+  { label: 'Shift Schedule', href: '/shift-schedule', icon: CalendarClock },
   { label: 'Customers', href: '/customers', icon: Users },
   { label: 'Reservations', href: '/reservations', icon: CalendarDays },
-  { label: 'Shift Schedule', href: '/shift-schedule', icon: CalendarClock },
   { label: 'Availability', href: '/availability', icon: UserCheck },
   { label: 'Waitlist', href: '/waitlist', icon: ListOrdered },
   { label: 'Stored Value Cards', href: '/stored-value-cards', icon: CreditCard },
