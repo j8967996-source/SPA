@@ -119,10 +119,12 @@ export function DayTimeline({
     // top and the name column can freeze on the left as you scroll.
     <Card className="p-0 overflow-auto max-h-[calc(100vh-16rem)]">
       <div style={{ minWidth: LABEL_W + trackMinWidth }}>
-        {/* hour axis — frozen on top; its label cell is the frozen top-left corner */}
-        <div className="flex border-b border-border">
-          <div className="w-40 shrink-0 p-2 flex items-center justify-center text-center text-xs font-bold text-muted-foreground sticky top-0 left-0 z-40 bg-muted">{subjectLabel}</div>
-          <div className="relative flex-1 h-9 sticky top-0 z-30 bg-muted">
+        {/* hour axis — the whole row is frozen on top (sticky must sit on the row,
+            whose parent spans the full height; on a cell it only sticks within the
+            36px row). Its label cell also sticks left = the top-left corner. */}
+        <div className="flex border-b border-border sticky top-0 z-30 bg-muted">
+          <div className="w-40 shrink-0 p-2 flex items-center justify-center text-center text-xs font-bold text-muted-foreground sticky left-0 z-40 bg-muted">{subjectLabel}</div>
+          <div className="relative flex-1 h-9">
             {/* hour ticks */}
             {hours.map((h) => (
               <div key={`t${h}`} className="absolute top-0 bottom-0 border-l border-border/50" style={{ left: `${pct(h * 60)}%` }} />
