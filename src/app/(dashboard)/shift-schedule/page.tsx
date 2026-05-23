@@ -3,6 +3,7 @@ import { Card } from '@/components/ui/card';
 import { ShiftControls } from '@/components/shift-schedule/shift-controls';
 import { ShiftCell, type ShiftData } from '@/components/shift-schedule/shift-cell';
 import { DayTimeline, type DayRow, type ReservationBlock } from '@/components/shift-schedule/day-timeline';
+import { getReservationGraceMinutes, isReservationOverdue } from '@/lib/reservations';
 
 export const dynamic = 'force-dynamic';
 
@@ -52,6 +53,7 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
     .gte('desired_service_start', `${day}T00:00:00+08:00`)
     .lte('desired_service_start', `${day}T23:59:59+08:00`)
     .order('desired_service_start');
+  const graceMin = await getReservationGraceMinutes();
   const resvRows = (resvData ?? []).map((r) => {
     const cats = (r.reservation_service_categories ?? []).map((l) => one(l.service_categories)?.name).filter(Boolean).join(' + ');
     const src = one(r.customer_sources)?.code;
@@ -63,6 +65,8 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
       endMin: tsToMin(r.desired_service_end),
       external: r.service_location_type === 'external_hotel',
       pinnedIds: (r.reservation_resources ?? []).map((x) => x.resource_id),
+      // Overdue → bed auto-released, so it leaves its bed row for the top lane.
+      overdue: isReservationOverdue({ desiredStartIso: r.desired_service_start, graceMin }),
     };
   });
 
@@ -93,8 +97,10 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
       arr.push({ line1: thName ?? svcName, line2: thName ? svcName : undefined, startMin, endMin, ongoing: !it.actual_end, cleanupEndMin, itemId });
       byStation.set(it.resource_id, arr);
     }
-    // Pinned reservations show as ghost blocks in their bed rows.
+    // Pinned reservations show as ghost blocks in their bed rows — unless
+    // overdue, in which case the bed is auto-released (it falls to the top lane).
     for (const rr of resvRows) {
+      if (rr.overdue) continue;
       for (const rid of rr.pinnedIds) {
         const arr = byStation.get(rid) ?? [];
         arr.push({ line1: rr.guest, line2: rr.line2, startMin: rr.startMin, endMin: rr.endMin, ongoing: false, reservation: true });
@@ -162,10 +168,10 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
       if (s.cleanupEndMin != null) allMins.push(s.cleanupEndMin);
     }
   }
-  // Top lane: unpinned reservations (Station shows pinned ones in bed rows
-  // instead); the Therapist view has no bed binding, so it lists them all.
-  const reservations: ReservationBlock[] = (subject === 'station' ? resvRows.filter((r) => r.pinnedIds.length === 0) : resvRows)
-    .map((r) => ({ id: r.id, guest: r.guest, line2: r.line2, startMin: r.startMin, endMin: r.endMin, external: r.external }));
+  // Top lane: unpinned reservations + any overdue ones (their beds were released);
+  // the Therapist view has no bed binding, so it lists them all.
+  const reservations: ReservationBlock[] = (subject === 'station' ? resvRows.filter((r) => r.pinnedIds.length === 0 || r.overdue) : resvRows)
+    .map((r) => ({ id: r.id, guest: r.guest, line2: r.line2, startMin: r.startMin, endMin: r.endMin, external: r.external, overdue: r.overdue }));
   for (const r of reservations) allMins.push(r.startMin, r.endMin);
   const windowStartMin = allMins.length ? Math.min(540, Math.floor(Math.min(...allMins) / 60) * 60) : 540;
   const windowEndMin = allMins.length ? Math.max(1320, Math.ceil(Math.max(...allMins) / 60) * 60) : 1320;

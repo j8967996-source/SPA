@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { Button } from '@/components/ui/button';
 import { NewReservationDialog } from '@/components/reservations/new-reservation-dialog';
 import { ReservationsExplorer, type ReservationRow } from '@/components/reservations/reservations-explorer';
+import { getReservationGraceMinutes, isReservationOverdue } from '@/lib/reservations';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,6 +51,7 @@ async function fetchData() {
     requiredResourceType: c.required_resource_type,
   }));
 
+  const graceMin = await getReservationGraceMinutes();
   const rows: ReservationRow[] = (resv.data ?? []).map((r) => {
     const cats = (r.reservation_service_categories ?? [])
       .map((link) => one(link.service_categories))
@@ -69,6 +71,7 @@ async function fetchData() {
       source_code: one(r.source)?.code ?? null,
       pax: r.pax,
       status: r.status,
+      overdue: isReservationOverdue({ status: r.status, desiredStartIso: r.desired_service_start, graceMin }),
       desired_service_start: r.desired_service_start,
       desired_service_end: r.desired_service_end,
       service_date: phtDate(r.desired_service_start),

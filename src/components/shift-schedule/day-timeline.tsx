@@ -38,6 +38,8 @@ export interface ReservationBlock {
   endMin: number;
   // External (in-room at a hotel) reservations don't consume a bed here.
   external?: boolean;
+  // Past its grace window — guest hasn't shown; pinned bed auto-released.
+  overdue?: boolean;
 }
 
 function hhmm(min: number): string {
@@ -153,11 +155,15 @@ export function DayTimeline({
                 {reservations.map((s, i) => (
                   <div
                     key={s.id}
-                    className="absolute rounded border border-dashed border-violet-500/70 bg-violet-500/20 px-1.5 flex flex-col items-center justify-center text-center overflow-hidden text-[10px] leading-tight text-violet-950 dark:text-violet-100"
+                    className={`absolute rounded border border-dashed px-1.5 flex flex-col items-center justify-center text-center overflow-hidden text-[10px] leading-tight ${
+                      s.overdue
+                        ? 'border-red-500/70 bg-red-500/20 text-red-900 dark:text-red-100'
+                        : 'border-violet-500/70 bg-violet-500/20 text-violet-950 dark:text-violet-100'
+                    }`}
                     style={{ left: `${pct(s.startMin)}%`, width: `${Math.max(2, pct(s.endMin) - pct(s.startMin))}%`, top: lanes[i] * LANE_H + 3, height: LANE_H - 6 }}
-                    title={`${s.guest}${s.line2 ? ` · ${s.line2}` : ''}${s.external ? ' · in-room' : ''} · ${hhmm(s.startMin)}–${hhmm(s.endMin)}`}
+                    title={`${s.overdue ? 'Overdue · ' : ''}${s.guest}${s.line2 ? ` · ${s.line2}` : ''}${s.external ? ' · in-room' : ''} · ${hhmm(s.startMin)}–${hhmm(s.endMin)}`}
                   >
-                    <span className="truncate font-bold">{s.guest}{s.external && ' 🏨'}</span>
+                    <span className="truncate font-bold">{s.guest}{s.external && ' 🏨'}{s.overdue && ' ⚠'}</span>
                     {s.line2 && <span className="truncate font-semibold opacity-90">{s.line2}</span>}
                     <span className="truncate font-semibold tabular-nums opacity-80">{hhmm(s.startMin)}–{hhmm(s.endMin)}</span>
                   </div>

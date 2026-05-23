@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import { createServiceClient } from '@/lib/supabase/server';
+import { getReservationGraceMinutes, isReservationOverdue } from '@/lib/reservations';
 
 const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
 
@@ -284,7 +285,9 @@ async function computeBusyResourceIds(
     if (s < endMs && startMs < e) busy.add(it.resource_id);
   }
 
-  // Beds pinned by other overlapping reservations.
+  // Beds pinned by other overlapping reservations — but an Overdue reservation
+  // auto-releases its bed, so its pin no longer blocks others.
+  const graceMin = await getReservationGraceMinutes();
   const { data: pins } = await supabase
     .from('reservation_resources')
     .select('resource_id, reservations!inner ( id, branch_id, status, deleted_at, desired_service_start, desired_service_end )')
@@ -296,6 +299,7 @@ async function computeBusyResourceIds(
   for (const p of pins ?? []) {
     const resv = one(p.reservations);
     if (excludeReservationId && resv?.id === excludeReservationId) continue;
+    if (resv && isReservationOverdue({ status: resv.status, desiredStartIso: resv.desired_service_start, graceMin })) continue;
     if (p.resource_id) busy.add(p.resource_id);
   }
   return busy;

@@ -36,6 +36,7 @@ export interface ReservationRow {
   source_code: string | null;
   pax: number;
   status: string;
+  overdue: boolean;
   desired_service_start: string;
   desired_service_end: string;
   service_date: string; // PHT yyyy-mm-dd of the desired start, for date filtering
@@ -215,9 +216,16 @@ export function ReservationsExplorer({
                     {fmt(r.desired_service_start)} – {fmtTime(r.desired_service_end)}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={STATUS_VARIANT[r.status] ?? 'secondary'} className="font-bold capitalize">
-                      {r.status.replace('_', ' ')}
-                    </Badge>
+                    <div className="flex flex-col items-start gap-1">
+                      <Badge variant={STATUS_VARIANT[r.status] ?? 'secondary'} className="font-bold capitalize">
+                        {r.status.replace('_', ' ')}
+                      </Badge>
+                      {r.overdue && (
+                        <span className="inline-flex items-center rounded bg-destructive/15 px-1.5 py-0.5 text-[11px] font-bold text-destructive">
+                          Overdue
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>
                     <ReservationRowActions
