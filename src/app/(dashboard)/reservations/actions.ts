@@ -493,5 +493,6 @@ export async function convertReservationToOrder(id: string): Promise<ActionResul
 
   revalidatePath('/reservations');
   revalidatePath('/sales-orders');
+  revalidatePath('/shift-schedule');
   return { ok: true, data: { orderId: order.id } };
 }

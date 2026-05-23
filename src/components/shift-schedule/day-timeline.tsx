@@ -1,5 +1,8 @@
+import Link from 'next/link';
+
 import { Card } from '@/components/ui/card';
 import { CleanupSegment } from '@/components/shift-schedule/cleanup-segment';
+import { ReservationConvertButton } from '@/components/shift-schedule/reservation-convert-button';
 
 export interface DayServiceBlock {
   // Three stacked lines: primary name, service category, time range.
@@ -13,8 +16,12 @@ export interface DayServiceBlock {
   cleanupEndMin?: number;
   // The order line, so the cleanup block can offer "Ready now".
   itemId?: string;
+  // The owning order, so the block links to its Sales Order.
+  orderId?: string;
   // A pinned reservation (not an actual order) — drawn as a violet dashed ghost.
   reservation?: boolean;
+  // The reservation, so clicking a ghost can convert it to an order.
+  reservationId?: string;
 }
 export interface DayRow {
   id: string;
@@ -153,20 +160,22 @@ export function DayTimeline({
                   <div key={h} className="absolute top-0 bottom-0 border-l border-border/40" style={{ left: `${pct(h * 60)}%` }} />
                 ))}
                 {reservations.map((s, i) => (
-                  <div
+                  <ReservationConvertButton
                     key={s.id}
-                    className={`absolute rounded border border-dashed px-1.5 flex flex-col items-center justify-center text-center overflow-hidden text-[10px] leading-tight ${
+                    reservationId={s.id}
+                    guest={s.guest}
+                    className={`absolute rounded border border-dashed px-1.5 flex flex-col items-center justify-center text-center overflow-hidden text-[10px] leading-tight cursor-pointer ${
                       s.overdue
-                        ? 'border-red-500/70 bg-red-500/20 text-red-900 dark:text-red-100'
-                        : 'border-violet-500/70 bg-violet-500/20 text-violet-950 dark:text-violet-100'
+                        ? 'border-red-500/70 bg-red-500/20 text-red-900 dark:text-red-100 hover:bg-red-500/30'
+                        : 'border-violet-500/70 bg-violet-500/20 text-violet-950 dark:text-violet-100 hover:bg-violet-500/30'
                     }`}
                     style={{ left: `${pct(s.startMin)}%`, width: `${Math.max(2, pct(s.endMin) - pct(s.startMin))}%`, top: lanes[i] * LANE_H + 3, height: LANE_H - 6 }}
-                    title={`${s.overdue ? 'Overdue · ' : ''}${s.guest}${s.line2 ? ` · ${s.line2}` : ''}${s.external ? ' · in-room' : ''} · ${hhmm(s.startMin)}–${hhmm(s.endMin)}`}
+                    title={`${s.overdue ? 'Overdue · ' : ''}click to convert · ${s.guest}${s.line2 ? ` · ${s.line2}` : ''}${s.external ? ' · in-room' : ''} · ${hhmm(s.startMin)}–${hhmm(s.endMin)}`}
                   >
                     <span className="truncate font-bold">{s.guest}{s.external && ' 🏨'}{s.overdue && ' ⚠'}</span>
                     {s.line2 && <span className="truncate font-semibold opacity-90">{s.line2}</span>}
                     <span className="truncate font-semibold tabular-nums opacity-80">{hhmm(s.startMin)}–{hhmm(s.endMin)}</span>
-                  </div>
+                  </ReservationConvertButton>
                 ))}
                 {showNow && (
                   <div className="absolute top-0 bottom-0 z-10 w-px bg-red-500" style={{ left: `${pct(nowMin!)}%` }} />
@@ -201,37 +210,48 @@ export function DayTimeline({
                   />
                 )}
                 {/* service blocks (+ trailing cleanup), stacked into lanes when overlapping */}
-                {r.services.map((s, i) => (
-                  <div key={i} className="contents">
-                    <div
-                      className={`absolute rounded px-1.5 flex flex-col items-center justify-center text-center overflow-hidden text-[10px] leading-tight ${
-                        s.reservation
-                          ? 'border border-dashed border-violet-500/70 bg-violet-500/20 text-violet-950 dark:text-violet-100'
-                          : s.ongoing
-                            ? 'bg-blue-500/70 text-white'
-                            : 'bg-primary/70 text-white'
-                      }`}
-                      style={{ left: `${pct(s.startMin)}%`, width: `${Math.max(2, pct(s.endMin) - pct(s.startMin))}%`, top: lanes[i] * LANE_H + 3, height: LANE_H - 6 }}
-                      title={`${s.reservation ? 'Reservation · ' : ''}${s.line1}${s.line2 ? ` · ${s.line2}` : ''} · ${hhmm(s.startMin)}–${hhmm(s.endMin)}`}
-                    >
+                {r.services.map((s, i) => {
+                  const clickable = Boolean((s.reservation && s.reservationId) || s.orderId);
+                  const blockStyle = { left: `${pct(s.startMin)}%`, width: `${Math.max(2, pct(s.endMin) - pct(s.startMin))}%`, top: lanes[i] * LANE_H + 3, height: LANE_H - 6 } as React.CSSProperties;
+                  const blockClass = `absolute rounded px-1.5 flex flex-col items-center justify-center text-center overflow-hidden text-[10px] leading-tight ${clickable ? 'cursor-pointer ' : ''}${
+                    s.reservation
+                      ? 'border border-dashed border-violet-500/70 bg-violet-500/20 text-violet-950 dark:text-violet-100 hover:bg-violet-500/30'
+                      : s.ongoing
+                        ? 'bg-blue-500/70 text-white hover:bg-blue-500/80'
+                        : 'bg-primary/70 text-white hover:bg-primary/80'
+                  }`;
+                  const blockTitle = `${s.reservation ? 'Reservation · click to convert · ' : s.orderId ? 'Open sales order · ' : ''}${s.line1}${s.line2 ? ` · ${s.line2}` : ''} · ${hhmm(s.startMin)}–${hhmm(s.endMin)}`;
+                  const inner = (
+                    <>
                       <span className="truncate font-bold">{s.line1}</span>
                       {s.line2 && <span className="truncate font-semibold opacity-90">{s.line2}</span>}
                       <span className="truncate font-semibold tabular-nums opacity-80">
                         {hhmm(s.startMin)}{s.ongoing ? '–~' : '–'}{hhmm(s.endMin)}
                       </span>
+                    </>
+                  );
+                  return (
+                    <div key={i} className="contents">
+                      {s.reservation && s.reservationId ? (
+                        <ReservationConvertButton reservationId={s.reservationId} guest={s.line1} className={blockClass} style={blockStyle} title={blockTitle}>{inner}</ReservationConvertButton>
+                      ) : s.orderId ? (
+                        <Link href={`/sales-orders/${s.orderId}`} className={blockClass} style={blockStyle} title={blockTitle}>{inner}</Link>
+                      ) : (
+                        <div className={blockClass} style={blockStyle} title={blockTitle}>{inner}</div>
+                      )}
+                      {s.cleanupEndMin != null && (
+                        <CleanupSegment
+                          itemId={s.itemId}
+                          left={pct(s.endMin)}
+                          width={Math.max(1.5, pct(s.cleanupEndMin) - pct(s.endMin))}
+                          top={lanes[i] * LANE_H + 3}
+                          height={LANE_H - 6}
+                          label={`Cleanup ${hhmm(s.endMin)}–${hhmm(s.cleanupEndMin)}`}
+                        />
+                      )}
                     </div>
-                    {s.cleanupEndMin != null && (
-                      <CleanupSegment
-                        itemId={s.itemId}
-                        left={pct(s.endMin)}
-                        width={Math.max(1.5, pct(s.cleanupEndMin) - pct(s.endMin))}
-                        top={lanes[i] * LANE_H + 3}
-                        height={LANE_H - 6}
-                        label={`Cleanup ${hhmm(s.endMin)}–${hhmm(s.cleanupEndMin)}`}
-                      />
-                    )}
-                  </div>
-                ))}
+                  );
+                })}
                 {/* now line */}
                 {showNow && (
                   <div className="absolute top-0 bottom-0 z-10 w-px bg-red-500" style={{ left: `${pct(nowMin!)}%` }} />

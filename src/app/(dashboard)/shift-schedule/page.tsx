@@ -34,7 +34,7 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
   const supabase = createServiceClient();
   const { data: itemData } = await supabase
     .from('order_items')
-    .select('id, therapist_id, resource_id, actual_start, actual_end, bed_released_at, duration_minutes, service:service_items ( name, prep_before_minutes, cleanup_after_minutes ), therapist:employees!order_items_therapist_id_fkey ( name, employee_code ), order:orders!order_items_order_id_fkey ( branch_id, service_date )')
+    .select('id, therapist_id, resource_id, actual_start, actual_end, bed_released_at, duration_minutes, service:service_items ( name, prep_before_minutes, cleanup_after_minutes ), therapist:employees!order_items_therapist_id_fkey ( name, employee_code ), order:orders!order_items_order_id_fkey ( id, branch_id, service_date )')
     .not('actual_start', 'is', null);
   const dayItems = (itemData ?? []).filter((it) => {
     const ord = one(it.order);
@@ -74,7 +74,7 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
   if (subject === 'station') {
     const { data: stations } = await supabase
       .from('resources').select('id, resource_name').eq('branch_id', branchId).eq('status', 'active').order('resource_name');
-    const byStation = new Map<string, { line1: string; line2?: string; startMin: number; endMin: number; ongoing: boolean; cleanupEndMin?: number; itemId?: string; reservation?: boolean }[]>();
+    const byStation = new Map<string, { line1: string; line2?: string; startMin: number; endMin: number; ongoing: boolean; cleanupEndMin?: number; itemId?: string; orderId?: string; reservation?: boolean; reservationId?: string }[]>();
     const nowMs = Date.now();
     for (const it of dayItems) {
       if (!it.resource_id) continue;
@@ -94,7 +94,7 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
       const svcName = one(it.service)?.name ?? 'Service';
       const thName = one(it.therapist)?.name ?? null;
       const arr = byStation.get(it.resource_id) ?? [];
-      arr.push({ line1: thName ?? svcName, line2: thName ? svcName : undefined, startMin, endMin, ongoing: !it.actual_end, cleanupEndMin, itemId });
+      arr.push({ line1: thName ?? svcName, line2: thName ? svcName : undefined, startMin, endMin, ongoing: !it.actual_end, cleanupEndMin, itemId, orderId: one(it.order)?.id });
       byStation.set(it.resource_id, arr);
     }
     // Pinned reservations show as ghost blocks in their bed rows — unless
@@ -103,7 +103,7 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
       if (rr.overdue) continue;
       for (const rid of rr.pinnedIds) {
         const arr = byStation.get(rid) ?? [];
-        arr.push({ line1: rr.guest, line2: rr.line2, startMin: rr.startMin, endMin: rr.endMin, ongoing: false, reservation: true });
+        arr.push({ line1: rr.guest, line2: rr.line2, startMin: rr.startMin, endMin: rr.endMin, ongoing: false, reservation: true, reservationId: rr.id });
         byStation.set(rid, arr);
       }
     }
@@ -121,7 +121,7 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
     ]);
     const shifts = shiftsRes.data;
     const resName = new Map((resRes.data ?? []).map((r) => [r.id, r.resource_name]));
-    const byTherapist = new Map<string, { line1: string; line2?: string; startMin: number; endMin: number; ongoing: boolean }[]>();
+    const byTherapist = new Map<string, { line1: string; line2?: string; startMin: number; endMin: number; ongoing: boolean; orderId?: string }[]>();
     const empMeta = new Map<string, { name: string; code: string }>();
     for (const it of dayItems) {
       if (!it.therapist_id) continue;
@@ -134,7 +134,7 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
       const svc = one(it.service)?.name ?? 'Service';
       const bed = it.resource_id ? resName.get(it.resource_id) : null;
       const arr = byTherapist.get(it.therapist_id) ?? [];
-      arr.push({ line1: svc, line2: bed ?? undefined, startMin, endMin, ongoing: !it.actual_end });
+      arr.push({ line1: svc, line2: bed ?? undefined, startMin, endMin, ongoing: !it.actual_end, orderId: one(it.order)?.id });
       byTherapist.set(it.therapist_id, arr);
     }
     const shiftEmpIds = new Set((shifts ?? []).map((s) => s.employee_id));
