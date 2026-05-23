@@ -4,11 +4,19 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
-function Table({ className, ...props }: React.ComponentProps<"table">) {
+function Table({
+  className,
+  containerClassName,
+  ...props
+}: React.ComponentProps<"table"> & { containerClassName?: string }) {
   return (
+    // Scrolls in both axes and is height-capped to the viewport, so long tables
+    // scroll *inside* the card and the sticky header stays put. Short tables stay
+    // shorter than the cap, so nothing changes for them. Override the cap per
+    // table via `containerClassName` when needed.
     <div
       data-slot="table-container"
-      className="relative w-full overflow-x-auto"
+      className={cn("relative w-full overflow-auto max-h-[calc(100vh-19rem)]", containerClassName)}
     >
       <table
         data-slot="table"
@@ -21,9 +29,15 @@ function Table({ className, ...props }: React.ComponentProps<"table">) {
 
 function TableHeader({ className, ...props }: React.ComponentProps<"thead">) {
   return (
+    // Frozen header: stays pinned to the top of the scroll container while the
+    // body scrolls. bg-card keeps rows from showing through; the row border and
+    // a soft shadow separate it from the data.
     <thead
       data-slot="table-header"
-      className={cn("[&_tr]:border-b", className)}
+      className={cn(
+        "sticky top-0 z-20 bg-card [&_tr]:border-b [&_th]:bg-card shadow-[0_1px_0_0_var(--border)]",
+        className,
+      )}
       {...props}
     />
   )
