@@ -85,10 +85,12 @@ export function ReservationsExplorer({
   const [source, setSource] = useState(ALL);
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  const [overdueOnly, setOverdueOnly] = useState(false);
 
   const filtered = useMemo(
     () =>
       rows.filter((r) => {
+        if (overdueOnly && !r.overdue) return false;
         if (branch !== ALL && r.branch_code !== branch) return false;
         if (status === ACTIVE.join(',')) { if (!ACTIVE.includes(r.status)) return false; }
         else if (status !== ALL && r.status !== status) return false;
@@ -101,9 +103,10 @@ export function ReservationsExplorer({
         }
         return true;
       }),
-    [rows, q, branch, status, source, from, to],
+    [rows, q, branch, status, source, from, to, overdueOnly],
   );
   const activeCount = filtered.filter((r) => ACTIVE.includes(r.status)).length;
+  const overdueCount = rows.filter((r) => r.overdue).length;
 
   // Base UI's <SelectValue /> needs an items map to render labels in the
   // trigger (otherwise it prints the raw value, e.g. "__all__").
@@ -162,8 +165,20 @@ export function ReservationsExplorer({
             <Label className="text-xs font-semibold">Search</Label>
             <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Guest, no, phone…" className="w-52" />
           </div>
+          <div className="flex flex-col gap-1">
+            <Label className="text-xs font-semibold">&nbsp;</Label>
+            <label className="flex h-8 items-center gap-2 cursor-pointer rounded-lg border border-input px-3">
+              <input
+                type="checkbox"
+                className="size-4 cursor-pointer accent-destructive"
+                checked={overdueOnly}
+                onChange={(e) => setOverdueOnly(e.target.checked)}
+              />
+              <span className="text-sm font-semibold whitespace-nowrap">Overdue only{overdueCount > 0 ? ` (${overdueCount})` : ''}</span>
+            </label>
+          </div>
           <p className="ml-auto text-sm font-semibold text-muted-foreground">
-            {filtered.length} shown · {activeCount} active
+            {filtered.length} shown · {activeCount} active{overdueCount > 0 ? ` · ${overdueCount} overdue` : ''}
           </p>
         </div>
       </Card>
@@ -173,8 +188,8 @@ export function ReservationsExplorer({
           <TableHeader>
             <TableRow>
               <TableHead className="w-[190px] font-bold whitespace-nowrap">Reservation No</TableHead>
-              <TableHead className="w-16 font-bold">Branch</TableHead>
-              <TableHead className="w-44 font-bold">Guest</TableHead>
+              <TableHead className="w-24 font-bold pl-4">Branch</TableHead>
+              <TableHead className="w-56 font-bold pl-4">Guest</TableHead>
               <TableHead className="min-w-[260px] font-bold">Service</TableHead>
               <TableHead className="w-24 font-bold">Source</TableHead>
               <TableHead className="w-14 font-bold">PAX</TableHead>
@@ -197,8 +212,8 @@ export function ReservationsExplorer({
               filtered.map((r) => (
                 <TableRow key={r.id}>
                   <TableCell className="font-mono font-bold whitespace-nowrap">{r.reservation_no}</TableCell>
-                  <TableCell className="font-mono font-bold">{r.branch_code}</TableCell>
-                  <TableCell className="font-semibold">
+                  <TableCell className="font-mono font-bold pl-4">{r.branch_code}</TableCell>
+                  <TableCell className="font-semibold pl-4">
                     <div>{r.guest_name}</div>
                     {r.guest_phone && <div className="font-medium text-muted-foreground text-xs tabular">{r.guest_phone}</div>}
                   </TableCell>
