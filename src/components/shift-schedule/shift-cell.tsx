@@ -37,6 +37,9 @@ interface Props {
   branchId: string;
   date: string; // YYYY-MM-DD
   shift: ShiftData | null;
+  // Borrowed from another branch (home ≠ this branch) → default new shifts to
+  // Cross-branch so staff don't have to remember.
+  visiting?: boolean;
 }
 
 const TYPES = [
@@ -66,11 +69,11 @@ const TYPE_STYLE: Record<string, string> = {
   leave: 'bg-destructive/15 text-destructive',
 };
 
-export function ShiftCell({ employeeId, employeeName, branchId, date, shift }: Props) {
+export function ShiftCell({ employeeId, employeeName, branchId, date, shift, visiting = false }: Props) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  const [type, setType] = useState(shift?.shift_type ?? 'regular');
+  const [type, setType] = useState(shift?.shift_type ?? (visiting ? 'cross_branch' : 'regular'));
   const [start, setStart] = useState(hhmm(shift?.shift_start ?? null) || '10:00');
   const [end, setEnd] = useState(hhmm(shift?.shift_end ?? null) || '20:00');
   const [leaveType, setLeaveType] = useState(shift?.leave_type ?? 'vacation');

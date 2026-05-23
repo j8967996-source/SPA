@@ -329,6 +329,7 @@ export default async function ShiftSchedulePage({
                         branchId={branchId}
                         date={d.date}
                         shift={shiftAt(e.id, d.date)}
+                        visiting={e.home_branch_id !== branchId}
                       />
                     </td>
                   ))}
