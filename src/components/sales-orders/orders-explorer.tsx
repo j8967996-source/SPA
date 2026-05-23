@@ -44,6 +44,7 @@ const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive'> = 
   completed: 'default', posting: 'secondary', paid: 'default', closed: 'secondary', void: 'destructive',
 };
 const STATUS_OPTIONS = ['draft', 'open', 'in_service', 'completed', 'paid', 'closed', 'void'];
+const TYPE_OPTIONS = ['walk_in', 'reservation', 'package_use', 'stored_value', 'external'];
 const ALL = '__all__';
 
 function peso(cents: number): string {
@@ -57,7 +58,7 @@ export function OrdersExplorer({ rows, billingCodes }: { rows: OrderRow[]; billi
   const today = todayPHT();
   const [from, setFrom] = useState(today);
   const [to, setTo] = useState(today);
-  const [typeQ, setTypeQ] = useState('');
+  const [type, setType] = useState(ALL);
   const [billing, setBilling] = useState(ALL);
   const [status, setStatus] = useState(ALL);
 
@@ -66,13 +67,19 @@ export function OrdersExplorer({ rows, billingCodes }: { rows: OrderRow[]; billi
       rows.filter((o) => {
         if (from && o.service_date < from) return false;
         if (to && o.service_date > to) return false;
-        if (typeQ && !o.order_type.toLowerCase().includes(typeQ.toLowerCase())) return false;
+        if (type !== ALL && o.order_type !== type) return false;
         if (billing !== ALL && o.billing_code !== billing) return false;
         if (status !== ALL && o.status !== status) return false;
         return true;
       }),
-    [rows, from, to, typeQ, billing, status],
+    [rows, from, to, type, billing, status],
   );
+
+  // Base UI's <SelectValue /> needs an items map to show labels in the trigger
+  // (otherwise it prints the raw value, e.g. "__all__").
+  const typeItems = [{ value: ALL, label: 'All' }, ...TYPE_OPTIONS.map((s) => ({ value: s, label: s.replace('_', ' ') }))];
+  const billingItems = [{ value: ALL, label: 'All' }, ...billingCodes.map((c) => ({ value: c, label: c }))];
+  const statusItems = [{ value: ALL, label: 'All' }, ...STATUS_OPTIONS.map((s) => ({ value: s, label: s.replace('_', ' ') }))];
 
   const moneyCell = (cents: number, cls = '') =>
     cents > 0 ? <span className={cls}>{peso(cents)}</span> : <span className="text-muted-foreground">—</span>;
@@ -91,11 +98,17 @@ export function OrdersExplorer({ rows, billingCodes }: { rows: OrderRow[]; billi
           </div>
           <div className="flex flex-col gap-1">
             <Label className="text-xs font-semibold">Type</Label>
-            <Input value={typeQ} onChange={(e) => setTypeQ(e.target.value)} placeholder="Search type…" className="w-40" />
+            <Select items={typeItems} value={type} onValueChange={(v) => v && setType(v)}>
+              <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL}>All</SelectItem>
+                {TYPE_OPTIONS.map((s) => <SelectItem key={s} value={s} className="capitalize">{s.replace('_', ' ')}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex flex-col gap-1">
             <Label className="text-xs font-semibold">Billing To</Label>
-            <Select value={billing} onValueChange={(v) => v && setBilling(v)}>
+            <Select items={billingItems} value={billing} onValueChange={(v) => v && setBilling(v)}>
               <SelectTrigger className="w-44"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL}>All</SelectItem>
@@ -105,7 +118,7 @@ export function OrdersExplorer({ rows, billingCodes }: { rows: OrderRow[]; billi
           </div>
           <div className="flex flex-col gap-1">
             <Label className="text-xs font-semibold">Status</Label>
-            <Select value={status} onValueChange={(v) => v && setStatus(v)}>
+            <Select items={statusItems} value={status} onValueChange={(v) => v && setStatus(v)}>
               <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL}>All</SelectItem>
