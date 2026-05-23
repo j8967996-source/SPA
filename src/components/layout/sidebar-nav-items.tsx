@@ -15,7 +15,6 @@ import {
   Building2,
   Database,
   CircleAlert,
-  ListOrdered,
   LucideIcon,
 } from 'lucide-react';
 
@@ -44,7 +43,8 @@ export const mainNavItems: NavItem[] = [
   { label: 'Customers', href: '/customers', icon: Users },
   { label: 'Reservations', href: '/reservations', icon: CalendarDays },
   { label: 'Availability', href: '/availability', icon: UserCheck },
-  { label: 'Waitlist', href: '/waitlist', icon: ListOrdered },
+  // Waitlist consolidated into Reservations (walk-ins use "Next available"); the
+  // page/route stays but is off the nav.
   { label: 'Stored Value Cards', href: '/stored-value-cards', icon: CreditCard },
   {
     label: 'Reconciliation',

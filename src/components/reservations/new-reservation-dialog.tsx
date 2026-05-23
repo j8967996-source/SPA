@@ -29,6 +29,7 @@ import {
   updateReservation,
   getReservationAvailability,
   getFreeBeds,
+  nextAvailableSlot,
 } from '@/app/(dashboard)/reservations/actions';
 import { RESOURCE_TYPE_LABEL } from '@/lib/resource-types';
 
@@ -118,6 +119,7 @@ export function NewReservationDialog({
   // reservation never reveals bed numbers on its own.
   const [showBedPicker, setShowBedPicker] = useState(false);
   const [beds, setBeds] = useState<FreeBed[] | null>(null);
+  const [finding, setFinding] = useState(false);
 
   // Capacity snapshot for the chosen branch + window (used per resource type).
   const [avail, setAvail] = useState<Record<string, { capacity: number; used: number }> | null>(null);
@@ -249,6 +251,23 @@ export function NewReservationDialog({
     if (chosen.length === 0) { toast.error('No free beds of this type for the window'); return; }
     const typeIds = new Set(list.map((b) => b.id));
     setPinnedBeds((prev) => [...prev.filter((id) => !typeIds.has(id)), ...chosen]);
+  }
+
+  // Walk-in helper: find the soonest time `pax` stations of the needed type are
+  // free (probing a 60-min window) and fill the start/end fields with it.
+  async function findNextAvailable() {
+    if (!branchId) return toast.error('Pick a branch first');
+    if (neededTypes.length === 0) return toast.error('Pick a service type first');
+    setFinding(true);
+    const r = await nextAvailableSlot({ branch_id: branchId, resource_type: neededTypes[0], pax: paxNum, durationMin: 60 });
+    setFinding(false);
+    if (!r.ok) return toast.error(r.error);
+    if (!r.data?.start) return toast.error('No slot fits within 24h (not enough stations for this party).');
+    const startMs = Date.parse(r.data.start);
+    setStart(toLocalInput(r.data.start));
+    setEnd(toLocalInput(new Date(startMs + 60 * 60000).toISOString()));
+    const hhmm = new Date(startMs).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' });
+    toast.success(r.data.availableNow ? `A ${rtLabel(neededTypes[0])} is free now` : `Next available ~${hhmm}`);
   }
 
   function handleSubmit(e: React.FormEvent) {
@@ -478,6 +497,15 @@ export function NewReservationDialog({
                 </SelectContent>
               </Select>
             </div>
+            {locationType === 'on_site' && neededTypes.length > 0 && (
+              <div className="col-span-2 flex items-center gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={findNextAvailable} disabled={finding || !branchId}>
+                  {finding ? 'Checking…' : `⚡ Next available ${rtLabel(neededTypes[0])}`}
+                </Button>
+                <span className="text-xs font-medium text-muted-foreground">Walk-in — fills the soonest free time below.</span>
+              </div>
+            )}
+
             <div className="flex flex-col gap-2">
               <Label htmlFor="r-start" className="font-semibold">Start *</Label>
               <Input id="r-start" type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} required />

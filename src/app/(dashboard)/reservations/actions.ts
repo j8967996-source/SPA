@@ -306,6 +306,63 @@ async function computeBusyResourceIds(
   return busy;
 }
 
+// Earliest time `pax` stations of a type are free for `durationMin` — used by the
+// reservation form's "Next available" helper for walk-ins. Considers live order
+// occupancy (incl. cleanup) and confirmed reservation holds; steps through the
+// times beds free up today. Returns null start if it can't fit within ~24h.
+export async function nextAvailableSlot(input: {
+  branch_id: string;
+  resource_type: string;
+  pax: number;
+  durationMin: number;
+}): Promise<ActionResult<{ start: string | null; availableNow: boolean }>> {
+  if (!input.branch_id || !input.resource_type) return { ok: false, error: 'Missing input' };
+  const supabase = createServiceClient();
+  const { data: resources } = await supabase
+    .from('resources').select('id')
+    .eq('branch_id', input.branch_id).eq('status', 'active').eq('resource_type', input.resource_type);
+  const typeIds = (resources ?? []).map((r) => r.id);
+  if (typeIds.length === 0) return { ok: false, error: 'No stations of this type at this branch' };
+  if (input.pax > typeIds.length) return { ok: true, data: { start: null, availableNow: false } };
+
+  const dur = Math.max(15, input.durationMin) * 60_000;
+  const now = Date.now();
+  const lookback = new Date(now - 12 * 3600 * 1000).toISOString();
+  const horizon = new Date(now + 24 * 3600 * 1000).toISOString();
+
+  // Change-points = times a bed of this type frees: live order ends (+cleanup)
+  // and confirmed reservation ends.
+  const ends: number[] = [];
+  const { data: items } = await supabase
+    .from('order_items')
+    .select('actual_start, actual_end, duration_minutes, resource_id, service:service_items ( cleanup_after_minutes ), order:orders!order_items_order_id_fkey ( branch_id )')
+    .in('resource_id', typeIds).not('actual_start', 'is', null)
+    .gte('actual_start', lookback).lt('actual_start', horizon);
+  for (const it of items ?? []) {
+    if (one(it.order)?.branch_id !== input.branch_id) continue;
+    const s = Date.parse(it.actual_start as string);
+    const e0 = it.actual_end ? Date.parse(it.actual_end) : s + (it.duration_minutes ?? 60) * 60_000;
+    ends.push(e0 + (one(it.service)?.cleanup_after_minutes ?? 0) * 60_000);
+  }
+  const { data: pins } = await supabase
+    .from('reservation_resources')
+    .select('reservations!inner ( branch_id, status, deleted_at, desired_service_end )')
+    .in('resource_id', typeIds)
+    .eq('reservations.status', 'confirmed').is('reservations.deleted_at', null);
+  for (const p of pins ?? []) {
+    const r = one(p.reservations);
+    if (r?.branch_id === input.branch_id) ends.push(Date.parse(r.desired_service_end));
+  }
+
+  const candidates = [now, ...ends.filter((t) => t > now)].sort((a, b) => a - b);
+  for (const t of candidates) {
+    const busy = await computeBusyResourceIds(input.branch_id, new Date(t).toISOString(), new Date(t + dur).toISOString(), null);
+    const free = typeIds.filter((id) => !busy.has(id)).length;
+    if (free >= input.pax) return { ok: true, data: { start: new Date(t).toISOString(), availableNow: t <= now + 60_000 } };
+  }
+  return { ok: true, data: { start: null, availableNow: false } };
+}
+
 // Active resources of a branch with a free/busy flag for the given window. Powers
 // the reservation form's optional bed picker and the "pick adjacent free" helper.
 export async function getFreeBeds(input: {
