@@ -120,6 +120,7 @@ interface Props {
   paymentMethods: { id: string; code: string; display_name: string }[];
   storedValueCards: { id: string; card_no: string; balance_cents: number; customer_name: string | null }[];
   capabilityByEmployee: Record<string, string[]>;
+  defaultGenderPref?: string | null; // from the source reservation, if any
   paymentPolicy: { arBilled: boolean; defaultMethodId: string | null; arBillingLabel: string | null };
   canManage: boolean;
 }
@@ -173,6 +174,7 @@ export function OrderWorkspace({
   storedValueCards,
   paymentPolicy,
   capabilityByEmployee,
+  defaultGenderPref = null,
   canManage,
 }: Props) {
   const [pending, startTransition] = useTransition();
@@ -187,7 +189,9 @@ export function OrderWorkspace({
   const [svcId, setSvcId] = useState('');
   const [therapistId, setTherapistId] = useState(NONE);
   const [resourceId, setResourceId] = useState(NONE);
-  const [genderPref, setGenderPref] = useState(ANY_GENDER); // therapist gender filter for this line
+  // Default the line's gender filter from the reservation (M/F), else Any.
+  const initialGenderPref = defaultGenderPref === 'M' || defaultGenderPref === 'F' ? defaultGenderPref : ANY_GENDER;
+  const [genderPref, setGenderPref] = useState(initialGenderPref);
   const noDiscount = discountClasses.find((d) => d.code === 'DIS-00');
   // New service lines default to the customer source's discount class (if it
   // still exists), else No Discount. Always overridable per line.
@@ -241,7 +245,7 @@ export function OrderWorkspace({
         discount_class_id: sourceDiscountLocked ? defaultDiscountId : discountId,
         discount_override: needsDiscountAmount ? Number(discountOverride || 0) : null,
       });
-      if (r.ok) { setSvcId(''); setGroupSel(''); setDiscountId(defaultDiscountId); setDiscountOverride(''); setActiveCustomer(null); setGenderPref(ANY_GENDER); toast.success('Service added'); }
+      if (r.ok) { setSvcId(''); setGroupSel(''); setDiscountId(defaultDiscountId); setDiscountOverride(''); setActiveCustomer(null); setGenderPref(initialGenderPref); toast.success('Service added'); }
       else toast.error(r.error);
     });
   }

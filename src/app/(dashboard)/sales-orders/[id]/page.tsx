@@ -32,6 +32,7 @@ async function fetchData(id: string) {
     .select(`
       id, order_no, status, order_type, service_date, note, branch_id,
       subtotal_cents, discount_cents, total_cents, paid_cents,
+      reservation:reservations ( gender_preference ),
       branch:branches!orders_branch_id_fkey ( code, name ),
       source:customer_sources ( code, name, default_discount_class_id, discount_locked ),
       billing:billing_destinations!orders_billing_to_id_fkey ( code, name, settlement_type, default_payment_method_id ),
@@ -176,6 +177,8 @@ async function fetchData(id: string) {
       customer_name: one(c.customer)?.name ?? null,
     })),
     capabilityByEmployee,
+    // Default the line's therapist-gender filter from the source reservation.
+    defaultGenderPref: one(order.reservation)?.gender_preference ?? null,
   };
 }
 
@@ -184,7 +187,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   const canManage = isManager(await currentSession());
   const result = await fetchData(id);
   if (!result) notFound();
-  const { order, serviceItems, employees, borrowableEmployees, busyTherapistIds, busyResourceIds, resources, discountClasses, paymentMethods, storedValueCards, capabilityByEmployee } = result;
+  const { order, serviceItems, employees, borrowableEmployees, busyTherapistIds, busyResourceIds, resources, discountClasses, paymentMethods, storedValueCards, capabilityByEmployee, defaultGenderPref } = result;
 
   const branch = one(order.branch);
   const source = one(order.source);
@@ -370,6 +373,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         paymentMethods={paymentMethods}
         storedValueCards={storedValueCards}
         capabilityByEmployee={capabilityByEmployee}
+        defaultGenderPref={defaultGenderPref}
         paymentPolicy={paymentPolicy}
         canManage={canManage}
       />
