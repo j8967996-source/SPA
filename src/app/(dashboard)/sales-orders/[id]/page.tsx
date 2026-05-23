@@ -56,7 +56,7 @@ async function fetchData(id: string) {
   if (error) throw new Error(error.message);
   if (!order) return null;
 
-  const [svc, emp, res, disc, pm, shifts] = await Promise.all([
+  const [svc, emp, res, disc, pm, shifts, brs] = await Promise.all([
     supabase
       .from('service_items')
       .select('id, code, name, service_group, duration_minutes, required_resource_type, service_item_prices ( price_cents, price_class, branch_id )')
@@ -74,6 +74,8 @@ async function fetchData(id: string) {
       .eq('branch_id', order.branch_id)
       .eq('shift_date', order.service_date)
       .in('shift_type', ['regular', 'cross_branch', 'on_call']),
+    // Branches + their sharing group (to limit borrowing to the same pool).
+    supabase.from('branches').select('id, therapist_share_group').eq('active', true),
   ]);
 
   const svcCardsRes = await supabase
@@ -127,15 +129,23 @@ async function fetchData(id: string) {
     homeBranchId: e.home_branch_id as string | null,
     homeBranchCode: one(e.home_branch)?.code ?? null,
   }));
+  // Branches in the same therapist-sharing group as this order's branch — only
+  // their staff can be borrowed.
+  const myGroup = (brs.data ?? []).find((b) => b.id === order.branch_id)?.therapist_share_group ?? null;
+  const shareBranchIds = new Set(
+    myGroup ? (brs.data ?? []).filter((b) => b.therapist_share_group === myGroup).map((b) => b.id) : [],
+  );
+
   // Only therapists actually rostered here today are normally selectable —
-  // someone off-shift shouldn't be assignable. Other-branch staff not rostered
-  // here are offered separately as a manual "borrow" (auto-assign skips them).
+  // someone off-shift shouldn't be assignable. Same-sharing-group staff not
+  // rostered here are offered separately as a manual "borrow" (auto-assign skips
+  // them). With no sharing group set, nothing is borrowable.
   const rosteredHere = (e: { id: string }) => scheduledIds.has(e.id);
   const thisBranchEmployees = allEmployees
     .filter(rosteredHere)
     .map((e) => ({ id: e.id, code: e.code, name: e.name }));
   const borrowableEmployees = allEmployees
-    .filter((e) => !rosteredHere(e) && e.homeBranchId !== order.branch_id)
+    .filter((e) => !rosteredHere(e) && e.homeBranchId !== order.branch_id && e.homeBranchId !== null && shareBranchIds.has(e.homeBranchId))
     .map((e) => ({ id: e.id, code: e.code, name: e.name, homeBranchCode: e.homeBranchCode }));
 
   return {
