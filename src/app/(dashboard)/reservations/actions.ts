@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { createServiceClient } from '@/lib/supabase/server';
 import { getReservationGraceMinutes, isReservationOverdue } from '@/lib/reservations';
 import { canPerformAny, matchesGender } from '@/lib/therapist-availability';
+import { addOrderItem } from '@/app/(dashboard)/sales-orders/actions';
 
 const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
 
@@ -30,6 +31,8 @@ const schema = z.object({
   seat_together: z.boolean().optional().default(false),
   // Walk-in: guest is present → create as confirmed (established), not pending.
   confirmed: z.boolean().optional().default(false),
+  // Optional specific service (within a chosen category). Null = decide later.
+  service_item_id: z.string().uuid().optional().nullable(),
 });
 
 export type ActionResult<T = unknown> = { ok: true; data?: T } | { ok: false; error: string };
@@ -112,6 +115,7 @@ export async function createReservation(input: unknown): Promise<ActionResult> {
     service_location_type: d.service_location_type,
     note: d.note || null,
     seat_together: d.seat_together,
+    service_item_id: d.service_item_id ?? null,
     status: d.confirmed ? 'confirmed' : 'reserved',
   }).select('id').single();
   if (error || !created) return { ok: false, error: error?.message ?? 'Insert failed' };
@@ -139,6 +143,7 @@ const updateSchema = z.object({
   note: z.string().max(500).optional().nullable(),
   resource_ids: z.array(z.string().uuid()).optional().default([]),
   seat_together: z.boolean().optional().default(false),
+  service_item_id: z.string().uuid().optional().nullable(),
 });
 
 export async function updateReservation(input: unknown): Promise<ActionResult> {
@@ -185,6 +190,7 @@ export async function updateReservation(input: unknown): Promise<ActionResult> {
     service_location_type: d.service_location_type,
     note: d.note || null,
     seat_together: d.seat_together,
+    service_item_id: d.service_item_id ?? null,
   }).eq('id', d.id);
   if (error) return { ok: false, error: error.message };
   const linkErr = await syncReservationCategories(d.id, d.service_category_ids);
@@ -625,7 +631,7 @@ export async function convertReservationToOrder(id: string): Promise<ActionResul
   const supabase = createServiceClient();
   const { data: r, error: re } = await supabase
     .from('reservations')
-    .select('id, branch_id, source_id, billing_to_id, desired_service_start, status, guest_name, guest_phone, pax, note')
+    .select('id, branch_id, source_id, billing_to_id, desired_service_start, status, guest_name, guest_phone, pax, note, service_item_id')
     .eq('id', id)
     .single();
   if (re || !r) return { ok: false, error: 'Reservation not found' };
@@ -661,14 +667,37 @@ export async function convertReservationToOrder(id: string): Promise<ActionResul
   // Carry the booking's guests: one order_customer per pax (first keeps the
   // name + phone; the rest are placeholders the desk can rename). Editable.
   const pax = Math.max(1, r.pax ?? 1);
-  await supabase.from('order_customers').insert(
+  const { data: createdCustomers } = await supabase.from('order_customers').insert(
     Array.from({ length: pax }, (_, i) => ({
       order_id: order.id,
       customer_name: i === 0 ? r.guest_name : `Guest ${i + 1}`,
       customer_phone: i === 0 ? r.guest_phone : null,
       seq_no: i + 1,
     })),
-  );
+  ).select('id, seq_no');
+  const firstCustomer = (createdCustomers ?? []).find((c) => c.seq_no === 1) ?? createdCustomers?.[0];
+
+  // If the booking named a specific service, pre-create that order line (with
+  // price/duration + the pinned bed). Therapist is left for the desk to confirm
+  // (the workspace pre-filters by gender). Reuses addOrderItem's pricing.
+  if (r.service_item_id && firstCustomer) {
+    const { data: src } = await supabase.from('customer_sources').select('default_discount_class_id').eq('id', r.source_id ?? '').maybeSingle();
+    let discountClassId = src?.default_discount_class_id ?? null;
+    if (!discountClassId) {
+      const { data: dis0 } = await supabase.from('discount_classes').select('id').eq('code', 'DIS-00').maybeSingle();
+      discountClassId = dis0?.id ?? null;
+    }
+    const { data: firstPin } = await supabase.from('reservation_resources').select('resource_id').eq('reservation_id', id).limit(1).maybeSingle();
+    if (discountClassId) {
+      await addOrderItem({
+        order_id: order.id,
+        order_customer_id: firstCustomer.id,
+        service_item_id: r.service_item_id,
+        resource_id: firstPin?.resource_id ?? null,
+        discount_class_id: discountClassId,
+      });
+    }
+  }
 
   await supabase.from('reservations').update({ status: 'converted' }).eq('id', id);
 

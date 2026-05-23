@@ -25,7 +25,7 @@ async function fetchData() {
       .select(`
         id, reservation_no, guest_name, guest_phone, pax, status,
         desired_service_start, desired_service_end,
-        branch_id, source_id, gender_preference, service_location_type, note, seat_together,
+        branch_id, source_id, gender_preference, service_location_type, note, seat_together, service_item_id,
         branch:branches ( code ),
         source:customer_sources ( code ),
         reservation_service_categories ( service_categories ( id, code, name ) ),
@@ -37,7 +37,7 @@ async function fetchData() {
     supabase.from('branches').select('id, code, name, branch_business_units ( business_unit_id )').eq('active', true).eq('reservation_enabled', true).order('code'),
     supabase.from('customer_sources').select('id, code, name, phone_required').eq('active', true).order('code'),
     supabase.from('service_categories').select('id, code, name, required_resource_type, service_category_business_units ( business_unit_id )').eq('active', true).order('code'),
-    supabase.from('service_items').select('id, name, service_group, service_category_id').eq('active', true).order('service_group'),
+    supabase.from('service_items').select('id, name, service_group, service_category_id, duration_minutes').eq('active', true).order('service_group'),
   ]);
   if (resv.error) throw new Error(resv.error.message);
   if (br.error) throw new Error(br.error.message);
@@ -54,7 +54,7 @@ async function fetchData() {
   }));
   const serviceItems = (si.data ?? [])
     .filter((s) => s.service_group)
-    .map((s) => ({ id: s.id, name: s.name, group: s.service_group as string, categoryId: s.service_category_id as string }));
+    .map((s) => ({ id: s.id, name: s.name, group: s.service_group as string, categoryId: s.service_category_id as string, durationMinutes: s.duration_minutes ?? null }));
 
   const graceMin = await getReservationGraceMinutes();
   const rows: ReservationRow[] = (resv.data ?? []).map((r) => {
@@ -96,6 +96,7 @@ async function fetchData() {
         desired_service_end: r.desired_service_end,
         resource_ids: pinnedIds,
         seat_together: r.seat_together,
+        service_item_id: r.service_item_id,
       },
     };
   });
@@ -136,6 +137,7 @@ export default async function ReservationsPage() {
             branches={branches}
             sources={sources}
             serviceCategories={serviceCategories}
+            serviceItems={serviceItems}
             trigger={
               <Button disabled={branches.length === 0}>
                 <Plus className="size-4" />

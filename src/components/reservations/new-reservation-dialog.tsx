@@ -56,13 +56,14 @@ export interface ReservationItem {
   desired_service_end: string;
   resource_ids?: string[];
   seat_together?: boolean;
+  service_item_id?: string | null;
 }
 
 interface Props {
   branches: BranchOpt[];
   sources: SourceOpt[];
   serviceCategories: CategoryOpt[];
-  serviceItems?: { id: string; name: string; group: string; categoryId: string }[];
+  serviceItems?: { id: string; name: string; group: string; categoryId: string; durationMinutes: number | null }[];
   mode?: 'create' | 'edit';
   reservation?: ReservationItem;
   trigger?: React.ReactNode;
@@ -127,7 +128,7 @@ export function NewReservationDialog({
   const [beds, setBeds] = useState<FreeBed[] | null>(null);
   const [finding, setFinding] = useState(false);
   const [walkInMsg, setWalkInMsg] = useState<string | null>(null);
-  const [specificGroup, setSpecificGroup] = useState(''); // '' = any service in the category
+  const [specificItemId, setSpecificItemId] = useState(reservation?.service_item_id ?? ''); // '' = any service in the category
 
   // Capacity snapshot for the chosen branch + window (used per resource type).
   const [avail, setAvail] = useState<Record<string, { capacity: number; used: number }> | null>(null);
@@ -207,7 +208,8 @@ export function NewReservationDialog({
   // The category that drives the bed type + therapist skill, and its specific
   // service groups (so a walk-in can narrow to e.g. "Thai Massage").
   const cat0 = serviceCategories.find((c) => categoryIds.includes(c.id) && c.requiredResourceType === neededTypes[0]) ?? null;
-  const groupChoices = cat0 ? [...new Set(serviceItems.filter((s) => s.categoryId === cat0.id).map((s) => s.group))].sort() : [];
+  const itemChoices = cat0 ? serviceItems.filter((s) => s.categoryId === cat0.id) : [];
+  const specificGroup = serviceItems.find((s) => s.id === specificItemId)?.group ?? null;
   const capacityRows = neededTypes.map((rt) => {
     const cap = avail?.[rt]?.capacity ?? 0;
     const usedOther = avail?.[rt]?.used ?? 0;
@@ -276,7 +278,7 @@ export function NewReservationDialog({
       branch_id: branchId,
       resource_type: neededTypes[0],
       service_category_id: cat0?.id ?? null,
-      service_group: specificGroup || null, // narrow to a specific service if chosen
+      service_group: specificGroup, // narrow to the chosen service's group if any
       pax: paxNum,
       durationMin: 60,
       gender: genderPref === '__none__' ? null : genderPref,
@@ -304,9 +306,9 @@ export function NewReservationDialog({
     const t = setTimeout(() => { void findNextAvailable(true); }, 300);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [walkIn, open, branchId, catKey, paxNum, genderPref, specificGroup]);
+  }, [walkIn, open, branchId, catKey, paxNum, genderPref, specificItemId]);
   // Clear a stale specific-service when the category set changes.
-  useEffect(() => { setSpecificGroup(''); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [catKey]);
+  useEffect(() => { setSpecificItemId(''); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [catKey]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -329,6 +331,7 @@ export function NewReservationDialog({
       resource_ids: locationType === 'external_hotel' ? [] : pinnedBeds,
       seat_together: locationType === 'external_hotel' ? false : seatTogether && paxNum > 1,
       confirmed: walkIn, // walk-in guest is present → established, not pending
+      service_item_id: specificItemId || null, // optional specific service
     };
     startTransition(async () => {
       const r = isEdit
@@ -398,23 +401,26 @@ export function NewReservationDialog({
               </div>
             </div>
 
-            {/* Walk-in: optionally narrow to a specific service for tighter
-                therapist-skill matching (else any service in the category). */}
-            {walkIn && groupChoices.length > 1 && (
+            {/* Optional specific service. Walk-ins usually set it (so the order
+                line + capable therapist are confirmed); advance bookings can leave
+                it "Any" and let the guest choose at check-in. Never required. */}
+            {cat0 && itemChoices.length > 0 && (
               <div className="flex flex-col gap-2 col-span-2">
                 <Label className="font-semibold">Specific service <span className="font-medium text-muted-foreground">(optional)</span></Label>
                 <Select
-                  items={[{ value: '__any__', label: `Any ${cat0?.name ?? 'service'}` }, ...groupChoices.map((g) => ({ value: g, label: g }))]}
-                  value={specificGroup || '__any__'}
-                  onValueChange={(v) => setSpecificGroup(v === '__any__' ? '' : (v ?? ''))}
+                  items={[{ value: '__any__', label: `Any ${cat0.name}` }, ...itemChoices.map((s) => ({ value: s.id, label: `${s.name}${s.durationMinutes ? ` · ${s.durationMinutes} min` : ''}` }))]}
+                  value={specificItemId || '__any__'}
+                  onValueChange={(v) => setSpecificItemId(v === '__any__' ? '' : (v ?? ''))}
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__any__">Any {cat0?.name ?? 'service'}</SelectItem>
-                    {groupChoices.map((g) => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+                    <SelectItem value="__any__">Any {cat0.name}</SelectItem>
+                    {itemChoices.map((s) => <SelectItem key={s.id} value={s.id}>{s.name}{s.durationMinutes ? ` · ${s.durationMinutes} min` : ''}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                <p className="text-xs font-medium text-muted-foreground">Pick the exact service to only match therapists who can do it.</p>
+                <p className="text-xs font-medium text-muted-foreground">
+                  {walkIn ? 'Pick the exact service to match capable therapists.' : 'Optional — set now or let the guest choose at check-in.'} Carried into the order as a ready line.
+                </p>
               </div>
             )}
 
