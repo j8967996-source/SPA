@@ -59,9 +59,6 @@ function hhmm(min: number): string {
 
 // Vertical height (px) of one stacked lane within a resource row.
 const LANE_H = 56;
-// The Reservations lane caps at this many lanes tall; extra overlapping
-// reservations scroll within the lane instead of pushing the bed board down.
-const RES_MAX_LANES = 3;
 
 // Greedy interval partitioning: each block gets the first lane whose previous
 // block (incl. its cleanup tail) has already ended. Overlapping blocks land in
@@ -118,12 +115,14 @@ export function DayTimeline({
   const trackMinWidth = Math.round((total / 60) * PX_PER_HOUR);
 
   return (
-    <Card className="p-0 overflow-x-auto">
+    // Own scroll box (both axes, viewport-capped) so the hour ruler can freeze on
+    // top and the name column can freeze on the left as you scroll.
+    <Card className="p-0 overflow-auto max-h-[calc(100vh-16rem)]">
       <div style={{ minWidth: LABEL_W + trackMinWidth }}>
-        {/* hour axis */}
-        <div className="flex border-b border-border bg-muted/40">
-          <div className="w-40 shrink-0 p-2 flex items-center justify-center text-center text-xs font-bold text-muted-foreground">{subjectLabel}</div>
-          <div className="relative flex-1 h-9">
+        {/* hour axis — frozen on top; its label cell is the frozen top-left corner */}
+        <div className="flex border-b border-border">
+          <div className="w-40 shrink-0 p-2 flex items-center justify-center text-center text-xs font-bold text-muted-foreground sticky top-0 left-0 z-40 bg-muted">{subjectLabel}</div>
+          <div className="relative flex-1 h-9 sticky top-0 z-30 bg-muted">
             {/* hour ticks */}
             {hours.map((h) => (
               <div key={`t${h}`} className="absolute top-0 bottom-0 border-l border-border/50" style={{ left: `${pct(h * 60)}%` }} />
@@ -155,15 +154,13 @@ export function DayTimeline({
             Capped to RES_MAX_LANES tall; overflow scrolls inside the lane. */}
         {reservations.length > 0 && (() => {
           const { lanes, count } = assignLanes(reservations);
-          const scrolls = count > RES_MAX_LANES;
           return (
             <div className="flex border-b-2 border-violet-500/30 bg-violet-500/5">
-              <div className="w-40 shrink-0 p-2 text-center flex flex-col justify-center">
+              <div className="w-40 shrink-0 p-2 text-center flex flex-col justify-center sticky left-0 z-20 bg-card">
                 <div className="font-semibold text-sm text-violet-700 dark:text-violet-300">Reservations</div>
-                <div className="font-bold text-xs text-muted-foreground">{reservations.length} upcoming{scrolls ? ' ↕' : ''}</div>
+                <div className="font-bold text-xs text-muted-foreground">{reservations.length} upcoming</div>
               </div>
-              <div className="flex-1 my-1 overflow-y-auto" style={{ height: Math.min(count, RES_MAX_LANES) * LANE_H }}>
-              <div className="relative" style={{ height: count * LANE_H }}>
+              <div className="relative flex-1 my-1" style={{ height: count * LANE_H }}>
                 {hours.map((h) => (
                   <div key={h} className="absolute top-0 bottom-0 border-l border-border/40" style={{ left: `${pct(h * 60)}%` }} />
                 ))}
@@ -192,7 +189,6 @@ export function DayTimeline({
                   <div className="absolute top-0 bottom-0 z-10 w-px bg-red-500" style={{ left: `${pct(nowMin!)}%` }} />
                 )}
               </div>
-              </div>
             </div>
           );
         })()}
@@ -204,7 +200,7 @@ export function DayTimeline({
             const { lanes, count } = assignLanes(r.services);
             return (
             <div key={r.id} className="flex border-b border-border last:border-0">
-              <div className="w-40 shrink-0 p-2 text-center flex flex-col justify-center">
+              <div className="w-40 shrink-0 p-2 text-center flex flex-col justify-center sticky left-0 z-20 bg-card">
                 <div className="font-semibold text-sm">{r.name}</div>
                 <div className="font-mono font-bold text-xs text-muted-foreground">{r.code}</div>
               </div>
