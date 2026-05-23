@@ -62,11 +62,13 @@ export function DayTimeline({
   windowStartMin,
   windowEndMin,
   subjectLabel,
+  nowMin = null,
 }: {
   rows: DayRow[];
   windowStartMin: number;
   windowEndMin: number;
   subjectLabel: string;
+  nowMin?: number | null;
 }) {
   const total = Math.max(60, windowEndMin - windowStartMin);
   const pct = (min: number) => ((min - windowStartMin) / total) * 100;
@@ -74,6 +76,8 @@ export function DayTimeline({
   const lastHour = Math.ceil(windowEndMin / 60);
   const hours: number[] = [];
   for (let h = firstHour; h <= lastHour; h++) hours.push(h);
+  // The "now" marker only shows when it falls inside the visible window.
+  const showNow = nowMin != null && nowMin >= windowStartMin && nowMin <= windowEndMin;
 
   // Give every hour a generous fixed width so the service + cleanup blocks
   // aren't cramped; the timeline scrolls horizontally when it overflows.
@@ -88,15 +92,30 @@ export function DayTimeline({
         <div className="flex border-b border-border">
           <div className="w-40 shrink-0 p-2 flex items-center justify-center text-center text-xs font-bold text-muted-foreground">{subjectLabel}</div>
           <div className="relative flex-1 h-8">
+            {/* hour ticks */}
             {hours.map((h) => (
+              <div key={`t${h}`} className="absolute top-0 bottom-0 border-l border-border/50" style={{ left: `${pct(h * 60)}%` }} />
+            ))}
+            {/* half-hour minor ticks (lower half, faint) */}
+            {hours.slice(0, -1).map((h) => (
+              <div key={`m${h}`} className="absolute bottom-0 h-2 border-l border-border/30" style={{ left: `${pct(h * 60 + 30)}%` }} />
+            ))}
+            {/* hour labels centred within each hour column */}
+            {hours.slice(0, -1).map((h) => (
               <div
-                key={h}
-                className="absolute top-0 bottom-0 border-l border-border/60 text-[10px] font-bold text-muted-foreground pl-1"
-                style={{ left: `${pct(h * 60)}%` }}
+                key={`l${h}`}
+                className="absolute top-0 bottom-0 flex items-center justify-center text-[10px] font-bold text-muted-foreground"
+                style={{ left: `${pct(h * 60)}%`, width: `${pct((h + 1) * 60) - pct(h * 60)}%` }}
               >
-                {String(h).padStart(2, '0')}
+                {String(h).padStart(2, '0')}:00
               </div>
             ))}
+            {/* now marker */}
+            {showNow && (
+              <div className="absolute top-0 bottom-0 z-10 -translate-x-1/2 flex flex-col items-center" style={{ left: `${pct(nowMin!)}%` }}>
+                <span className="rounded bg-red-500 px-1 text-[9px] font-bold leading-tight text-white">{hhmm(nowMin!)}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -150,6 +169,10 @@ export function DayTimeline({
                     )}
                   </div>
                 ))}
+                {/* now line */}
+                {showNow && (
+                  <div className="absolute top-0 bottom-0 z-10 w-px bg-red-500" style={{ left: `${pct(nowMin!)}%` }} />
+                )}
               </div>
             </div>
             );
