@@ -259,7 +259,16 @@ export function NewReservationDialog({
     if (!branchId) return toast.error('Pick a branch first');
     if (neededTypes.length === 0) return toast.error('Pick a service type first');
     setFinding(true);
-    const r = await nextAvailableSlot({ branch_id: branchId, resource_type: neededTypes[0], pax: paxNum, durationMin: 60, gender: genderPref === '__none__' ? null : genderPref });
+    // The category that produced this resource type — used to require therapist skill.
+    const cat0 = serviceCategories.find((c) => categoryIds.includes(c.id) && c.requiredResourceType === neededTypes[0]);
+    const r = await nextAvailableSlot({
+      branch_id: branchId,
+      resource_type: neededTypes[0],
+      service_category_id: cat0?.id ?? null,
+      pax: paxNum,
+      durationMin: 60,
+      gender: genderPref === '__none__' ? null : genderPref,
+    });
     setFinding(false);
     if (!r.ok) return toast.error(r.error);
     if (!r.data?.start) return toast.error('No slot within 24h — not enough free beds + on-shift therapists for this party.');

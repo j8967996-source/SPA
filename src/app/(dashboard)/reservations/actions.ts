@@ -317,6 +317,7 @@ export async function nextAvailableSlot(input: {
   pax: number;
   durationMin: number;
   gender?: string | null; // 'M' | 'F' — only count therapists of this gender
+  service_category_id?: string | null; // only count therapists who can perform it
 }): Promise<ActionResult<{ start: string | null; availableNow: boolean }>> {
   if (!input.branch_id || !input.resource_type) return { ok: false, error: 'Missing input' };
   const supabase = createServiceClient();
@@ -354,13 +355,27 @@ export async function nextAvailableSlot(input: {
     .from('employee_shifts').select('employee_id, shift_start, shift_end')
     .eq('branch_id', input.branch_id).eq('shift_date', today).in('shift_type', ['regular', 'cross_branch', 'on_call']);
   let pool = (shiftsToday ?? []).map((s) => ({ id: s.employee_id, startMin: hhmmToMin(s.shift_start), endMin: hhmmToMin(s.shift_end) }));
-  if (pool.length && (therapistPos.size > 0 || input.gender)) {
-    const { data: emps } = await supabase.from('employees').select('id, position_id, gender').in('id', pool.map((p) => p.id));
+  if (pool.length) {
+    const poolIds = pool.map((p) => p.id);
+    const { data: emps } = await supabase.from('employees').select('id, position_id, gender').in('id', poolIds);
     const meta = new Map((emps ?? []).map((e) => [e.id, e]));
+
+    // Capability: who can perform a service_group within the chosen category.
+    let capableIds: Set<string> | null = null;
+    if (input.service_category_id) {
+      const { data: catItems } = await supabase.from('service_items').select('service_group').eq('service_category_id', input.service_category_id);
+      const groups = new Set((catItems ?? []).map((i) => i.service_group).filter(Boolean) as string[]);
+      if (groups.size > 0) {
+        const { data: caps } = await supabase.from('employee_service_groups').select('employee_id, service_group').in('employee_id', poolIds);
+        capableIds = new Set((caps ?? []).filter((c) => groups.has(c.service_group)).map((c) => c.employee_id));
+      }
+    }
+
     pool = pool.filter((p) => {
       const e = meta.get(p.id);
       if (therapistPos.size > 0 && !therapistPos.has(e?.position_id as string)) return false; // only therapists
       if (input.gender && e?.gender !== input.gender) return false; // gender preference
+      if (capableIds && !capableIds.has(p.id)) return false; // can perform the category
       return true;
     });
   }
