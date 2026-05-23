@@ -625,7 +625,7 @@ export async function convertReservationToOrder(id: string): Promise<ActionResul
   const supabase = createServiceClient();
   const { data: r, error: re } = await supabase
     .from('reservations')
-    .select('id, branch_id, source_id, billing_to_id, desired_service_start, status, guest_name, guest_phone')
+    .select('id, branch_id, source_id, billing_to_id, desired_service_start, status, guest_name, guest_phone, pax, note')
     .eq('id', id)
     .single();
   if (re || !r) return { ok: false, error: 'Reservation not found' };
@@ -651,19 +651,24 @@ export async function convertReservationToOrder(id: string): Promise<ActionResul
       reservation_id: r.id,
       order_type: 'reservation',
       service_date: serviceDate,
+      note: r.note ?? null,
       status: 'draft',
     })
     .select('id')
     .single();
   if (oe || !order) return { ok: false, error: oe?.message ?? 'Could not create order' };
 
-  // Carry the guest as the first order customer.
-  await supabase.from('order_customers').insert({
-    order_id: order.id,
-    customer_name: r.guest_name,
-    customer_phone: r.guest_phone,
-    seq_no: 1,
-  });
+  // Carry the booking's guests: one order_customer per pax (first keeps the
+  // name + phone; the rest are placeholders the desk can rename). Editable.
+  const pax = Math.max(1, r.pax ?? 1);
+  await supabase.from('order_customers').insert(
+    Array.from({ length: pax }, (_, i) => ({
+      order_id: order.id,
+      customer_name: i === 0 ? r.guest_name : `Guest ${i + 1}`,
+      customer_phone: i === 0 ? r.guest_phone : null,
+      seq_no: i + 1,
+    })),
+  );
 
   await supabase.from('reservations').update({ status: 'converted' }).eq('id', id);
 
