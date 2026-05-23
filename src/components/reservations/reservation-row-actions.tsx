@@ -37,6 +37,11 @@ export function ReservationRowActions({ reservation, branches, sources, serviceC
   const [editOpen, setEditOpen] = useState(false);
   const { id, status } = reservation;
   const terminal = ['converted', 'cancelled', 'no_show'].includes(status);
+  // Cancelled / no-show can still be reopened; everything non-terminal has
+  // Edit/Convert/etc. Converted has nothing — hide the menu so it doesn't open
+  // an empty popup.
+  const hasActions = !terminal || status === 'no_show' || status === 'cancelled';
+  if (!hasActions) return null;
 
   function set(next: 'reserved' | 'confirmed' | 'cancelled' | 'no_show') {
     startTransition(async () => {
