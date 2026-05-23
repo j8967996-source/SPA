@@ -22,6 +22,8 @@ const schema = z.object({
   desired_service_end: z.string().min(1),
   service_location_type: z.enum(['on_site', 'external_hotel']).default('on_site'),
   note: z.string().max(500).optional().nullable(),
+  // Optional pinned beds (hybrid model). Empty = leave unassigned.
+  resource_ids: z.array(z.string().uuid()).optional().default([]),
 });
 
 export type ActionResult<T = unknown> = { ok: true; data?: T } | { ok: false; error: string };
@@ -74,6 +76,10 @@ export async function createReservation(input: unknown): Promise<ActionResult> {
     return { ok: false, error: 'A guest phone is required for this source' };
   }
 
+  // Validate any pinned beds before creating the row.
+  const pinned = await resolvePinnedBeds(d.branch_id, d.resource_ids, d.pax, d.desired_service_start, d.desired_service_end, d.service_location_type, null);
+  if (!pinned.ok) return { ok: false, error: pinned.error };
+
   const reservation_no = await nextReservationNo(branch.code, d.desired_service_start);
 
   const { data: created, error } = await supabase.from('reservations').insert({
@@ -98,7 +104,10 @@ export async function createReservation(input: unknown): Promise<ActionResult> {
   if (error || !created) return { ok: false, error: error?.message ?? 'Insert failed' };
   const linkErr = await syncReservationCategories(created.id, d.service_category_ids);
   if (linkErr) return { ok: false, error: linkErr.message };
+  const pinErr = await syncReservationResources(created.id, pinned.ids);
+  if (pinErr) return { ok: false, error: pinErr.message };
   revalidatePath('/reservations');
+  revalidatePath('/shift-schedule');
   return { ok: true };
 }
 
@@ -115,6 +124,7 @@ const updateSchema = z.object({
   desired_service_end: z.string().min(1),
   service_location_type: z.enum(['on_site', 'external_hotel']),
   note: z.string().max(500).optional().nullable(),
+  resource_ids: z.array(z.string().uuid()).optional().default([]),
 });
 
 export async function updateReservation(input: unknown): Promise<ActionResult> {
@@ -140,6 +150,8 @@ export async function updateReservation(input: unknown): Promise<ActionResult> {
   if (source.phone_required && !d.guest_phone?.trim()) {
     return { ok: false, error: 'A guest phone is required for this source' };
   }
+  const pinned = await resolvePinnedBeds(d.branch_id, d.resource_ids, d.pax, d.desired_service_start, d.desired_service_end, d.service_location_type, d.id);
+  if (!pinned.ok) return { ok: false, error: pinned.error };
   const { error } = await supabase.from('reservations').update({
     branch_id: d.branch_id,
     source_id: d.source_id,
@@ -157,7 +169,10 @@ export async function updateReservation(input: unknown): Promise<ActionResult> {
   if (error) return { ok: false, error: error.message };
   const linkErr = await syncReservationCategories(d.id, d.service_category_ids);
   if (linkErr) return { ok: false, error: linkErr.message };
+  const pinErr = await syncReservationResources(d.id, pinned.ids);
+  if (pinErr) return { ok: false, error: pinErr.message };
   revalidatePath('/reservations');
+  revalidatePath('/shift-schedule');
   return { ok: true };
 }
 
@@ -210,6 +225,117 @@ export async function getReservationAvailability(input: {
     byType[t] = { capacity: capacity[t] ?? 0, used: used[t] ?? 0 };
   }
   return { ok: true, data: { byType } };
+}
+
+// Replace a reservation's pinned beds (hybrid optional binding).
+async function syncReservationResources(reservationId: string, resourceIds: string[]) {
+  const supabase = createServiceClient();
+  await supabase.from('reservation_resources').delete().eq('reservation_id', reservationId);
+  if (resourceIds.length === 0) return null;
+  const { error } = await supabase.from('reservation_resources').insert(
+    resourceIds.map((resource_id) => ({ reservation_id: reservationId, resource_id })),
+  );
+  return error;
+}
+
+// Resource IDs unavailable in [start,end): occupied by a live order (incl. its
+// cleanup tail) or already pinned by another overlapping reservation.
+async function computeBusyResourceIds(
+  branchId: string,
+  start: string,
+  end: string,
+  excludeReservationId?: string | null,
+): Promise<Set<string>> {
+  const supabase = createServiceClient();
+  const startMs = Date.parse(start);
+  const endMs = Date.parse(end);
+  const busy = new Set<string>();
+
+  // Live orders sitting on a bed — use actual times plus the cleanup tail.
+  const lookback = new Date(startMs - 12 * 3600 * 1000).toISOString();
+  const { data: items } = await supabase
+    .from('order_items')
+    .select('resource_id, actual_start, actual_end, duration_minutes, service:service_items ( cleanup_after_minutes ), order:orders!order_items_order_id_fkey ( branch_id )')
+    .not('resource_id', 'is', null)
+    .not('actual_start', 'is', null)
+    .gte('actual_start', lookback)
+    .lt('actual_start', end);
+  for (const it of items ?? []) {
+    if (one(it.order)?.branch_id !== branchId || !it.resource_id) continue;
+    const s = Date.parse(it.actual_start as string);
+    const e0 = it.actual_end ? Date.parse(it.actual_end) : s + (it.duration_minutes ?? 60) * 60000;
+    const e = e0 + (one(it.service)?.cleanup_after_minutes ?? 0) * 60000;
+    if (s < endMs && startMs < e) busy.add(it.resource_id);
+  }
+
+  // Beds pinned by other overlapping reservations.
+  const { data: pins } = await supabase
+    .from('reservation_resources')
+    .select('resource_id, reservations!inner ( id, branch_id, status, deleted_at, desired_service_start, desired_service_end )')
+    .eq('reservations.branch_id', branchId)
+    .in('reservations.status', ['reserved', 'confirmed'])
+    .is('reservations.deleted_at', null)
+    .lt('reservations.desired_service_start', end)
+    .gt('reservations.desired_service_end', start);
+  for (const p of pins ?? []) {
+    const resv = one(p.reservations);
+    if (excludeReservationId && resv?.id === excludeReservationId) continue;
+    if (p.resource_id) busy.add(p.resource_id);
+  }
+  return busy;
+}
+
+// Active resources of a branch with a free/busy flag for the given window. Powers
+// the reservation form's optional bed picker and the "pick adjacent free" helper.
+export async function getFreeBeds(input: {
+  branch_id: string;
+  start: string;
+  end: string;
+  exclude_id?: string | null;
+}): Promise<ActionResult<{ beds: { id: string; name: string; type: string; free: boolean }[] }>> {
+  if (!input.branch_id || !input.start || !input.end) return { ok: false, error: 'Missing input' };
+  if (new Date(input.end) <= new Date(input.start)) return { ok: false, error: 'Bad window' };
+  const supabase = createServiceClient();
+  const { data: resources } = await supabase
+    .from('resources')
+    .select('id, resource_name, resource_type')
+    .eq('branch_id', input.branch_id)
+    .eq('status', 'active')
+    .order('resource_name');
+  const busy = await computeBusyResourceIds(input.branch_id, input.start, input.end, input.exclude_id);
+  const beds = (resources ?? []).map((r) => ({
+    id: r.id, name: r.resource_name, type: r.resource_type, free: !busy.has(r.id),
+  }));
+  return { ok: true, data: { beds } };
+}
+
+// Validate pinned beds: belong to the branch, within pax, and free for the window.
+// External (in-room) reservations consume no bed here, so pins are dropped.
+async function resolvePinnedBeds(
+  branchId: string,
+  resourceIds: string[],
+  pax: number,
+  start: string,
+  end: string,
+  locationType: string,
+  excludeReservationId?: string | null,
+): Promise<{ ok: true; ids: string[] } | { ok: false; error: string }> {
+  if (locationType === 'external_hotel' || resourceIds.length === 0) return { ok: true, ids: [] };
+  if (resourceIds.length > pax) return { ok: false, error: `Can't pin more beds (${resourceIds.length}) than pax (${pax})` };
+  const supabase = createServiceClient();
+  const { data: rows } = await supabase
+    .from('resources')
+    .select('id, resource_name')
+    .eq('branch_id', branchId)
+    .eq('status', 'active')
+    .in('id', resourceIds);
+  const found = new Map((rows ?? []).map((r) => [r.id, r.resource_name]));
+  const missing = resourceIds.filter((id) => !found.has(id));
+  if (missing.length) return { ok: false, error: 'A pinned bed is not an active resource of this branch' };
+  const busy = await computeBusyResourceIds(branchId, start, end, excludeReservationId);
+  const taken = resourceIds.filter((id) => busy.has(id)).map((id) => found.get(id));
+  if (taken.length) return { ok: false, error: `Already taken for this window: ${taken.join(', ')}` };
+  return { ok: true, ids: resourceIds };
 }
 
 export async function setReservationStatus(

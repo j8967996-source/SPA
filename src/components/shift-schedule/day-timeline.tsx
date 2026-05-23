@@ -13,6 +13,8 @@ export interface DayServiceBlock {
   cleanupEndMin?: number;
   // The order line, so the cleanup block can offer "Ready now".
   itemId?: string;
+  // A pinned reservation (not an actual order) — drawn as a violet dashed ghost.
+  reservation?: boolean;
 }
 export interface DayRow {
   id: string;
@@ -196,9 +198,15 @@ export function DayTimeline({
                 {r.services.map((s, i) => (
                   <div key={i} className="contents">
                     <div
-                      className={`absolute rounded px-1.5 flex flex-col items-center justify-center text-center overflow-hidden text-[10px] leading-tight ${s.ongoing ? 'bg-blue-500/70 text-white' : 'bg-primary/70 text-white'}`}
+                      className={`absolute rounded px-1.5 flex flex-col items-center justify-center text-center overflow-hidden text-[10px] leading-tight ${
+                        s.reservation
+                          ? 'border border-dashed border-violet-500/70 bg-violet-500/20 text-violet-950 dark:text-violet-100'
+                          : s.ongoing
+                            ? 'bg-blue-500/70 text-white'
+                            : 'bg-primary/70 text-white'
+                      }`}
                       style={{ left: `${pct(s.startMin)}%`, width: `${Math.max(2, pct(s.endMin) - pct(s.startMin))}%`, top: lanes[i] * LANE_H + 3, height: LANE_H - 6 }}
-                      title={`${s.line1}${s.line2 ? ` · ${s.line2}` : ''} · ${hhmm(s.startMin)}–${hhmm(s.endMin)}`}
+                      title={`${s.reservation ? 'Reservation · ' : ''}${s.line1}${s.line2 ? ` · ${s.line2}` : ''} · ${hhmm(s.startMin)}–${hhmm(s.endMin)}`}
                     >
                       <span className="truncate font-bold">{s.line1}</span>
                       {s.line2 && <span className="truncate font-semibold opacity-90">{s.line2}</span>}

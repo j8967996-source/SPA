@@ -28,8 +28,13 @@ import {
   createReservation,
   updateReservation,
   getReservationAvailability,
+  getFreeBeds,
 } from '@/app/(dashboard)/reservations/actions';
 import { RESOURCE_TYPE_LABEL } from '@/lib/resource-types';
+
+interface FreeBed { id: string; name: string; type: string; free: boolean }
+// Trailing number in "Bed #3" → 3, for natural sort + adjacency runs.
+function bedNum(name: string): number { const m = name.match(/(\d+)/); return m ? Number(m[1]) : 9999; }
 
 interface SourceOpt { id: string; code: string; name: string; phone_required: boolean }
 interface BranchOpt { id: string; code: string; name: string; businessUnitIds: string[] }
@@ -48,6 +53,7 @@ export interface ReservationItem {
   note: string | null;
   desired_service_start: string;
   desired_service_end: string;
+  resource_ids?: string[];
 }
 
 interface Props {
@@ -103,6 +109,9 @@ export function NewReservationDialog({
   const [end, setEnd] = useState(reservation ? toLocalInput(reservation.desired_service_end) : '');
   const [locationType, setLocationType] = useState(reservation?.service_location_type ?? 'on_site');
   const [note, setNote] = useState(reservation?.note ?? '');
+  // Optional pinned beds (hybrid model) + the branch's free/busy snapshot.
+  const [pinnedBeds, setPinnedBeds] = useState<string[]>(reservation?.resource_ids ?? []);
+  const [beds, setBeds] = useState<FreeBed[] | null>(null);
 
   // Capacity snapshot for the chosen branch + window (used per resource type).
   const [avail, setAvail] = useState<Record<string, { capacity: number; used: number }> | null>(null);
@@ -119,6 +128,7 @@ export function NewReservationDialog({
 
   function pickBranch(v: string) {
     setBranchId(v);
+    setPinnedBeds([]); // beds belong to a branch; clear when switching
     const units = branches.find((b) => b.id === v)?.businessUnitIds ?? [];
     // Drop selected categories not offered at the new branch.
     setCategoryIds((prev) =>
@@ -127,6 +137,11 @@ export function NewReservationDialog({
         return c?.businessUnitIds.some((u) => units.includes(u));
       }),
     );
+  }
+
+  function pickLocation(v: string) {
+    setLocationType(v);
+    if (v === 'external_hotel') setPinnedBeds([]); // in-room: no branch bed
   }
 
   const selectedSource = sources.find((s) => s.id === sourceId) ?? null;
@@ -148,6 +163,22 @@ export function NewReservationDialog({
     return () => clearTimeout(t);
   }, [open, branchId, start, end, reservation?.id]);
 
+  // Free/busy beds for the optional pin picker (on-site only).
+  useEffect(() => {
+    if (!open || locationType !== 'on_site' || !branchId || !start || !end) { setBeds(null); return; }
+    if (new Date(end) <= new Date(start)) return;
+    const t = setTimeout(async () => {
+      const r = await getFreeBeds({
+        branch_id: branchId,
+        start: new Date(start).toISOString(),
+        end: new Date(end).toISOString(),
+        exclude_id: reservation?.id ?? null,
+      });
+      if (r.ok && r.data) setBeds(r.data.beds);
+    }, 350);
+    return () => clearTimeout(t);
+  }, [open, locationType, branchId, start, end, reservation?.id]);
+
   // Per resource type needed by the selected categories, vs window capacity.
   const paxNum = Math.max(1, Number(pax) || 1);
   const neededTypes = [
@@ -165,6 +196,37 @@ export function NewReservationDialog({
   });
   const hasOver = capacityRows.some((r) => r.over);
   const missingResourceType = categoryIds.some((id) => !serviceCategories.find((c) => c.id === id)?.requiredResourceType);
+
+  // Beds the picker offers = active resources of the types this reservation needs.
+  const pinnableBeds = (beds ?? []).filter((b) => neededTypes.includes(b.type));
+  const bedsByType = neededTypes
+    .map((rt) => ({ rt, list: pinnableBeds.filter((b) => b.type === rt).sort((a, b) => bedNum(a.name) - bedNum(b.name)) }))
+    .filter((g) => g.list.length > 0);
+  const isFreeOrMine = (b: FreeBed) => b.free || pinnedBeds.includes(b.id);
+
+  function toggleBed(id: string) {
+    setPinnedBeds((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length >= paxNum) { toast.error(`Can't pin more than ${paxNum} bed(s) for ${paxNum} pax`); return prev; }
+      return [...prev, id];
+    });
+  }
+
+  // Pick a run of `pax` consecutive free beds in a type group (couples/groups);
+  // falls back to the first free beds if no adjacent run exists.
+  function pickAdjacent(list: FreeBed[]) {
+    const n = paxNum;
+    let chosen: string[] = [];
+    for (let i = 0; i + n <= list.length; i++) {
+      const win = list.slice(i, i + n);
+      const consecutive = win.every((b, k) => k === 0 || bedNum(b.name) - bedNum(win[k - 1].name) === 1);
+      if (consecutive && win.every(isFreeOrMine)) { chosen = win.map((b) => b.id); break; }
+    }
+    if (chosen.length === 0) chosen = list.filter(isFreeOrMine).slice(0, n).map((b) => b.id);
+    if (chosen.length === 0) { toast.error('No free beds of this type for the window'); return; }
+    const typeIds = new Set(list.map((b) => b.id));
+    setPinnedBeds((prev) => [...prev.filter((id) => !typeIds.has(id)), ...chosen]);
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -184,6 +246,7 @@ export function NewReservationDialog({
       desired_service_end: new Date(end).toISOString(),
       service_location_type: locationType,
       note: note || null,
+      resource_ids: locationType === 'external_hotel' ? [] : pinnedBeds,
     };
     startTransition(async () => {
       const r = isEdit
@@ -193,7 +256,7 @@ export function NewReservationDialog({
         toast.success(isEdit ? 'Reservation updated' : 'Reservation created');
         setOpen(false);
         if (!isEdit) {
-          setGuestName(''); setGuestPhone(''); setStart(''); setEnd(''); setNote(''); setCategoryIds([]);
+          setGuestName(''); setGuestPhone(''); setStart(''); setEnd(''); setNote(''); setCategoryIds([]); setPinnedBeds([]);
         }
       } else toast.error(r.error);
     });
@@ -277,6 +340,64 @@ export function NewReservationDialog({
               </p>
             )}
 
+            {/* Optional bed pinning (hybrid). On-site only; in-room uses no bed. */}
+            {locationType === 'on_site' && bedsByType.length > 0 && (
+              <div className="col-span-2 rounded-lg border border-border bg-muted/30 p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                    Assign bed(s) — optional
+                  </p>
+                  <span className="text-xs font-bold tabular text-muted-foreground">{pinnedBeds.length} / {paxNum} pinned</span>
+                </div>
+                <p className="text-xs font-medium text-muted-foreground mb-2">
+                  Leave empty to assign a bed at check-in. Pin beds for couples/groups who want to be together.
+                </p>
+                <div className="flex flex-col gap-3">
+                  {bedsByType.map((g) => (
+                    <div key={g.rt}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-bold text-foreground">{rtLabel(g.rt)}</span>
+                        {paxNum > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => pickAdjacent(g.list)}
+                            className="text-xs font-bold text-primary hover:underline"
+                          >
+                            Pick {paxNum} adjacent free
+                          </button>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {g.list.map((b) => {
+                          const picked = pinnedBeds.includes(b.id);
+                          const disabled = !isFreeOrMine(b);
+                          return (
+                            <button
+                              key={b.id}
+                              type="button"
+                              disabled={disabled}
+                              onClick={() => toggleBed(b.id)}
+                              title={disabled ? 'Taken for this window' : undefined}
+                              className={
+                                picked
+                                  ? 'rounded-md border border-violet-500 bg-violet-500/20 px-2 py-1 text-xs font-bold text-violet-700 dark:text-violet-200'
+                                  : disabled
+                                    ? 'rounded-md border border-dashed border-border bg-muted px-2 py-1 text-xs font-semibold text-muted-foreground/50 line-through cursor-not-allowed'
+                                    : 'rounded-md border border-input bg-card px-2 py-1 text-xs font-semibold hover:bg-accent'
+                              }
+                            >
+                              {b.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {beds === null && <p className="text-xs font-medium text-muted-foreground mt-1.5">Loading beds…</p>}
+              </div>
+            )}
+
             <div className="flex flex-col gap-2">
               <Label htmlFor="r-name" className="font-semibold">Guest Name *</Label>
               <Input id="r-name" value={guestName} onChange={(e) => setGuestName(e.target.value)} required maxLength={120} />
@@ -312,7 +433,7 @@ export function NewReservationDialog({
             </div>
             <div className="flex flex-col gap-2 col-span-2">
               <Label className="font-semibold">Location</Label>
-              <Select items={LOCATION_TYPES} value={locationType} onValueChange={(v) => v && setLocationType(v)}>
+              <Select items={LOCATION_TYPES} value={locationType} onValueChange={(v) => v && pickLocation(v)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>{LOCATION_TYPES.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
               </Select>

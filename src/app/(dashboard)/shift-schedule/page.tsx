@@ -41,17 +41,18 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
   });
 
   // Upcoming reservations (not yet converted to an order) for this branch/day.
-  // They carry no bed/therapist, so they render in their own top lane.
+  // Unpinned ones ride the top "Reservations" lane; ones with pinned beds show
+  // as ghost blocks in those bed rows (Station view only).
   const { data: resvData } = await supabase
     .from('reservations')
-    .select('id, guest_name, pax, desired_service_start, desired_service_end, service_location_type, customer_sources ( code ), reservation_service_categories ( service_categories ( name ) )')
+    .select('id, guest_name, pax, desired_service_start, desired_service_end, service_location_type, customer_sources ( code ), reservation_service_categories ( service_categories ( name ) ), reservation_resources ( resource_id )')
     .eq('branch_id', branchId)
     .in('status', ['reserved', 'confirmed'])
     .is('deleted_at', null)
     .gte('desired_service_start', `${day}T00:00:00+08:00`)
     .lte('desired_service_start', `${day}T23:59:59+08:00`)
     .order('desired_service_start');
-  const reservations: ReservationBlock[] = (resvData ?? []).map((r) => {
+  const resvRows = (resvData ?? []).map((r) => {
     const cats = (r.reservation_service_categories ?? []).map((l) => one(l.service_categories)?.name).filter(Boolean).join(' + ');
     const src = one(r.customer_sources)?.code;
     return {
@@ -61,6 +62,7 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
       startMin: tsToMin(r.desired_service_start),
       endMin: tsToMin(r.desired_service_end),
       external: r.service_location_type === 'external_hotel',
+      pinnedIds: (r.reservation_resources ?? []).map((x) => x.resource_id),
     };
   });
 
@@ -68,7 +70,7 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
   if (subject === 'station') {
     const { data: stations } = await supabase
       .from('resources').select('id, resource_name').eq('branch_id', branchId).eq('status', 'active').order('resource_name');
-    const byStation = new Map<string, { line1: string; line2?: string; startMin: number; endMin: number; ongoing: boolean; cleanupEndMin?: number; itemId?: string }[]>();
+    const byStation = new Map<string, { line1: string; line2?: string; startMin: number; endMin: number; ongoing: boolean; cleanupEndMin?: number; itemId?: string; reservation?: boolean }[]>();
     const nowMs = Date.now();
     for (const it of dayItems) {
       if (!it.resource_id) continue;
@@ -90,6 +92,14 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
       const arr = byStation.get(it.resource_id) ?? [];
       arr.push({ line1: thName ?? svcName, line2: thName ? svcName : undefined, startMin, endMin, ongoing: !it.actual_end, cleanupEndMin, itemId });
       byStation.set(it.resource_id, arr);
+    }
+    // Pinned reservations show as ghost blocks in their bed rows.
+    for (const rr of resvRows) {
+      for (const rid of rr.pinnedIds) {
+        const arr = byStation.get(rid) ?? [];
+        arr.push({ line1: rr.guest, line2: rr.line2, startMin: rr.startMin, endMin: rr.endMin, ongoing: false, reservation: true });
+        byStation.set(rid, arr);
+      }
     }
     rows = (stations ?? []).map((s) => ({
       id: s.id, name: s.resource_name, code: '', shiftType: 'regular',
@@ -152,6 +162,10 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
       if (s.cleanupEndMin != null) allMins.push(s.cleanupEndMin);
     }
   }
+  // Top lane: unpinned reservations (Station shows pinned ones in bed rows
+  // instead); the Therapist view has no bed binding, so it lists them all.
+  const reservations: ReservationBlock[] = (subject === 'station' ? resvRows.filter((r) => r.pinnedIds.length === 0) : resvRows)
+    .map((r) => ({ id: r.id, guest: r.guest, line2: r.line2, startMin: r.startMin, endMin: r.endMin, external: r.external }));
   for (const r of reservations) allMins.push(r.startMin, r.endMin);
   const windowStartMin = allMins.length ? Math.min(540, Math.floor(Math.min(...allMins) / 60) * 60) : 540;
   const windowEndMin = allMins.length ? Math.max(1320, Math.ceil(Math.max(...allMins) / 60) * 60) : 1320;
