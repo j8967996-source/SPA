@@ -285,14 +285,15 @@ async function computeBusyResourceIds(
     if (s < endMs && startMs < e) busy.add(it.resource_id);
   }
 
-  // Beds pinned by other overlapping reservations — but an Overdue reservation
+  // Beds pinned by other overlapping reservations. Only a *confirmed* reservation
+  // actually holds its bed (pending ones are tentative); an Overdue one
   // auto-releases its bed, so its pin no longer blocks others.
   const graceMin = await getReservationGraceMinutes();
   const { data: pins } = await supabase
     .from('reservation_resources')
     .select('resource_id, reservations!inner ( id, branch_id, status, deleted_at, desired_service_start, desired_service_end )')
     .eq('reservations.branch_id', branchId)
-    .in('reservations.status', ['reserved', 'confirmed'])
+    .eq('reservations.status', 'confirmed')
     .is('reservations.deleted_at', null)
     .lt('reservations.desired_service_start', end)
     .gt('reservations.desired_service_end', start);
@@ -441,6 +442,39 @@ export async function setReservationStatus(
   const { error } = await supabase.from('reservations').update({ status }).eq('id', id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/reservations');
+  revalidatePath('/shift-schedule');
+  return { ok: true };
+}
+
+// Confirm a pending reservation — this is the point it becomes "established" and
+// actually holds its bed(s). Beds are re-resolved against current (confirmed-only)
+// occupancy: explicit pins must still be free (else error → adjust & retry); a
+// seat-together group is auto-assigned fresh adjacent beds now.
+export async function confirmReservation(id: string): Promise<ActionResult> {
+  const supabase = createServiceClient();
+  const { data: r } = await supabase
+    .from('reservations')
+    .select('id, branch_id, status, pax, seat_together, service_location_type, desired_service_start, desired_service_end, reservation_service_categories ( service_category_id ), reservation_resources ( resource_id )')
+    .eq('id', id)
+    .maybeSingle();
+  if (!r) return { ok: false, error: 'Reservation not found' };
+  if (r.status !== 'reserved') return { ok: false, error: 'Only a pending reservation can be confirmed' };
+
+  const categoryIds = (r.reservation_service_categories ?? []).map((x) => x.service_category_id);
+  const intendedPins = (r.reservation_resources ?? []).map((x) => x.resource_id);
+  const resolved = await resolveEffectiveBeds({
+    branchId: r.branch_id, resourceIds: intendedPins, seatTogether: r.seat_together,
+    categoryIds, pax: r.pax, start: r.desired_service_start, end: r.desired_service_end,
+    locationType: r.service_location_type ?? 'on_site', excludeReservationId: id,
+  });
+  if (!resolved.ok) return { ok: false, error: resolved.error };
+
+  const { error } = await supabase.from('reservations').update({ status: 'confirmed' }).eq('id', id);
+  if (error) return { ok: false, error: error.message };
+  const pinErr = await syncReservationResources(id, resolved.ids);
+  if (pinErr) return { ok: false, error: pinErr.message };
+  revalidatePath('/reservations');
+  revalidatePath('/shift-schedule');
   return { ok: true };
 }
 

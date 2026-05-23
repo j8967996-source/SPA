@@ -47,6 +47,8 @@ export interface ReservationBlock {
   external?: boolean;
   // Past its grace window — guest hasn't shown; pinned bed auto-released.
   overdue?: boolean;
+  // Pending (not yet confirmed) — tentative, doesn't hold a bed.
+  pending?: boolean;
 }
 
 function hhmm(min: number): string {
@@ -167,10 +169,12 @@ export function DayTimeline({
                     className={`absolute rounded border border-dashed px-1.5 flex flex-col items-center justify-center text-center overflow-hidden text-[10px] leading-tight cursor-pointer ${
                       s.overdue
                         ? 'border-red-500/70 bg-red-500/20 text-red-900 dark:text-red-100 hover:bg-red-500/30'
-                        : 'border-violet-500/70 bg-violet-500/20 text-violet-950 dark:text-violet-100 hover:bg-violet-500/30'
+                        : s.pending
+                          ? 'border-amber-500/70 bg-amber-500/15 text-amber-900 dark:text-amber-100 hover:bg-amber-500/25'
+                          : 'border-violet-500/70 bg-violet-500/20 text-violet-950 dark:text-violet-100 hover:bg-violet-500/30'
                     }`}
                     style={{ left: `${pct(s.startMin)}%`, width: `${Math.max(2, pct(s.endMin) - pct(s.startMin))}%`, top: lanes[i] * LANE_H + 3, height: LANE_H - 6 }}
-                    title={`${s.overdue ? 'Overdue · ' : ''}click to convert · ${s.guest}${s.line2 ? ` · ${s.line2}` : ''}${s.external ? ' · in-room' : ''} · ${hhmm(s.startMin)}–${hhmm(s.endMin)}`}
+                    title={`${s.overdue ? 'Overdue · ' : s.pending ? 'Pending · ' : 'Confirmed · '}click to convert · ${s.guest}${s.line2 ? ` · ${s.line2}` : ''}${s.external ? ' · in-room' : ''} · ${hhmm(s.startMin)}–${hhmm(s.endMin)}`}
                   >
                     <span className="truncate font-bold">{s.guest}{s.external && ' 🏨'}{s.overdue && ' ⚠'}</span>
                     {s.line2 && <span className="truncate font-semibold opacity-90">{s.line2}</span>}

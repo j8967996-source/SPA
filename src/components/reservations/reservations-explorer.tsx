@@ -57,6 +57,8 @@ const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive'> = 
 const STATUS_OPTIONS = ['reserved', 'confirmed', 'converted', 'cancelled', 'no_show'];
 const ALL = '__all__';
 const ACTIVE = ['reserved', 'confirmed'];
+// `reserved` is the pending (not-yet-confirmed) state; show it as "Pending".
+const statusLabel = (s: string) => (s === 'reserved' ? 'Pending' : s.replace('_', ' '));
 
 function fmt(ts: string): string {
   return new Date(ts).toLocaleString('en-PH', {
@@ -113,8 +115,8 @@ export function ReservationsExplorer({
   const branchItems = [{ value: ALL, label: 'All' }, ...branches.map((b) => ({ value: b.code, label: b.code }))];
   const statusItems = [
     { value: ALL, label: 'All' },
-    { value: ACTIVE.join(','), label: 'Active (reserved + confirmed)' },
-    ...STATUS_OPTIONS.map((s) => ({ value: s, label: s.replace('_', ' ') })),
+    { value: ACTIVE.join(','), label: 'Active (pending + confirmed)' },
+    ...STATUS_OPTIONS.map((s) => ({ value: s, label: statusLabel(s) })),
   ];
   const sourceItems = [{ value: ALL, label: 'All' }, ...sources.map((s) => ({ value: s.code, label: s.code }))];
 
@@ -146,8 +148,8 @@ export function ReservationsExplorer({
               <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value={ALL}>All</SelectItem>
-                <SelectItem value={ACTIVE.join(',')}>Active (reserved + confirmed)</SelectItem>
-                {STATUS_OPTIONS.map((s) => <SelectItem key={s} value={s} className="capitalize">{s.replace('_', ' ')}</SelectItem>)}
+                <SelectItem value={ACTIVE.join(',')}>Active (pending + confirmed)</SelectItem>
+                {STATUS_OPTIONS.map((s) => <SelectItem key={s} value={s} className="capitalize">{statusLabel(s)}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
@@ -233,7 +235,7 @@ export function ReservationsExplorer({
                   <TableCell>
                     <div className="flex flex-col items-start gap-1">
                       <Badge variant={STATUS_VARIANT[r.status] ?? 'secondary'} className="font-bold capitalize">
-                        {r.status.replace('_', ' ')}
+                        {statusLabel(r.status)}
                       </Badge>
                       {r.overdue && (
                         <span className="inline-flex items-center rounded bg-destructive/15 px-1.5 py-0.5 text-[11px] font-bold text-destructive">

@@ -46,7 +46,7 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
   // as ghost blocks in those bed rows (Station view only).
   const { data: resvData } = await supabase
     .from('reservations')
-    .select('id, guest_name, pax, desired_service_start, desired_service_end, service_location_type, customer_sources ( code ), reservation_service_categories ( service_categories ( name ) ), reservation_resources ( resource_id )')
+    .select('id, status, guest_name, pax, desired_service_start, desired_service_end, service_location_type, customer_sources ( code ), reservation_service_categories ( service_categories ( name ) ), reservation_resources ( resource_id )')
     .eq('branch_id', branchId)
     .in('status', ['reserved', 'confirmed'])
     .is('deleted_at', null)
@@ -65,6 +65,9 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
       endMin: tsToMin(r.desired_service_end),
       external: r.service_location_type === 'external_hotel',
       pinnedIds: (r.reservation_resources ?? []).map((x) => x.resource_id),
+      // Pending (reserved) is tentative — it doesn't hold a bed yet, so it never
+      // becomes a bed ghost; only a confirmed reservation does.
+      pending: r.status === 'reserved',
       // Overdue → bed auto-released, so it leaves its bed row for the top lane.
       overdue: isReservationOverdue({ desiredStartIso: r.desired_service_start, graceMin }),
     };
@@ -97,10 +100,10 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
       arr.push({ line1: thName ?? svcName, line2: thName ? svcName : undefined, startMin, endMin, ongoing: !it.actual_end, cleanupEndMin, itemId, orderId: one(it.order)?.id });
       byStation.set(it.resource_id, arr);
     }
-    // Pinned reservations show as ghost blocks in their bed rows — unless
-    // overdue, in which case the bed is auto-released (it falls to the top lane).
+    // Pinned reservations show as ghost blocks in their bed rows — but only when
+    // confirmed (pending doesn't hold a bed) and not overdue (bed auto-released).
     for (const rr of resvRows) {
-      if (rr.overdue) continue;
+      if (rr.overdue || rr.pending) continue;
       for (const rid of rr.pinnedIds) {
         const arr = byStation.get(rid) ?? [];
         arr.push({ line1: rr.guest, line2: rr.line2, startMin: rr.startMin, endMin: rr.endMin, ongoing: false, reservation: true, reservationId: rr.id });
@@ -168,10 +171,10 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
       if (s.cleanupEndMin != null) allMins.push(s.cleanupEndMin);
     }
   }
-  // Top lane: unpinned reservations + any overdue ones (their beds were released);
-  // the Therapist view has no bed binding, so it lists them all.
-  const reservations: ReservationBlock[] = (subject === 'station' ? resvRows.filter((r) => r.pinnedIds.length === 0 || r.overdue) : resvRows)
-    .map((r) => ({ id: r.id, guest: r.guest, line2: r.line2, startMin: r.startMin, endMin: r.endMin, external: r.external, overdue: r.overdue }));
+  // Top lane: pending (never holds a bed), unpinned, and overdue reservations
+  // (released beds); the Therapist view has no bed binding, so it lists them all.
+  const reservations: ReservationBlock[] = (subject === 'station' ? resvRows.filter((r) => r.pending || r.pinnedIds.length === 0 || r.overdue) : resvRows)
+    .map((r) => ({ id: r.id, guest: r.guest, line2: r.line2, startMin: r.startMin, endMin: r.endMin, external: r.external, overdue: r.overdue, pending: r.pending }));
   for (const r of reservations) allMins.push(r.startMin, r.endMin);
   const windowStartMin = allMins.length ? Math.min(540, Math.floor(Math.min(...allMins) / 60) * 60) : 540;
   const windowEndMin = allMins.length ? Math.max(1320, Math.ceil(Math.max(...allMins) / 60) * 60) : 1320;
@@ -334,7 +337,10 @@ export default async function ShiftSchedulePage({
           <span className="inline-flex items-center gap-1"><span className="size-3 rounded border border-dashed border-zinc-500/50 bg-zinc-400/75" /> Bed cleanup</span>
         )}
         {scale === 'day' && (
-          <span className="inline-flex items-center gap-1"><span className="size-3 rounded border border-dashed border-violet-500/70 bg-violet-500/20" /> Reservation (unassigned)</span>
+          <>
+            <span className="inline-flex items-center gap-1"><span className="size-3 rounded border border-dashed border-amber-500/70 bg-amber-500/15" /> Reservation — pending</span>
+            <span className="inline-flex items-center gap-1"><span className="size-3 rounded border border-dashed border-violet-500/70 bg-violet-500/20" /> Reservation — confirmed</span>
+          </>
         )}
       </div>
     </div>

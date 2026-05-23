@@ -16,6 +16,7 @@ import {
 
 import {
   setReservationStatus,
+  confirmReservation,
   convertReservationToOrder,
 } from '@/app/(dashboard)/reservations/actions';
 import { NewReservationDialog, type ReservationItem } from './new-reservation-dialog';
@@ -43,10 +44,20 @@ export function ReservationRowActions({ reservation, branches, sources, serviceC
   const hasActions = !terminal || status === 'no_show' || status === 'cancelled';
   if (!hasActions) return null;
 
-  function set(next: 'reserved' | 'confirmed' | 'cancelled' | 'no_show') {
+  function set(next: 'reserved' | 'cancelled' | 'no_show') {
     startTransition(async () => {
       const r = await setReservationStatus(id, next);
       if (r.ok) toast.success(next === 'reserved' ? 'Reopened' : `Marked ${next.replace('_', ' ')}`);
+      else toast.error(r.error);
+    });
+  }
+
+  // Confirm establishes the booking and holds the bed(s); it can fail if a
+  // pinned bed was taken since, so surface the error.
+  function confirm() {
+    startTransition(async () => {
+      const r = await confirmReservation(id);
+      if (r.ok) toast.success('Reservation confirmed — bed held');
       else toast.error(r.error);
     });
   }
@@ -91,7 +102,7 @@ export function ReservationRowActions({ reservation, branches, sources, serviceC
             </DropdownMenuItem>
           )}
           {status === 'reserved' && (
-            <DropdownMenuItem onClick={() => set('confirmed')}>
+            <DropdownMenuItem onClick={confirm}>
               <Check className="size-4" />
               Confirm
             </DropdownMenuItem>
