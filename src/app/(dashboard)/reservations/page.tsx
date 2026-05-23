@@ -1,4 +1,4 @@
-import { Plus } from 'lucide-react';
+import { Plus, Footprints } from 'lucide-react';
 
 import { createServiceClient } from '@/lib/supabase/server';
 import { Button } from '@/components/ui/button';
@@ -111,17 +111,31 @@ export default async function ReservationsPage() {
             {rows.length} loaded · filter below
           </p>
         </div>
-        <NewReservationDialog
-          branches={branches}
-          sources={sources}
-          serviceCategories={serviceCategories}
-          trigger={
-            <Button disabled={branches.length === 0}>
-              <Plus className="size-4" />
-              New Reservation
-            </Button>
-          }
-        />
+        <div className="flex items-center gap-2">
+          <NewReservationDialog
+            branches={branches}
+            sources={sources}
+            serviceCategories={serviceCategories}
+            walkIn
+            trigger={
+              <Button variant="outline" disabled={branches.length === 0}>
+                <Footprints className="size-4" />
+                Walk-in
+              </Button>
+            }
+          />
+          <NewReservationDialog
+            branches={branches}
+            sources={sources}
+            serviceCategories={serviceCategories}
+            trigger={
+              <Button disabled={branches.length === 0}>
+                <Plus className="size-4" />
+                New Reservation
+              </Button>
+            }
+          />
+        </div>
       </div>
 
       <ReservationsExplorer

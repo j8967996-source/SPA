@@ -67,6 +67,9 @@ interface Props {
   trigger?: React.ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  // Walk-in mode: a streamlined flow that books the soonest available slot and
+  // hides the manual Start/End + Location fields.
+  walkIn?: boolean;
 }
 
 const LOCATION_TYPES = [
@@ -91,6 +94,7 @@ export function NewReservationDialog({
   trigger,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
+  walkIn = false,
 }: Props) {
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
@@ -120,6 +124,7 @@ export function NewReservationDialog({
   const [showBedPicker, setShowBedPicker] = useState(false);
   const [beds, setBeds] = useState<FreeBed[] | null>(null);
   const [finding, setFinding] = useState(false);
+  const [walkInMsg, setWalkInMsg] = useState<string | null>(null);
 
   // Capacity snapshot for the chosen branch + window (used per resource type).
   const [avail, setAvail] = useState<Record<string, { capacity: number; used: number }> | null>(null);
@@ -253,11 +258,12 @@ export function NewReservationDialog({
     setPinnedBeds((prev) => [...prev.filter((id) => !typeIds.has(id)), ...chosen]);
   }
 
-  // Walk-in helper: find the soonest time `pax` stations of the needed type are
-  // free (probing a 60-min window) and fill the start/end fields with it.
-  async function findNextAvailable() {
-    if (!branchId) return toast.error('Pick a branch first');
-    if (neededTypes.length === 0) return toast.error('Pick a service type first');
+  // Walk-in helper: find the soonest time `pax` stations of the needed type AND
+  // matching therapists are free (60-min probe) and fill start/end. `silent` =
+  // auto-run (no toast); the result is shown inline via walkInMsg.
+  async function findNextAvailable(silent = false) {
+    if (!branchId) { if (!silent) toast.error('Pick a branch first'); return; }
+    if (neededTypes.length === 0) { setStart(''); setEnd(''); setWalkInMsg('Pick a service type first.'); return; }
     setFinding(true);
     // The category that produced this resource type — used to require therapist skill.
     const cat0 = serviceCategories.find((c) => categoryIds.includes(c.id) && c.requiredResourceType === neededTypes[0]);
@@ -270,20 +276,35 @@ export function NewReservationDialog({
       gender: genderPref === '__none__' ? null : genderPref,
     });
     setFinding(false);
-    if (!r.ok) return toast.error(r.error);
-    if (!r.data?.start) return toast.error('No slot within 24h — not enough free beds + on-shift therapists for this party.');
+    if (!r.ok) { setStart(''); setEnd(''); setWalkInMsg(r.error); if (!silent) toast.error(r.error); return; }
+    if (!r.data?.start) {
+      setStart(''); setEnd('');
+      setWalkInMsg('No slot within 24h — not enough free beds + on-shift therapists for this party.');
+      return;
+    }
     const startMs = Date.parse(r.data.start);
     setStart(toLocalInput(r.data.start));
     setEnd(toLocalInput(new Date(startMs + 60 * 60000).toISOString()));
-    const hhmm = new Date(startMs).toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' });
-    toast.success(r.data.availableNow ? `A ${rtLabel(neededTypes[0])} is free now` : `Next available ~${hhmm}`);
+    const when = new Date(startMs).toLocaleString('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    setWalkInMsg(r.data.availableNow ? `A spot is free now (${when})` : `Soonest available: ${when}`);
+    if (!silent) toast.success(r.data.availableNow ? 'A spot is free now' : `Soonest ~${when}`);
   }
+
+  // In walk-in mode, auto-recompute the soonest slot as the branch / service /
+  // pax / gender change.
+  const catKey = categoryIds.join(',');
+  useEffect(() => {
+    if (!walkIn || !open) return;
+    const t = setTimeout(() => { void findNextAvailable(true); }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [walkIn, open, branchId, catKey, paxNum, genderPref]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!sourceId) return toast.error('Pick a customer source');
     if (categoryIds.length === 0) return toast.error('Pick at least one service type');
-    if (!start || !end) return toast.error('Pick start and end time');
+    if (!start || !end) return toast.error(walkIn ? 'No available slot — adjust service type / pax / gender.' : 'Pick start and end time');
     if (phoneRequired && !guestPhone.trim()) return toast.error('Phone is required for this source');
     const payload = {
       branch_id: branchId,
@@ -308,7 +329,7 @@ export function NewReservationDialog({
         toast.success(isEdit ? 'Reservation updated' : 'Reservation created');
         setOpen(false);
         if (!isEdit) {
-          setGuestName(''); setGuestPhone(''); setStart(''); setEnd(''); setNote(''); setCategoryIds([]); setPinnedBeds([]); setSeatTogether(false); setShowBedPicker(false);
+          setGuestName(''); setGuestPhone(''); setStart(''); setEnd(''); setNote(''); setCategoryIds([]); setPinnedBeds([]); setSeatTogether(false); setShowBedPicker(false); setWalkInMsg(null);
         }
       } else toast.error(r.error);
     });
@@ -320,8 +341,10 @@ export function NewReservationDialog({
       <DialogContent className="sm:max-w-lg">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
-            <DialogTitle className="font-bold">{isEdit ? 'Edit Reservation' : 'New Reservation'}</DialogTitle>
-            <DialogDescription className="font-medium">Book a slot. Convert to an order at check-in.</DialogDescription>
+            <DialogTitle className="font-bold">{isEdit ? 'Edit Reservation' : walkIn ? 'Walk-in' : 'New Reservation'}</DialogTitle>
+            <DialogDescription className="font-medium">
+              {walkIn ? 'Seat the guest at the soonest available time.' : 'Book a slot. Convert to an order at check-in.'}
+            </DialogDescription>
           </DialogHeader>
 
           <div className="grid grid-cols-2 gap-4 py-4">
@@ -506,30 +529,37 @@ export function NewReservationDialog({
                 </SelectContent>
               </Select>
             </div>
-            {locationType === 'on_site' && neededTypes.length > 0 && (
-              <div className="col-span-2 flex items-center gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={findNextAvailable} disabled={finding || !branchId}>
-                  {finding ? 'Checking…' : `⚡ Next available ${rtLabel(neededTypes[0])}`}
+            {walkIn ? (
+              <div className="col-span-2 rounded-lg border border-primary/40 bg-primary/5 p-3 flex items-center justify-between gap-3">
+                <div className="text-sm">
+                  <div className="font-bold">{finding ? 'Finding soonest…' : walkInMsg ?? 'Pick a service type & pax to find the soonest slot.'}</div>
+                  <div className="text-xs font-medium text-muted-foreground">Beds + on-shift therapists (skill / gender) are considered.</div>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={() => findNextAvailable(false)} disabled={finding || !branchId}>
+                  {finding ? '…' : 'Refresh'}
                 </Button>
-                <span className="text-xs font-medium text-muted-foreground">Walk-in — fills the soonest free time below.</span>
+              </div>
+            ) : (
+              <>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="r-start" className="font-semibold">Start *</Label>
+                  <Input id="r-start" type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} required />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="r-end" className="font-semibold">End *</Label>
+                  <Input id="r-end" type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} required />
+                </div>
+              </>
+            )}
+            {!walkIn && (
+              <div className="flex flex-col gap-2 col-span-2">
+                <Label className="font-semibold">Location</Label>
+                <Select items={LOCATION_TYPES} value={locationType} onValueChange={(v) => v && pickLocation(v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>{LOCATION_TYPES.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+                </Select>
               </div>
             )}
-
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="r-start" className="font-semibold">Start *</Label>
-              <Input id="r-start" type="datetime-local" value={start} onChange={(e) => setStart(e.target.value)} required />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="r-end" className="font-semibold">End *</Label>
-              <Input id="r-end" type="datetime-local" value={end} onChange={(e) => setEnd(e.target.value)} required />
-            </div>
-            <div className="flex flex-col gap-2 col-span-2">
-              <Label className="font-semibold">Location</Label>
-              <Select items={LOCATION_TYPES} value={locationType} onValueChange={(v) => v && pickLocation(v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{LOCATION_TYPES.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
             <div className="flex flex-col gap-2 col-span-2">
               <Label htmlFor="r-note" className="font-semibold">Note</Label>
               <Textarea id="r-note" value={note} onChange={(e) => setNote(e.target.value)} rows={2} />
@@ -539,7 +569,7 @@ export function NewReservationDialog({
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)} disabled={pending}>Cancel</Button>
             <Button type="submit" disabled={pending || !branchId}>
-              {pending ? 'Saving…' : isEdit ? 'Save changes' : 'Create reservation'}
+              {pending ? 'Saving…' : isEdit ? 'Save changes' : walkIn ? 'Book walk-in' : 'Create reservation'}
             </Button>
           </DialogFooter>
         </form>
