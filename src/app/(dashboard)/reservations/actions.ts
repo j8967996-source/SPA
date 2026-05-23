@@ -28,6 +28,8 @@ const schema = z.object({
   resource_ids: z.array(z.string().uuid()).optional().default([]),
   // Group wants to sit together → auto-assign adjacent beds when no override.
   seat_together: z.boolean().optional().default(false),
+  // Walk-in: guest is present → create as confirmed (established), not pending.
+  confirmed: z.boolean().optional().default(false),
 });
 
 export type ActionResult<T = unknown> = { ok: true; data?: T } | { ok: false; error: string };
@@ -110,7 +112,7 @@ export async function createReservation(input: unknown): Promise<ActionResult> {
     service_location_type: d.service_location_type,
     note: d.note || null,
     seat_together: d.seat_together,
-    status: 'reserved',
+    status: d.confirmed ? 'confirmed' : 'reserved',
   }).select('id').single();
   if (error || !created) return { ok: false, error: error?.message ?? 'Insert failed' };
   const linkErr = await syncReservationCategories(created.id, d.service_category_ids);

@@ -320,13 +320,14 @@ export function NewReservationDialog({
       note: note || null,
       resource_ids: locationType === 'external_hotel' ? [] : pinnedBeds,
       seat_together: locationType === 'external_hotel' ? false : seatTogether && paxNum > 1,
+      confirmed: walkIn, // walk-in guest is present → established, not pending
     };
     startTransition(async () => {
       const r = isEdit
         ? await updateReservation({ id: reservation!.id, ...payload })
         : await createReservation(payload);
       if (r.ok) {
-        toast.success(isEdit ? 'Reservation updated' : 'Reservation created');
+        toast.success(isEdit ? 'Reservation updated' : walkIn ? 'Walk-in booked (confirmed)' : 'Reservation created');
         setOpen(false);
         if (!isEdit) {
           setGuestName(''); setGuestPhone(''); setStart(''); setEnd(''); setNote(''); setCategoryIds([]); setPinnedBeds([]); setSeatTogether(false); setShowBedPicker(false); setWalkInMsg(null);
