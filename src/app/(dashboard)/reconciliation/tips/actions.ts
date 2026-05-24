@@ -10,63 +10,70 @@ export type ActionResult<T = unknown> = { ok: true; data?: T } | { ok: false; er
 
 const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
 
-export interface OpenTip {
-  id: string;
-  amount_cents: number;
+export interface TipLine { id: string; service_date: string; order_no: string; amount_cents: number }
+export interface TipGroup {
   therapist_id: string;
   therapist_name: string;
-  service_date: string;
+  count: number;
+  total_cents: number;
+  tips: TipLine[];
 }
 
-/** Open (unsettled) PAYMAYA tips for a branch whose order falls in the period. */
-export async function loadOpenTips(from: string, to: string, branchId: string): Promise<OpenTip[]> {
+/** Open (unsettled) PAYMAYA tips for a branch in range, grouped by therapist. */
+export async function loadOpenTipGroups(branchId: string, from: string, to: string): Promise<TipGroup[]> {
   const supabase = createServiceClient();
   const { data } = await supabase
     .from('tips')
     .select(`
       id, amount_cents, therapist_id, status, settlement_id,
       therapist:employees!tips_therapist_id_fkey ( name ),
-      order:orders!tips_order_id_fkey ( service_date, status, branch_id )
+      order:orders!tips_order_id_fkey ( order_no, service_date, status, branch_id )
     `)
     .is('settlement_id', null)
     .eq('status', 'open');
-  return (data ?? [])
-    .map((t) => {
-      const ord = one(t.order);
-      const th = one(t.therapist);
-      return {
-        id: t.id,
-        amount_cents: t.amount_cents,
-        therapist_id: t.therapist_id,
-        therapist_name: th?.name ?? '—',
-        service_date: ord?.service_date ?? '',
-        status: ord?.status ?? '',
-        branch_id: ord?.branch_id ?? '',
-      };
-    })
-    .filter((t) => t.branch_id === branchId && t.service_date >= from && t.service_date <= to && t.status !== 'void')
-    .map(({ status: _status, branch_id: _branch_id, ...t }) => t);
+
+  const groups = new Map<string, TipGroup>();
+  for (const t of data ?? []) {
+    const ord = one(t.order);
+    if (!ord || ord.branch_id !== branchId || ord.status === 'void') continue;
+    if (ord.service_date < from || ord.service_date > to) continue;
+    const th = one(t.therapist);
+    const g = groups.get(t.therapist_id) ?? { therapist_id: t.therapist_id, therapist_name: th?.name ?? '—', count: 0, total_cents: 0, tips: [] };
+    g.count += 1;
+    g.total_cents += t.amount_cents;
+    g.tips.push({ id: t.id, service_date: ord.service_date, order_no: ord.order_no, amount_cents: t.amount_cents });
+    groups.set(t.therapist_id, g);
+  }
+  for (const g of groups.values()) g.tips.sort((a, b) => (a.service_date < b.service_date ? 1 : -1));
+  return [...groups.values()].sort((a, b) => b.total_cents - a.total_cents);
 }
 
-const createSchema = z.object({
+const settleSchema = z.object({
   branch_id: z.string().uuid(),
-  period_from: z.string().min(1),
-  period_to: z.string().min(1),
+  tip_ids: z.array(z.string().uuid()).min(1),
 });
 
-export async function createTipSettlement(input: unknown): Promise<ActionResult<{ id: string }>> {
+/** Settle the selected open tips into one settlement (closed; ERP/AP posting deferred). */
+export async function settleTips(input: unknown): Promise<ActionResult<{ id: string; count: number }>> {
   const session = await currentSession();
   if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
-  const parsed = createSchema.safeParse(input);
+  const parsed = settleSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
-  const { branch_id, period_from, period_to } = parsed.data;
-  if (period_to < period_from) return { ok: false, error: 'End date must be on/after start date' };
-
-  const tips = await loadOpenTips(period_from, period_to, branch_id);
-  if (tips.length === 0) return { ok: false, error: 'No open tips for this branch in this range' };
-  const subtotal = tips.reduce((s, t) => s + t.amount_cents, 0);
+  const { branch_id, tip_ids } = parsed.data;
 
   const supabase = createServiceClient();
+  const { data: rows } = await supabase
+    .from('tips')
+    .select('id, amount_cents, status, settlement_id, order:orders!tips_order_id_fkey ( service_date, branch_id )')
+    .in('id', tip_ids);
+  const valid = (rows ?? []).filter((t) => t.status === 'open' && !t.settlement_id && one(t.order)?.branch_id === branch_id);
+  if (valid.length === 0) return { ok: false, error: 'No open tips to settle for the selection' };
+
+  const dates = valid.map((t) => one(t.order)!.service_date).sort();
+  const period_from = dates[0];
+  const period_to = dates[dates.length - 1];
+  const subtotal = valid.reduce((s, t) => s + t.amount_cents, 0);
+
   const { data: branch } = await supabase.from('branches').select('code').eq('id', branch_id).single();
   const ym = period_from.replace(/-/g, '').slice(0, 6);
   const prefix = `TS-${branch?.code ?? 'X'}-${ym}-`;
@@ -75,47 +82,26 @@ export async function createTipSettlement(input: unknown): Promise<ActionResult<
   const seq = last?.[0]?.settlement_no ? Number(last[0].settlement_no.slice(prefix.length)) : 0;
   const settlement_no = `${prefix}${String(seq + 1).padStart(2, '0')}`;
 
-  const { data, error } = await supabase
+  const { data: settlement, error } = await supabase
     .from('tip_settlements')
-    .insert({ settlement_no, branch_id, period_from, period_to, subtotal_cents: subtotal, status: 'draft' })
+    .insert({ settlement_no, branch_id, period_from, period_to, subtotal_cents: subtotal, status: 'closed', posted_at: new Date().toISOString() })
     .select('id')
     .single();
-  if (error || !data) return { ok: false, error: error?.message ?? 'Could not create settlement' };
+  if (error || !settlement) return { ok: false, error: error?.message ?? 'Could not create settlement' };
+
+  const ids = valid.map((t) => t.id);
+  const { error: te } = await supabase.from('tips').update({ settlement_id: settlement.id, status: 'closed' }).in('id', ids);
+  if (te) return { ok: false, error: te.message };
 
   revalidatePath('/reconciliation/tips');
-  return { ok: true, data: { id: data.id } };
-}
-
-export async function confirmTipSettlement(id: string): Promise<ActionResult> {
-  const session = await currentSession();
-  if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
-  const supabase = createServiceClient();
-  const { data: s } = await supabase.from('tip_settlements').select('period_from, period_to, status, branch_id').eq('id', id).single();
-  if (!s) return { ok: false, error: 'Settlement not found' };
-  if (s.status !== 'draft') return { ok: false, error: 'Only draft settlements can be confirmed' };
-  if (!s.branch_id) return { ok: false, error: 'Settlement has no branch' };
-
-  // NOTE: ERP/AP posting deferred — this only closes the tips for now.
-  const tips = await loadOpenTips(s.period_from, s.period_to, s.branch_id);
-  const ids = tips.map((t) => t.id);
-  if (ids.length > 0) {
-    const { error } = await supabase.from('tips').update({ settlement_id: id, status: 'closed' }).in('id', ids);
-    if (error) return { ok: false, error: error.message };
-  }
-  const { error: se } = await supabase
-    .from('tip_settlements')
-    .update({ status: 'closed', posted_at: new Date().toISOString() })
-    .eq('id', id);
-  if (se) return { ok: false, error: se.message };
-
-  revalidatePath('/reconciliation/tips');
-  return { ok: true };
+  return { ok: true, data: { id: settlement.id, count: valid.length } };
 }
 
 export async function voidTipSettlement(id: string): Promise<ActionResult> {
   const session = await currentSession();
   if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
   const supabase = createServiceClient();
+  // Release the tips back to open so they can be re-settled.
   await supabase.from('tips').update({ settlement_id: null, status: 'open' }).eq('settlement_id', id);
   const { error } = await supabase.from('tip_settlements').update({ status: 'void' }).eq('id', id);
   if (error) return { ok: false, error: error.message };
