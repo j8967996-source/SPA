@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { ChevronRight, ChevronDown, FileText, FilePlus2 } from 'lucide-react';
+import { ChevronRight, ChevronDown, FileText, FilePlus2, CalendarClock } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -46,11 +46,13 @@ export interface SoaHistoryRow {
 export function SoaWorkspace({
   initialFrom,
   initialTo,
+  today,
   initialGroups,
   history,
 }: {
   initialFrom: string;
   initialTo: string;
+  today: string; // PHT yyyy-mm-dd — for the semi-monthly settlement reminder
   initialGroups: SoaGroup[];
   history: SoaHistoryRow[];
 }) {
@@ -93,6 +95,11 @@ export function SoaWorkspace({
 
   const selTotal = groups.filter((g) => selected.has(g.billing_id)).reduce((s, g) => s + g.total_cents, 0);
 
+  // Semi-monthly cadence: settle each half-month (1–15, 16–EOM). It's "due" when
+  // un-stated closed AR exists from a half-month that has already ended.
+  const halfStart = Number(today.slice(8, 10)) <= 15 ? `${today.slice(0, 7)}-01` : `${today.slice(0, 7)}-16`;
+  const settleOverdue = groups.some((g) => g.orders.some((o) => o.service_date < halfStart));
+
   function doGenerate() {
     if (selected.size === 0) return toast.error('Select at least one billing destination');
     startGen(async () => {
@@ -112,7 +119,7 @@ export function SoaWorkspace({
     <div className="flex flex-col gap-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <Link href="/dashboard" className="text-xs font-semibold text-muted-foreground hover:text-foreground">Reconciliation</Link>
+          <Link href="/reconciliation" className="text-xs font-semibold text-muted-foreground hover:text-foreground">Reconciliation</Link>
           <h2 className="text-3xl font-bold tracking-tight mt-1 flex items-center gap-2">
             <FileText className="size-6 text-primary" /> Revenue SOA
           </h2>
@@ -141,6 +148,16 @@ export function SoaWorkspace({
 
       {tab === 'generate' ? (
         <>
+          <div className={cn(
+            'flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold',
+            settleOverdue ? 'border-amber-500/50 bg-amber-500/10 text-amber-800 dark:text-amber-300' : 'border-border bg-muted/40 text-muted-foreground',
+          )}>
+            <CalendarClock className="size-4 shrink-0" />
+            {settleOverdue
+              ? 'Closed AR from a finished half-month isn’t stated yet — time to issue this period’s SOA.'
+              : 'Settle semi-monthly — around the 15th and month-end.'}
+          </div>
+
           <Card className="p-4">
             <div className="flex flex-wrap items-end gap-4">
               <div className="flex flex-col gap-1">

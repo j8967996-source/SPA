@@ -35,6 +35,6 @@ export default async function RevenueSoaPage() {
   const [groups, history] = await Promise.all([loadSoaWorkspace(from, to), fetchHistory()]);
 
   return (
-    <SoaWorkspace initialFrom={from} initialTo={to} initialGroups={groups} history={history} />
+    <SoaWorkspace initialFrom={from} initialTo={to} today={to} initialGroups={groups} history={history} />
   );
 }
