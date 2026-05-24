@@ -30,13 +30,13 @@ export default async function TipSettlementPage({ searchParams }: { searchParams
     branchId ? loadOpenTipGroups(branchId, from, to) : Promise.resolve([]),
     supabase
       .from('tip_settlements')
-      .select('id, settlement_no, status, period_from, period_to, subtotal_cents, branch:branches!tip_settlements_branch_id_fkey ( code )')
+      .select('id, settlement_no, status, period_from, period_to, subtotal_cents, posted_at, branch:branches!tip_settlements_branch_id_fkey ( code )')
       .order('created_at', { ascending: false }),
   ]);
   const history: TipHistoryRow[] = (histRes.data ?? []).map((s) => ({
     id: s.id, settlement_no: s.settlement_no, status: s.status,
     period_from: s.period_from, period_to: s.period_to, subtotal_cents: s.subtotal_cents,
-    branch_code: one(s.branch)?.code ?? null,
+    posted_at: s.posted_at, branch_code: one(s.branch)?.code ?? null,
   }));
 
   if (!branchId) {

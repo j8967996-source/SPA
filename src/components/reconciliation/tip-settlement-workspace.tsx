@@ -25,6 +25,9 @@ import { loadOpenTipGroups, settleTips, voidTipSettlement, type TipGroup } from 
 function peso(cents: number): string {
   return `₱${(cents / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
 }
+function fmtDateTime(iso: string): string {
+  return new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
+}
 
 const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive'> = {
   draft: 'secondary', posting: 'secondary', closed: 'default', failed: 'destructive', void: 'destructive',
@@ -39,6 +42,7 @@ export interface TipHistoryRow {
   period_from: string;
   period_to: string;
   subtotal_cents: number;
+  posted_at: string | null;
 }
 
 export function TipSettlementWorkspace({
@@ -252,6 +256,7 @@ export function TipSettlementWorkspace({
                 <TableHead className="font-bold">Settlement No</TableHead>
                 <TableHead className="w-20 font-bold">Branch</TableHead>
                 <TableHead className="font-bold">Period</TableHead>
+                <TableHead className="w-40 font-bold">Settle Date</TableHead>
                 <TableHead className="w-32 font-bold text-right">Total</TableHead>
                 <TableHead className="w-28 font-bold">Status</TableHead>
                 <TableHead className="w-24" />
@@ -263,6 +268,7 @@ export function TipSettlementWorkspace({
                   <TableCell className="font-mono font-bold">{s.settlement_no}</TableCell>
                   <TableCell className="font-mono font-bold">{s.branch_code ?? '—'}</TableCell>
                   <TableCell className="font-medium tabular text-muted-foreground">{s.period_from} → {s.period_to}</TableCell>
+                  <TableCell className="font-medium tabular">{s.posted_at ? fmtDateTime(s.posted_at) : '—'}</TableCell>
                   <TableCell className="font-bold tabular text-right">{peso(s.subtotal_cents)}</TableCell>
                   <TableCell><Badge variant={STATUS_VARIANT[s.status] ?? 'secondary'} className="font-bold capitalize">{s.status}</Badge></TableCell>
                   <TableCell>
