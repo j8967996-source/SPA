@@ -106,6 +106,7 @@ async function fetchData() {
 
 export default async function ReservationsPage() {
   const { rows, branches, sources, serviceCategories, serviceItems } = await fetchData();
+  const today = phtDate(new Date().toISOString()); // PHT yyyy-mm-dd, for the default "today onward" filter
 
   return (
     <div className="flex flex-col gap-6">
@@ -153,6 +154,7 @@ export default async function ReservationsPage() {
         branches={branches}
         sources={sources}
         serviceCategories={serviceCategories}
+        today={today}
       />
     </div>
   );

@@ -75,17 +75,20 @@ export function ReservationsExplorer({
   branches,
   sources,
   serviceCategories,
+  today,
 }: {
   rows: ReservationRow[];
   branches: BranchOpt[];
   sources: SourceOpt[];
   serviceCategories: CategoryOpt[];
+  today: string; // PHT yyyy-mm-dd — default lower bound so the list opens on today onward
 }) {
   const [q, setQ] = useState('');
   const [branch, setBranch] = useState(ALL);
   const [status, setStatus] = useState(ALL);
   const [source, setSource] = useState(ALL);
-  const [from, setFrom] = useState('');
+  // Default to today so past reservations are hidden; clear it to see history.
+  const [from, setFrom] = useState(today);
   const [to, setTo] = useState('');
   const [overdueOnly, setOverdueOnly] = useState(false);
 
