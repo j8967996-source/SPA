@@ -538,8 +538,12 @@ export function OrderWorkspace({
           )}
         </div>
         {canRunService && items.some((i) => i.status === 'scheduled') ? (
-          <Button size="sm" variant="outline" onClick={doStartAll} disabled={pending}>
-            <Play className="size-4" /> Start all
+          <Button
+            onClick={doStartAll}
+            disabled={pending}
+            className="bg-blue-600 font-bold text-white shadow-sm hover:bg-blue-700 focus-visible:ring-blue-500/40 dark:bg-blue-600 dark:hover:bg-blue-700"
+          >
+            <Play className="size-4 fill-current" /> Start all
           </Button>
         ) : <span />}
         <span />
