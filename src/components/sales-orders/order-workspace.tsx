@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { Plus, Trash2, UserPlus, CreditCard, Wand2, Users, Receipt, Star, History, Play, Pencil, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -182,6 +182,15 @@ export function OrderWorkspace({
   canManage,
 }: Props) {
   const [pending, startTransition] = useTransition();
+
+  // Active workspace tab. Auto-jumps to Folio the moment the order completes
+  // (all services done) so the desk lands on payment without an extra click.
+  const [tab, setTab] = useState('guests');
+  const prevStatus = useRef(order.status);
+  useEffect(() => {
+    if (prevStatus.current !== 'completed' && order.status === 'completed') setTab('folio');
+    prevStatus.current = order.status;
+  }, [order.status]);
 
   // add customer
   const [custName, setCustName] = useState('');
@@ -495,7 +504,7 @@ export function OrderWorkspace({
 
   return (
     <div className="flex flex-col gap-4">
-      <Tabs defaultValue="guests" className="w-full flex-col gap-4">
+      <Tabs value={tab} onValueChange={(v) => v && setTab(v)} className="w-full flex-col gap-4">
         <TabsList className="w-fit">
           <TabsTrigger value="guests"><Users /> Guest List</TabsTrigger>
           <TabsTrigger value="folio"><Receipt /> Folio</TabsTrigger>
