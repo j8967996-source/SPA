@@ -15,6 +15,7 @@ import {
 import { cn } from '@/lib/utils';
 import { ConfirmRevenueButton } from '@/components/reconciliation/confirm-revenue-button';
 import { ReconDatePicker } from '@/components/reconciliation/recon-date-picker';
+import { RevenueConfirmHistory } from '@/components/reconciliation/revenue-confirm-history';
 import { loadConfirmable, loadConfirmedHistory, isCashClosed, type ConfirmableOrder } from './actions';
 
 export const dynamic = 'force-dynamic';
@@ -108,34 +109,12 @@ export default async function RevenueConfirmPage({
       {!branchId ? (
         <Card className="border-dashed bg-muted/30 p-8 text-center text-sm font-semibold text-muted-foreground">Create a branch first.</Card>
       ) : view === 'history' ? (
-        <Card className="p-0 overflow-hidden">
-          <CardHeader className="p-4">
-            <CardTitle className="text-base font-bold">Confirmed (Closed) · {history.length} order(s) · {peso(histTotal)}</CardTitle>
-          </CardHeader>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-32 font-bold">Service Date</TableHead>
-                <TableHead className="font-bold">Order No</TableHead>
-                <TableHead className="w-28 font-bold">Type</TableHead>
-                <TableHead className="w-16 font-bold text-center">PAX</TableHead>
-                <TableHead className="w-24 font-bold">Settle</TableHead>
-                <TableHead className="font-bold">Billing</TableHead>
-                <TableHead className="w-28 font-bold text-right">Cash</TableHead>
-                <TableHead className="w-28 font-bold text-right">PAYMAYA</TableHead>
-                <TableHead className="w-28 font-bold text-right">AR</TableHead>
-                <TableHead className="w-32 font-bold text-right">Total</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {history.length === 0 ? (
-                <TableRow><TableCell colSpan={10} className="text-center py-10 text-sm font-semibold text-muted-foreground">No confirmed orders yet for this branch.</TableCell></TableRow>
-              ) : (
-                history.map((o) => <OrderRow key={o.id} o={o} showDate />)
-              )}
-            </TableBody>
-          </Table>
-        </Card>
+        <>
+          <p className="text-sm font-semibold text-muted-foreground -mb-2">
+            Confirmed (Closed) · {history.length} order(s) · {peso(histTotal)} · grouped by service date
+          </p>
+          <RevenueConfirmHistory orders={history} />
+        </>
       ) : (
         <>
           <Card className={cn('border', cashClosed ? 'border-primary/30' : 'border-destructive/40')}>
