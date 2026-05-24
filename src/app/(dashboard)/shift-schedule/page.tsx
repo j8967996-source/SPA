@@ -46,7 +46,7 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
   // as ghost blocks in those bed rows (Station view only).
   const { data: resvData } = await supabase
     .from('reservations')
-    .select('id, status, guest_name, pax, desired_service_start, desired_service_end, service_location_type, customer_sources ( code ), reservation_service_categories ( service_categories ( name ) ), reservation_resources ( resource_id )')
+    .select('id, status, guest_name, pax, desired_service_start, desired_service_end, service_location_type, customer_sources ( code ), service:service_items ( prep_before_minutes, cleanup_after_minutes ), reservation_service_categories ( service_categories ( name ) ), reservation_resources ( resource_id )')
     .eq('branch_id', branchId)
     .in('status', ['reserved', 'confirmed'])
     .is('deleted_at', null)
@@ -57,12 +57,18 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
   const resvRows = (resvData ?? []).map((r) => {
     const cats = (r.reservation_service_categories ?? []).map((l) => one(l.service_categories)?.name).filter(Boolean).join(' + ');
     const src = one(r.customer_sources)?.code;
+    // Bed occupancy = booked window widened by the service's prep (before) +
+    // cleanup (after). 0 when no specific service was chosen on the booking.
+    const prepMin = one(r.service)?.prep_before_minutes ?? 0;
+    const cleanupMin = one(r.service)?.cleanup_after_minutes ?? 0;
+    const endMin = tsToMin(r.desired_service_end);
     return {
       id: r.id,
       guest: r.guest_name ?? 'Guest',
       line2: [cats || 'Service', src, r.pax > 1 ? `${r.pax}p` : null].filter(Boolean).join(' · '),
-      startMin: tsToMin(r.desired_service_start),
-      endMin: tsToMin(r.desired_service_end),
+      startMin: Math.max(0, tsToMin(r.desired_service_start) - prepMin),
+      endMin,
+      cleanupEndMin: cleanupMin > 0 ? Math.min(1439, endMin + cleanupMin) : undefined,
       external: r.service_location_type === 'external_hotel',
       pinnedIds: (r.reservation_resources ?? []).map((x) => x.resource_id),
       // Pending (reserved) is tentative — it doesn't hold a bed yet, so it never
@@ -81,8 +87,11 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
     const nowMs = Date.now();
     for (const it of dayItems) {
       if (!it.resource_id) continue;
-      const startMin = tsToMin(it.actual_start!);
-      const endMin = it.actual_end ? tsToMin(it.actual_end) : Math.min(1439, startMin + (it.duration_minutes ?? 60) + (one(it.service)?.prep_before_minutes ?? 0));
+      // Occupancy = prep (before the service start) + service + cleanup (after).
+      const prepMin = one(it.service)?.prep_before_minutes ?? 0;
+      const s0 = tsToMin(it.actual_start!);
+      const startMin = Math.max(0, s0 - prepMin);
+      const endMin = it.actual_end ? tsToMin(it.actual_end) : Math.min(1439, s0 + (it.duration_minutes ?? 60));
       // A finished line still holds the bed for cleanup_after_minutes (unless
       // released early). Only show it while the buffer hasn't elapsed.
       const cleanupMin = one(it.service)?.cleanup_after_minutes ?? 0;
@@ -106,7 +115,7 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
       if (rr.overdue || rr.pending) continue;
       for (const rid of rr.pinnedIds) {
         const arr = byStation.get(rid) ?? [];
-        arr.push({ line1: rr.guest, line2: rr.line2, startMin: rr.startMin, endMin: rr.endMin, ongoing: false, reservation: true, reservationId: rr.id });
+        arr.push({ line1: rr.guest, line2: rr.line2, startMin: rr.startMin, endMin: rr.endMin, cleanupEndMin: rr.cleanupEndMin, ongoing: false, reservation: true, reservationId: rr.id });
         byStation.set(rid, arr);
       }
     }
@@ -131,7 +140,9 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
       const th = one(it.therapist);
       empMeta.set(it.therapist_id, { name: th?.name ?? '—', code: th?.employee_code ?? '' });
       const startMin = tsToMin(it.actual_start!);
-      const endMin = it.actual_end ? tsToMin(it.actual_end) : Math.min(1439, startMin + (it.duration_minutes ?? 60) + (one(it.service)?.prep_before_minutes ?? 0));
+      // Therapists carry no prep/cleanup buffer (that's the bed's turnover, not
+      // the person's) — their block is the pure service window.
+      const endMin = it.actual_end ? tsToMin(it.actual_end) : Math.min(1439, startMin + (it.duration_minutes ?? 60));
       // Therapist rows already name the therapist, so the block leads with the
       // service (line 1) and the bed it is on (line 2).
       const svc = one(it.service)?.name ?? 'Service';
