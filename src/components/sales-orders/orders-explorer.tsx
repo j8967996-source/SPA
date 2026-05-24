@@ -36,6 +36,7 @@ export interface OrderRow {
   pax: number;
   cash_cents: number;
   paymaya_cents: number;
+  ar_cents: number;
   tip_cents: number;
 }
 
@@ -141,6 +142,7 @@ export function OrdersExplorer({ rows, billingCodes }: { rows: OrderRow[]; billi
               <TableHead className="w-32 font-bold">Service Date</TableHead>
               <TableHead className="w-28 font-bold text-right">Cash</TableHead>
               <TableHead className="w-28 font-bold text-right">Paymaya</TableHead>
+              <TableHead className="w-28 font-bold text-right">AR</TableHead>
               <TableHead className="w-32 font-bold text-right">Total</TableHead>
               <TableHead className="w-24 font-bold text-right">Tips</TableHead>
               <TableHead className="w-28 font-bold text-right pr-4">Status</TableHead>
@@ -149,7 +151,7 @@ export function OrdersExplorer({ rows, billingCodes }: { rows: OrderRow[]; billi
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={11} className="text-center py-16">
+                <TableCell colSpan={12} className="text-center py-16">
                   <Receipt className="size-8 mx-auto text-muted-foreground/50" />
                   <p className="text-sm font-semibold text-muted-foreground mt-3">No orders match these filters.</p>
                 </TableCell>
@@ -167,6 +169,7 @@ export function OrdersExplorer({ rows, billingCodes }: { rows: OrderRow[]; billi
                   <TableCell className="font-medium tabular">{o.service_date}</TableCell>
                   <TableCell className="font-medium tabular text-right">{moneyCell(o.cash_cents)}</TableCell>
                   <TableCell className="font-medium tabular text-right">{moneyCell(o.paymaya_cents)}</TableCell>
+                  <TableCell className="font-medium tabular text-right">{moneyCell(o.ar_cents)}</TableCell>
                   <TableCell className="font-bold tabular text-right">{peso(o.total_cents)}</TableCell>
                   <TableCell className="font-medium tabular text-right">{moneyCell(o.tip_cents, 'text-primary')}</TableCell>
                   <TableCell className="text-right pr-4">

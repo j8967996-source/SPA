@@ -100,12 +100,13 @@ export default async function RevenueConfirmPage({
                   <TableHead className="font-bold">Billing</TableHead>
                   <TableHead className="w-28 font-bold text-right">Cash</TableHead>
                   <TableHead className="w-28 font-bold text-right">PAYMAYA</TableHead>
+                  <TableHead className="w-28 font-bold text-right">AR</TableHead>
                   <TableHead className="w-32 font-bold text-right">Total</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {orders.length === 0 ? (
-                  <TableRow><TableCell colSpan={6} className="text-center py-10 text-sm font-semibold text-muted-foreground">No orders pending confirmation for this branch/day.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={7} className="text-center py-10 text-sm font-semibold text-muted-foreground">No orders pending confirmation for this branch/day.</TableCell></TableRow>
                 ) : (
                   orders.map((o) => (
                     <TableRow key={o.id}>
@@ -118,6 +119,7 @@ export default async function RevenueConfirmPage({
                       <TableCell className="font-medium text-muted-foreground">{o.billing_label ?? 'Self-pay'}</TableCell>
                       <TableCell className="font-medium tabular text-right text-muted-foreground">{moneyCell(o.cash_cents)}</TableCell>
                       <TableCell className="font-medium tabular text-right text-muted-foreground">{moneyCell(o.paymaya_cents)}</TableCell>
+                      <TableCell className="font-medium tabular text-right text-muted-foreground">{moneyCell(o.isAR ? o.total_cents : 0)}</TableCell>
                       <TableCell className="font-bold tabular text-right">{peso(o.total_cents)}</TableCell>
                     </TableRow>
                   ))

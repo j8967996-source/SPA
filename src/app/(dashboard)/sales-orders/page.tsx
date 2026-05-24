@@ -9,13 +9,13 @@ export const dynamic = 'force-dynamic';
 
 async function fetchData() {
   const supabase = createServiceClient();
-  const [ordRes, brRes, srcRes, billRes] = await Promise.all([
+  const [ordRes, brRes, srcRes, billRes, arRes] = await Promise.all([
     supabase
       .from('orders')
       .select(`
         id, order_no, status, order_type, service_date, total_cents, paid_cents,
         branch:branches!orders_branch_id_fkey ( code ),
-        billing:billing_destinations!orders_billing_to_id_fkey ( code ),
+        billing:billing_destinations!orders_billing_to_id_fkey ( code, default_payment_method_id ),
         order_customers ( id ),
         payments ( amount_cents, method:payment_methods ( code ), tips ( amount_cents ) )
       `)
@@ -37,6 +37,7 @@ async function fetchData() {
       .eq('active', true)
       .order('code'),
     supabase.from('billing_destinations').select('id, code, name').eq('active', true).order('code'),
+    supabase.from('payment_methods').select('id').eq('code', 'ar').maybeSingle(),
   ]);
   if (ordRes.error) throw new Error(ordRes.error.message);
   if (brRes.error) throw new Error(brRes.error.message);
@@ -52,10 +53,14 @@ async function fetchData() {
   }));
 
   const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
+  const arMethodId = arRes.data?.id ?? null;
   const rows: OrderRow[] = (ordRes.data ?? []).map((o) => {
     const pays = o.payments ?? [];
     const sumByCode = (code: string) =>
       pays.filter((p) => one(p.method)?.code === code).reduce((s, p) => s + p.amount_cents, 0);
+    const billing = one(o.billing);
+    // AR-billed orders carry no counter payment — the whole total is on AR terms.
+    const isAR = !!arMethodId && billing?.default_payment_method_id === arMethodId;
     return {
       id: o.id,
       order_no: o.order_no,
@@ -64,10 +69,11 @@ async function fetchData() {
       service_date: o.service_date,
       total_cents: o.total_cents,
       branch_code: one(o.branch)?.code ?? '—',
-      billing_code: one(o.billing)?.code ?? null,
+      billing_code: billing?.code ?? null,
       pax: o.order_customers?.length ?? 0,
       cash_cents: sumByCode('cash'),
       paymaya_cents: sumByCode('paymaya'),
+      ar_cents: isAR ? o.total_cents : 0,
       tip_cents: pays.reduce((s, p) => s + (p.tips ?? []).reduce((a, t) => a + t.amount_cents, 0), 0),
     };
   });
