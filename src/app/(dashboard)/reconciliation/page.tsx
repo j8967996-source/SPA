@@ -17,7 +17,7 @@ export default async function ReconciliationHubPage() {
   // tone: 'attention' = amber dot (something to do), 'clear' = green dot.
   const modules = [
     {
-      href: '/reconciliation/cash', label: 'Cash Reconciliation', icon: Banknote,
+      href: '/reconciliation/cash', label: 'Shift Cash Count', icon: Banknote,
       desc: 'Count and confirm the day’s cash drawer against recorded cash payments.',
       metric: s.cashNotClosed > 0 ? `${s.cashNotClosed} branch not closed today` : 'All branches closed today',
       attention: s.cashNotClosed > 0,

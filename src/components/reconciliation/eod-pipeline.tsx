@@ -154,9 +154,9 @@ export function EodPipeline({
             <h3 className="text-lg font-bold">Revenue Confirmation</h3>
           </div>
           <p className="text-sm font-medium text-muted-foreground flex-1">
-            Close the day&apos;s Paid / AR-completed orders on the Revenue Confirm page (cash must be reconciled first).
+            Close the day&apos;s Paid / AR-completed orders on the Revenue Confirm page (shift cash count must be closed first).
             {view.pendingConfirmCount > 0 && <span className="block mt-1 text-amber-700 dark:text-amber-400">{view.pendingConfirmCount} order(s) still to confirm.</span>}
-            {view.pendingConfirmCount > 0 && !view.cashClosed && <span className="block mt-1 text-amber-700 dark:text-amber-400">Cash not closed yet — Revenue Confirm will be blocked.</span>}
+            {view.pendingConfirmCount > 0 && !view.cashClosed && <span className="block mt-1 text-amber-700 dark:text-amber-400">Shift cash count not closed yet — Revenue Confirm will be blocked.</span>}
           </p>
           {step3Done ? (
             <div className="flex items-center gap-1.5 text-sm font-bold text-primary"><CircleCheck className="size-4" /> Confirmed {rec?.revenue_confirmed_at ? `· ${fmt(rec.revenue_confirmed_at)}` : ''}</div>

@@ -120,10 +120,10 @@ export default async function RevenueConfirmPage({
           <Card className={cn('border', cashClosed ? 'border-primary/30' : 'border-destructive/40')}>
             <CardContent className="py-3 flex items-center gap-2 text-sm font-semibold">
               {cashClosed ? (
-                <><CircleCheck className="size-4 text-primary" /> Cash reconciliation closed — ready to confirm.</>
+                <><CircleCheck className="size-4 text-primary" /> Shift cash count closed — ready to confirm.</>
               ) : (
-                <><CircleAlert className="size-4 text-destructive" /> Cash reconciliation not closed for this day.{' '}
-                  <Link href={`/reconciliation/cash?branch=${branchId}&date=${date}`} className="underline">Go to Cash Reconciliation</Link></>
+                <><CircleAlert className="size-4 text-destructive" /> Shift cash count not closed for this day.{' '}
+                  <Link href={`/reconciliation/cash?branch=${branchId}&date=${date}`} className="underline">Go to Shift Cash Count</Link></>
               )}
             </CardContent>
           </Card>

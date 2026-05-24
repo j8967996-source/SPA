@@ -52,7 +52,7 @@ export const mainNavItems: NavItem[] = [
     href: '/reconciliation',
     children: [
       { label: 'End of Day', href: '/reconciliation/end-of-day' },
-      { label: 'Cash Reconciliation', href: '/reconciliation/cash' },
+      { label: 'Shift Cash Count', href: '/reconciliation/cash' },
       { label: 'Revenue Confirm', href: '/reconciliation/revenue-confirm' },
       { label: 'Tip Settlement', href: '/reconciliation/tips' },
       { label: 'Commission Settlement', href: '/reconciliation/commission' },

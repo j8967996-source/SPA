@@ -42,7 +42,7 @@ const ROLES = [
       'Approve Void / DIS-90 / DIS-91 via Manager PIN',
       'Reopen Completed Orders',
       'Revenue Confirm (daily close)',
-      'Cash Reconciliation approval',
+      'Shift Cash Count approval',
       'Tip & Commission Settlement',
       'Generate / Settle Revenue SOA',
       'Service station status management',

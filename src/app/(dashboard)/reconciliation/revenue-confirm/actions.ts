@@ -94,7 +94,7 @@ export async function confirmRevenue(input: unknown): Promise<ActionResult<{ clo
   const { branch_id, date } = parsed.data;
 
   if (!(await isCashClosed(branch_id, date))) {
-    return { ok: false, error: 'Close the Cash Reconciliation for this branch/day first' };
+    return { ok: false, error: 'Close the Shift Cash Count for this branch/day first' };
   }
 
   const eligible = await loadConfirmable(branch_id, date);

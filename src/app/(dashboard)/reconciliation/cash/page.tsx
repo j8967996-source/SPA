@@ -37,7 +37,7 @@ export default async function CashReconciliationPage({
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 className="text-3xl font-bold tracking-tight">Cash Reconciliation</h2>
+        <h2 className="text-3xl font-bold tracking-tight">Shift Cash Count</h2>
         <p className="text-sm font-semibold text-muted-foreground mt-1">
           Count each shift&apos;s drawer before the day&apos;s Revenue Confirm.
         </p>
