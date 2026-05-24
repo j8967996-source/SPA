@@ -18,10 +18,32 @@ export interface ConfirmableOrder {
   order_type: string;
   pax: number;
   isAR: boolean;
+  service_date: string;
   total_cents: number;
   cash_cents: number;
   paymaya_cents: number;
   billing_label: string | null;
+}
+
+const ORDER_SELECT = `
+  id, order_no, status, order_type, service_date, total_cents,
+  billing:billing_destinations!orders_billing_to_id_fkey ( code, name, default_payment_method_id ),
+  order_customers ( id ),
+  payments ( amount_cents, method:payment_methods ( code ) )
+`;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapOrderRow(o: any, arMethodId: string | null): ConfirmableOrder {
+  const b = one<{ code: string; name: string; default_payment_method_id: string | null }>(o.billing);
+  const isAR = !!arMethodId && b?.default_payment_method_id === arMethodId;
+  const pays = o.payments ?? [];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sumByCode = (code: string) => pays.filter((p: any) => one<{ code: string }>(p.method)?.code === code).reduce((s: number, p: any) => s + p.amount_cents, 0);
+  return {
+    id: o.id, order_no: o.order_no, status: o.status, order_type: o.order_type,
+    pax: o.order_customers?.length ?? 0, isAR, service_date: o.service_date, total_cents: o.total_cents,
+    cash_cents: sumByCode('cash'), paymaya_cents: sumByCode('paymaya'),
+    billing_label: b ? `${b.code} — ${b.name}` : null,
+  };
 }
 
 /** Orders for a branch+date that the daily close will move to Closed. */
@@ -31,40 +53,30 @@ export async function loadConfirmable(branchId: string, date: string): Promise<C
   const arMethodId = arMethod.data?.id ?? null;
 
   const { data } = await supabase
-    .from('orders')
-    .select(`
-      id, order_no, status, order_type, total_cents,
-      billing:billing_destinations!orders_billing_to_id_fkey ( code, name, default_payment_method_id ),
-      order_customers ( id ),
-      payments ( amount_cents, method:payment_methods ( code ) )
-    `)
-    .eq('branch_id', branchId)
-    .eq('service_date', date)
-    .is('deleted_at', null)
+    .from('orders').select(ORDER_SELECT)
+    .eq('branch_id', branchId).eq('service_date', date).is('deleted_at', null)
     .in('status', ['paid', 'completed']);
 
   return (data ?? [])
-    .map((o) => {
-      const b = one(o.billing);
-      const isAR = !!arMethodId && b?.default_payment_method_id === arMethodId;
-      const pays = o.payments ?? [];
-      const sumByCode = (code: string) =>
-        pays.filter((p) => one(p.method)?.code === code).reduce((s, p) => s + p.amount_cents, 0);
-      return {
-        id: o.id,
-        order_no: o.order_no,
-        status: o.status,
-        order_type: o.order_type,
-        pax: o.order_customers?.length ?? 0,
-        isAR,
-        total_cents: o.total_cents,
-        cash_cents: sumByCode('cash'),
-        paymaya_cents: sumByCode('paymaya'),
-        billing_label: b ? `${b.code} — ${b.name}` : null,
-      };
-    })
+    .map((o) => mapOrderRow(o, arMethodId))
     // Paid (self-pay collected) OR Completed-AR (invoiced). Completed non-AR isn't done yet.
     .filter((o) => o.status === 'paid' || (o.status === 'completed' && o.isAR));
+}
+
+/** Already-confirmed (Closed) orders for a branch — the Revenue Confirm history. */
+export async function loadConfirmedHistory(branchId: string): Promise<ConfirmableOrder[]> {
+  const supabase = createServiceClient();
+  const arMethod = await supabase.from('payment_methods').select('id').eq('code', 'ar').maybeSingle();
+  const arMethodId = arMethod.data?.id ?? null;
+
+  const { data } = await supabase
+    .from('orders').select(ORDER_SELECT)
+    .eq('branch_id', branchId).is('deleted_at', null).eq('status', 'closed')
+    .order('service_date', { ascending: false })
+    .order('order_no', { ascending: false })
+    .limit(300);
+
+  return (data ?? []).map((o) => mapOrderRow(o, arMethodId));
 }
 
 export async function isCashClosed(branchId: string, date: string): Promise<boolean> {

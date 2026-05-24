@@ -15,7 +15,7 @@ import {
 import { cn } from '@/lib/utils';
 import { ConfirmRevenueButton } from '@/components/reconciliation/confirm-revenue-button';
 import { ReconDatePicker } from '@/components/reconciliation/recon-date-picker';
-import { loadConfirmable, isCashClosed } from './actions';
+import { loadConfirmable, loadConfirmedHistory, isCashClosed, type ConfirmableOrder } from './actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,10 +29,29 @@ function moneyCell(cents: number): string {
   return cents > 0 ? peso(cents) : '—';
 }
 
+function OrderRow({ o, showDate }: { o: ConfirmableOrder; showDate?: boolean }) {
+  return (
+    <TableRow>
+      {showDate && <TableCell className="font-medium tabular text-muted-foreground">{o.service_date}</TableCell>}
+      <TableCell className="font-mono font-bold">
+        <Link href={`/sales-orders/${o.id}`} className="hover:text-primary">{o.order_no}</Link>
+      </TableCell>
+      <TableCell className="font-medium text-muted-foreground text-xs capitalize">{o.order_type.replace('_', ' ')}</TableCell>
+      <TableCell className="font-bold tabular text-center">{o.pax}</TableCell>
+      <TableCell><Badge variant={o.isAR ? 'secondary' : 'default'} className="font-bold">{o.isAR ? 'AR' : 'Paid'}</Badge></TableCell>
+      <TableCell className="font-medium text-muted-foreground">{o.billing_label ?? 'Self-pay'}</TableCell>
+      <TableCell className="font-medium tabular text-right text-muted-foreground">{moneyCell(o.cash_cents)}</TableCell>
+      <TableCell className="font-medium tabular text-right text-muted-foreground">{moneyCell(o.paymaya_cents)}</TableCell>
+      <TableCell className="font-medium tabular text-right text-muted-foreground">{moneyCell(o.isAR ? o.total_cents : 0)}</TableCell>
+      <TableCell className="font-bold tabular text-right">{peso(o.total_cents)}</TableCell>
+    </TableRow>
+  );
+}
+
 export default async function RevenueConfirmPage({
   searchParams,
 }: {
-  searchParams: Promise<{ branch?: string; date?: string }>;
+  searchParams: Promise<{ branch?: string; date?: string; view?: string }>;
 }) {
   const sp = await searchParams;
   const supabase = createServiceClient();
@@ -40,25 +59,37 @@ export default async function RevenueConfirmPage({
   const list = branches ?? [];
   const branchId = sp.branch && list.some((b) => b.id === sp.branch) ? sp.branch : list[0]?.id;
   const date = sp.date || todayPHT();
+  const view = sp.view === 'history' ? 'history' : 'confirm';
 
-  const cashClosed = branchId ? await isCashClosed(branchId, date) : false;
-  const orders = branchId ? await loadConfirmable(branchId, date) : [];
+  const cashClosed = branchId && view === 'confirm' ? await isCashClosed(branchId, date) : false;
+  const orders = branchId && view === 'confirm' ? await loadConfirmable(branchId, date) : [];
+  const history = branchId && view === 'history' ? await loadConfirmedHistory(branchId) : [];
   const total = orders.reduce((s, o) => s + o.total_cents, 0);
+  const histTotal = history.reduce((s, o) => s + o.total_cents, 0);
+
+  const tabLink = (v: 'confirm' | 'history') => `/reconciliation/revenue-confirm?branch=${branchId}&date=${date}&view=${v}`;
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h2 className="text-3xl font-bold tracking-tight">Revenue Confirm</h2>
-        <p className="text-sm font-semibold text-muted-foreground mt-1">
-          Daily close — moves Paid and AR-Completed orders to Closed. (ERP posting wired later.)
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <Link href="/reconciliation" className="text-xs font-semibold text-muted-foreground hover:text-foreground">Reconciliation</Link>
+          <h2 className="text-3xl font-bold tracking-tight mt-1">Revenue Confirm</h2>
+          <p className="text-sm font-semibold text-muted-foreground mt-1">
+            Daily close — moves Paid and AR-Completed orders to Closed. (ERP posting wired later.)
+          </p>
+        </div>
+        <div className="inline-flex rounded-lg border border-border bg-card p-0.5 shrink-0">
+          <Link href={tabLink('confirm')} className={cn('rounded-md px-4 py-1.5 text-sm font-bold transition-colors', view === 'confirm' ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-accent')}>Confirm</Link>
+          <Link href={tabLink('history')} className={cn('rounded-md px-4 py-1.5 text-sm font-bold transition-colors', view === 'history' ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-accent')}>History</Link>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
         {list.map((b) => (
           <Link
             key={b.id}
-            href={`/reconciliation/revenue-confirm?branch=${b.id}&date=${date}`}
+            href={`/reconciliation/revenue-confirm?branch=${b.id}&date=${date}&view=${view}`}
             className={cn(
               'rounded-lg px-3 py-1.5 text-sm font-bold transition-colors',
               b.id === branchId ? 'bg-primary text-primary-foreground shadow-sm' : 'bg-muted text-muted-foreground hover:bg-accent',
@@ -67,13 +98,44 @@ export default async function RevenueConfirmPage({
             {b.code}
           </Link>
         ))}
-        <div className="ml-auto">
-          <ReconDatePicker basePath="/reconciliation/revenue-confirm" branchId={branchId} date={date} />
-        </div>
+        {view === 'confirm' && (
+          <div className="ml-auto">
+            <ReconDatePicker basePath="/reconciliation/revenue-confirm" branchId={branchId} date={date} />
+          </div>
+        )}
       </div>
 
       {!branchId ? (
         <Card className="border-dashed bg-muted/30 p-8 text-center text-sm font-semibold text-muted-foreground">Create a branch first.</Card>
+      ) : view === 'history' ? (
+        <Card className="p-0 overflow-hidden">
+          <CardHeader className="p-4">
+            <CardTitle className="text-base font-bold">Confirmed (Closed) · {history.length} order(s) · {peso(histTotal)}</CardTitle>
+          </CardHeader>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-32 font-bold">Service Date</TableHead>
+                <TableHead className="font-bold">Order No</TableHead>
+                <TableHead className="w-28 font-bold">Type</TableHead>
+                <TableHead className="w-16 font-bold text-center">PAX</TableHead>
+                <TableHead className="w-24 font-bold">Settle</TableHead>
+                <TableHead className="font-bold">Billing</TableHead>
+                <TableHead className="w-28 font-bold text-right">Cash</TableHead>
+                <TableHead className="w-28 font-bold text-right">PAYMAYA</TableHead>
+                <TableHead className="w-28 font-bold text-right">AR</TableHead>
+                <TableHead className="w-32 font-bold text-right">Total</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {history.length === 0 ? (
+                <TableRow><TableCell colSpan={10} className="text-center py-10 text-sm font-semibold text-muted-foreground">No confirmed orders yet for this branch.</TableCell></TableRow>
+              ) : (
+                history.map((o) => <OrderRow key={o.id} o={o} showDate />)
+              )}
+            </TableBody>
+          </Table>
+        </Card>
       ) : (
         <>
           <Card className={cn('border', cashClosed ? 'border-primary/30' : 'border-destructive/40')}>
@@ -110,23 +172,7 @@ export default async function RevenueConfirmPage({
                 {orders.length === 0 ? (
                   <TableRow><TableCell colSpan={9} className="text-center py-10 text-sm font-semibold text-muted-foreground">No orders pending confirmation for this branch/day.</TableCell></TableRow>
                 ) : (
-                  orders.map((o) => (
-                    <TableRow key={o.id}>
-                      <TableCell className="font-mono font-bold">
-                        <Link href={`/sales-orders/${o.id}`} className="hover:text-primary">{o.order_no}</Link>
-                      </TableCell>
-                      <TableCell className="font-medium text-muted-foreground text-xs capitalize">{o.order_type.replace('_', ' ')}</TableCell>
-                      <TableCell className="font-bold tabular text-center">{o.pax}</TableCell>
-                      <TableCell>
-                        <Badge variant={o.isAR ? 'secondary' : 'default'} className="font-bold">{o.isAR ? 'AR' : 'Paid'}</Badge>
-                      </TableCell>
-                      <TableCell className="font-medium text-muted-foreground">{o.billing_label ?? 'Self-pay'}</TableCell>
-                      <TableCell className="font-medium tabular text-right text-muted-foreground">{moneyCell(o.cash_cents)}</TableCell>
-                      <TableCell className="font-medium tabular text-right text-muted-foreground">{moneyCell(o.paymaya_cents)}</TableCell>
-                      <TableCell className="font-medium tabular text-right text-muted-foreground">{moneyCell(o.isAR ? o.total_cents : 0)}</TableCell>
-                      <TableCell className="font-bold tabular text-right">{peso(o.total_cents)}</TableCell>
-                    </TableRow>
-                  ))
+                  orders.map((o) => <OrderRow key={o.id} o={o} />)
                 )}
               </TableBody>
             </Table>
