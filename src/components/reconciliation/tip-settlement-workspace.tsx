@@ -259,10 +259,10 @@ export function TipSettlementWorkspace({
                 <TableHead className="w-8" />
                 <TableHead className="font-bold">Settlement No</TableHead>
                 <TableHead className="w-16 font-bold">Branch</TableHead>
-                <TableHead className="font-bold">Period</TableHead>
+                <TableHead className="font-bold pl-6">Period</TableHead>
                 <TableHead className="w-40 font-bold">Settle Date</TableHead>
                 <TableHead className="w-32 font-bold text-right">Total</TableHead>
-                <TableHead className="w-24 font-bold">Status</TableHead>
+                <TableHead className="w-24 font-bold pl-6">Status</TableHead>
                 <TableHead className="w-20" />
               </TableRow>
             </TableHeader>
@@ -275,10 +275,10 @@ export function TipSettlementWorkspace({
                       <TableCell className="text-muted-foreground">{isOpen ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}</TableCell>
                       <TableCell className="font-mono font-bold">{s.settlement_no}</TableCell>
                       <TableCell className="font-mono font-bold">{s.branch_code ?? '—'}</TableCell>
-                      <TableCell className="font-medium tabular text-muted-foreground">{s.period_from} → {s.period_to}</TableCell>
+                      <TableCell className="font-medium tabular text-muted-foreground pl-6">{s.period_from} → {s.period_to}</TableCell>
                       <TableCell className="font-medium tabular">{s.posted_at ? fmtDateTime(s.posted_at) : '—'}</TableCell>
                       <TableCell className="font-bold tabular text-right">{peso(s.subtotal_cents)}</TableCell>
-                      <TableCell><Badge variant={STATUS_VARIANT[s.status] ?? 'secondary'} className="font-bold capitalize">{s.status}</Badge></TableCell>
+                      <TableCell className="pl-6"><Badge variant={STATUS_VARIANT[s.status] ?? 'secondary'} className="font-bold capitalize">{s.status}</Badge></TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end">
                           {s.status === 'closed' && (
@@ -296,7 +296,9 @@ export function TipSettlementWorkspace({
                                 <TableHead className="w-44 font-bold pl-12">Therapist</TableHead>
                                 <TableHead className="w-32 font-bold">Date</TableHead>
                                 <TableHead className="font-bold">Order No</TableHead>
-                                <TableHead className="w-36 font-bold text-right pr-4">Amount</TableHead>
+                                <TableHead className="font-bold text-right">Amount</TableHead>
+                                <TableHead className="w-24" />
+                                <TableHead className="w-20" />
                               </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -305,7 +307,9 @@ export function TipSettlementWorkspace({
                                   <TableCell className="font-medium pl-12">{l.therapist}</TableCell>
                                   <TableCell className="font-medium tabular text-muted-foreground">{l.service_date}</TableCell>
                                   <TableCell className="font-mono font-bold">{l.order_no}</TableCell>
-                                  <TableCell className="font-bold tabular text-right pr-4">{peso(l.amount_cents)}</TableCell>
+                                  <TableCell className="font-bold tabular text-right">{peso(l.amount_cents)}</TableCell>
+                                  <TableCell className="w-24" />
+                                  <TableCell className="w-20" />
                                 </TableRow>
                               ))}
                             </TableBody>
