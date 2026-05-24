@@ -760,13 +760,14 @@ export async function requestOrderAdjustment(orderId: string, reason: string): P
     .single();
   if (!order) return { ok: false, error: 'Order not found' };
   if (order.status !== 'closed') return { ok: false, error: 'Only a closed order needs an adjustment (reopen/void otherwise)' };
-  const nowMonth = new Date().toISOString().slice(0, 7);
+  // *_month columns are DATE — store the first of the month, not a YYYY-MM string.
+  const nowMonth = `${new Date().toISOString().slice(0, 7)}-01`;
   const { error } = await supabase.from('order_adjustments').insert({
     original_order_id: orderId,
     adjustment_type: 'reversal',
     amount_cents: order.total_cents,
     reason: reason.trim(),
-    original_month: order.service_date.slice(0, 7),
+    original_month: `${order.service_date.slice(0, 7)}-01`,
     adjustment_month: nowMonth,
     approved_by_user_id: session!.staffUserId,
   });
