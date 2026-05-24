@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { loadReconStatus } from '@/lib/recon-status';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,6 +76,7 @@ function fmtDateTime(iso: string): string {
 
 export default async function DashboardPage() {
   const d = await fetchData();
+  const recon = await loadReconStatus();
 
   const kpis = [
     { label: 'Bookings Today', value: String(d.bookings) },
@@ -125,6 +127,40 @@ export default async function DashboardPage() {
               </Card>
             </Link>
           ))}
+        </div>
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-[0.12em]">Daily Close · {recon.today}</h3>
+          <Link href="/reconciliation" className="text-xs font-bold text-primary hover:underline">Reconciliation →</Link>
+        </div>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {recon.branches.map((b) => {
+            const done = b.cashClosed && b.pendingConfirm === 0;
+            return (
+              <Link key={b.id} href={`/reconciliation/revenue-confirm?branch=${b.id}&date=${recon.today}`}>
+                <Card className="transition-colors hover:bg-accent/40">
+                  <CardHeader className="pb-2 flex-row items-center justify-between">
+                    <CardTitle className="text-sm font-bold">{b.code}</CardTitle>
+                    {done ? <span className="text-xs font-bold text-primary">All done</span> : <span className="size-2.5 rounded-full bg-amber-500" />}
+                  </CardHeader>
+                  <CardContent className="flex flex-col gap-1 text-sm font-semibold">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Cash</span>
+                      <span className={b.cashClosed ? 'text-primary' : 'text-amber-700 dark:text-amber-400'}>{b.cashClosed ? 'Closed' : 'Pending'}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">To confirm</span>
+                      <span className={`tabular ${b.pendingConfirm > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground'}`}>
+                        {b.pendingConfirm > 0 ? `${b.pendingConfirm} · ${peso(b.pendingConfirmCents)}` : '0'}
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+              </Link>
+            );
+          })}
         </div>
       </div>
 

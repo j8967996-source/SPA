@@ -2,43 +2,84 @@ import Link from 'next/link';
 import { Banknote, CheckCircle2, HandCoins, Percent, Wallet, FileText, ChevronRight } from 'lucide-react';
 
 import { Card } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
+import { loadReconStatus } from '@/lib/recon-status';
 
 export const dynamic = 'force-dynamic';
 
-// /reconciliation has no data of its own — it's the parent of the recon modules.
-// Landing hub so the sidebar group never dead-ends on a 404.
-const MODULES = [
-  { href: '/reconciliation/cash', label: 'Cash Reconciliation', desc: 'Count and confirm the day’s cash drawer against recorded cash payments.', icon: Banknote },
-  { href: '/reconciliation/revenue-confirm', label: 'Revenue Confirm', desc: 'Daily close — move paid and AR-completed orders to Closed.', icon: CheckCircle2 },
-  { href: '/reconciliation/tips', label: 'Tip Settlement', desc: 'Half-month PAYMAYA tip payout to therapists (to AP).', icon: HandCoins },
-  { href: '/reconciliation/commission', label: 'Commission Settlement', desc: 'Therapist commission per period from rendered services.', icon: Percent },
-  { href: '/reconciliation/ar-balance', label: 'AR Balance', desc: 'Outstanding AR by billing destination, reconciled against payments.', icon: Wallet },
-  { href: '/reconciliation/soa', label: 'Revenue SOA', desc: 'Statements of account for AR billings — intercompany vs third-party.', icon: FileText },
-];
+function peso(cents: number): string {
+  return `₱${(cents / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
+}
 
-export default function ReconciliationHubPage() {
+export default async function ReconciliationHubPage() {
+  const s = await loadReconStatus();
+
+  // tone: 'attention' = amber dot (something to do), 'clear' = green dot.
+  const modules = [
+    {
+      href: '/reconciliation/cash', label: 'Cash Reconciliation', icon: Banknote,
+      desc: 'Count and confirm the day’s cash drawer against recorded cash payments.',
+      metric: s.cashNotClosed > 0 ? `${s.cashNotClosed} branch not closed today` : 'All branches closed today',
+      attention: s.cashNotClosed > 0,
+    },
+    {
+      href: '/reconciliation/revenue-confirm', label: 'Revenue Confirm', icon: CheckCircle2,
+      desc: 'Daily close — move paid and AR-completed orders to Closed.',
+      metric: s.pendingConfirm > 0 ? `${s.pendingConfirm} order(s) pending · ${peso(s.pendingConfirmCents)}` : 'Nothing pending today',
+      attention: s.pendingConfirm > 0,
+    },
+    {
+      href: '/reconciliation/tips', label: 'Tip Settlement', icon: HandCoins,
+      desc: 'Half-month PAYMAYA tip payout to therapists (to AP).',
+      metric: s.openTipsCount > 0 ? `${s.openTipsCount} open tip(s) · ${peso(s.openTipsCents)}` : 'No open tips',
+      attention: s.openTipsCount > 0,
+    },
+    {
+      href: '/reconciliation/commission', label: 'Commission Settlement', icon: Percent,
+      desc: 'Therapist commission per period from rendered services.',
+      metric: s.unsettledCommissionLines > 0 ? `${s.unsettledCommissionLines} unsettled line(s)` : 'Nothing unsettled',
+      attention: s.unsettledCommissionLines > 0,
+    },
+    {
+      href: '/reconciliation/ar-balance', label: 'AR Balance', icon: Wallet,
+      desc: 'Outstanding AR by billing destination, reconciled against payments.',
+      metric: s.arOutstandingCents > 0 ? `${peso(s.arOutstandingCents)} outstanding` : 'Nothing outstanding',
+      attention: s.arOutstandingCents > 0,
+    },
+    {
+      href: '/reconciliation/soa', label: 'Revenue SOA', icon: FileText,
+      desc: 'Statements of account for AR billings — intercompany vs third-party.',
+      metric: s.soaUnstated > 0 ? `${s.soaUnstated} closed AR order(s) un-stated` : 'All AR stated',
+      attention: s.soaUnstated > 0,
+    },
+  ];
+
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h2 className="text-3xl font-bold tracking-tight">Reconciliation</h2>
         <p className="text-sm font-semibold text-muted-foreground mt-1">
-          Daily cash &amp; revenue close, tips, commission, and AR statements.
+          Daily cash &amp; revenue close, tips, commission, and AR statements · live status for {s.today}.
         </p>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {MODULES.map((m) => (
+        {modules.map((m) => (
           <Link key={m.href} href={m.href}>
             <Card className="p-4 h-full flex items-start gap-3 transition-colors hover:bg-accent">
               <span className="rounded-lg bg-primary/10 p-2 text-primary">
                 <m.icon className="size-5" />
               </span>
-              <div className="flex-1">
+              <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1 font-bold">
                   {m.label}
                   <ChevronRight className="size-4 text-muted-foreground" />
                 </div>
-                <p className="text-sm font-medium text-muted-foreground mt-0.5">{m.desc}</p>
+                <div className="mt-1 flex items-center gap-2">
+                  <span className={cn('size-2 rounded-full shrink-0', m.attention ? 'bg-amber-500' : 'bg-primary')} />
+                  <span className={cn('text-sm font-bold', m.attention ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground')}>{m.metric}</span>
+                </div>
+                <p className="text-xs font-medium text-muted-foreground mt-1">{m.desc}</p>
               </div>
             </Card>
           </Link>
