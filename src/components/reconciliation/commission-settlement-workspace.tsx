@@ -50,7 +50,7 @@ export interface CommHistoryRow {
     sessions: number;
     gross_cents: number;
     commission_cents: number;
-    lines: { service_date: string; order_no: string; service: string; gross_cents: number; rate: number; commission_cents: number }[];
+    lines: { service_date: string; order_no: string; service: string; gross_cents: number; rate: number; commission_cents: number; warmup: boolean }[];
   }[];
 }
 
@@ -335,7 +335,10 @@ export function CommissionSettlementWorkspace({
                                     <TableRow key={`${g.therapist}-${i}`}>
                                       <TableCell className="font-medium tabular text-muted-foreground pl-12">{l.service_date}</TableCell>
                                       <TableCell className="font-mono font-bold">{l.order_no}</TableCell>
-                                      <TableCell className="font-medium pl-4">{l.service}</TableCell>
+                                      <TableCell className="font-medium pl-4">
+                                        {l.service}
+                                        {l.warmup && <span className="ml-2 inline-flex items-center rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-bold text-amber-700 dark:text-amber-300">warm-up</span>}
+                                      </TableCell>
                                       <TableCell className="tabular text-right text-muted-foreground">{peso(l.gross_cents)}</TableCell>
                                       <TableCell className="tabular text-right text-muted-foreground">{(l.rate * 100).toFixed(0)}%</TableCell>
                                       <TableCell className="font-bold tabular text-right">{peso(l.commission_cents)}</TableCell>
