@@ -143,7 +143,7 @@ export function OrdersExplorer({ rows, billingCodes }: { rows: OrderRow[]; billi
               <TableHead className="w-28 font-bold text-right">Paymaya</TableHead>
               <TableHead className="w-32 font-bold text-right">Total</TableHead>
               <TableHead className="w-24 font-bold text-right">Tips</TableHead>
-              <TableHead className="w-28 font-bold">Status</TableHead>
+              <TableHead className="w-28 font-bold text-right pr-4">Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -169,7 +169,7 @@ export function OrdersExplorer({ rows, billingCodes }: { rows: OrderRow[]; billi
                   <TableCell className="font-medium tabular text-right">{moneyCell(o.paymaya_cents)}</TableCell>
                   <TableCell className="font-bold tabular text-right">{peso(o.total_cents)}</TableCell>
                   <TableCell className="font-medium tabular text-right">{moneyCell(o.tip_cents, 'text-primary')}</TableCell>
-                  <TableCell>
+                  <TableCell className="text-right pr-4">
                     <Badge variant={STATUS_VARIANT[o.status] ?? 'secondary'} className="font-bold capitalize">
                       {o.status.replace('_', ' ')}
                     </Badge>
