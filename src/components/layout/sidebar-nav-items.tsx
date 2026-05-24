@@ -40,8 +40,8 @@ export const mainNavItems: NavItem[] = [
   { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { label: 'Sales Orders', href: '/sales-orders', icon: Receipt },
   { label: 'Shift Schedule', href: '/shift-schedule', icon: CalendarClock },
-  { label: 'Customers', href: '/customers', icon: Users },
   { label: 'Reservations', href: '/reservations', icon: CalendarDays },
+  { label: 'Customers', href: '/customers', icon: Users },
   { label: 'Availability', href: '/availability', icon: UserCheck },
   // Waitlist consolidated into Reservations (walk-ins use "Next available"); the
   // page/route stays but is off the nav.
