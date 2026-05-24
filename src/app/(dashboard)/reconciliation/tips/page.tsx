@@ -30,14 +30,21 @@ export default async function TipSettlementPage({ searchParams }: { searchParams
     branchId ? loadOpenTipGroups(branchId, from, to) : Promise.resolve([]),
     supabase
       .from('tip_settlements')
-      .select('id, settlement_no, status, period_from, period_to, subtotal_cents, posted_at, branch:branches!tip_settlements_branch_id_fkey ( code )')
+      .select('id, settlement_no, status, period_from, period_to, subtotal_cents, posted_at, branch:branches!tip_settlements_branch_id_fkey ( code ), tips ( amount_cents, therapist:employees!tips_therapist_id_fkey ( name ), order:orders!tips_order_id_fkey ( order_no, service_date ) )')
       .order('created_at', { ascending: false }),
   ]);
-  const history: TipHistoryRow[] = (histRes.data ?? []).map((s) => ({
-    id: s.id, settlement_no: s.settlement_no, status: s.status,
-    period_from: s.period_from, period_to: s.period_to, subtotal_cents: s.subtotal_cents,
-    posted_at: s.posted_at, branch_code: one(s.branch)?.code ?? null,
-  }));
+  const history: TipHistoryRow[] = (histRes.data ?? []).map((s) => {
+    const lines = (s.tips ?? [])
+      .map((t) => ({ therapist: one(t.therapist)?.name ?? '—', service_date: one(t.order)?.service_date ?? '', order_no: one(t.order)?.order_no ?? '—', amount_cents: t.amount_cents }))
+      .sort((a, b) => (a.service_date < b.service_date ? 1 : -1));
+    return {
+      id: s.id, settlement_no: s.settlement_no, status: s.status,
+      period_from: s.period_from, period_to: s.period_to, subtotal_cents: s.subtotal_cents,
+      posted_at: s.posted_at, branch_code: one(s.branch)?.code ?? null,
+      therapists: [...new Set(lines.map((l) => l.therapist))],
+      lines,
+    };
+  });
 
   if (!branchId) {
     return <div className="p-8 text-center text-sm font-semibold text-muted-foreground">Create a branch first.</div>;

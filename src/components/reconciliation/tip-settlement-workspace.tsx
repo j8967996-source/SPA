@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { Fragment, useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -28,6 +28,11 @@ function peso(cents: number): string {
 function fmtDateTime(iso: string): string {
   return new Intl.DateTimeFormat('en-PH', { timeZone: 'Asia/Manila', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(iso));
 }
+function therapistList(names: string[]): string {
+  if (names.length === 0) return '—';
+  if (names.length <= 2) return names.join(', ');
+  return `${names.slice(0, 2).join(', ')} +${names.length - 2}`;
+}
 
 const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive'> = {
   draft: 'secondary', posting: 'secondary', closed: 'default', failed: 'destructive', void: 'destructive',
@@ -43,6 +48,8 @@ export interface TipHistoryRow {
   period_to: string;
   subtotal_cents: number;
   posted_at: string | null;
+  therapists: string[];
+  lines: { therapist: string; service_date: string; order_no: string; amount_cents: number }[];
 }
 
 export function TipSettlementWorkspace({
@@ -68,6 +75,7 @@ export function TipSettlementWorkspace({
   const [groups, setGroups] = useState<TipGroup[]>(initialGroups);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [histExpanded, setHistExpanded] = useState<Set<string>>(new Set());
   const [loading, startLoad] = useTransition();
   const [pending, startGen] = useTransition();
 
@@ -253,33 +261,68 @@ export function TipSettlementWorkspace({
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-8" />
                 <TableHead className="font-bold">Settlement No</TableHead>
-                <TableHead className="w-20 font-bold">Branch</TableHead>
+                <TableHead className="w-16 font-bold">Branch</TableHead>
+                <TableHead className="font-bold">Therapists</TableHead>
                 <TableHead className="font-bold">Period</TableHead>
                 <TableHead className="w-40 font-bold">Settle Date</TableHead>
                 <TableHead className="w-32 font-bold text-right">Total</TableHead>
-                <TableHead className="w-28 font-bold">Status</TableHead>
-                <TableHead className="w-24" />
+                <TableHead className="w-24 font-bold">Status</TableHead>
+                <TableHead className="w-20" />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {history.map((s) => (
-                <TableRow key={s.id}>
-                  <TableCell className="font-mono font-bold">{s.settlement_no}</TableCell>
-                  <TableCell className="font-mono font-bold">{s.branch_code ?? '—'}</TableCell>
-                  <TableCell className="font-medium tabular text-muted-foreground">{s.period_from} → {s.period_to}</TableCell>
-                  <TableCell className="font-medium tabular">{s.posted_at ? fmtDateTime(s.posted_at) : '—'}</TableCell>
-                  <TableCell className="font-bold tabular text-right">{peso(s.subtotal_cents)}</TableCell>
-                  <TableCell><Badge variant={STATUS_VARIANT[s.status] ?? 'secondary'} className="font-bold capitalize">{s.status}</Badge></TableCell>
-                  <TableCell>
-                    <div className="flex justify-end">
-                      {s.status === 'closed' && (
-                        <Button size="sm" variant="ghost" className="text-destructive" onClick={() => doVoid(s.id)} disabled={pending}>Void</Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {history.map((s) => {
+                const isOpen = histExpanded.has(s.id);
+                return (
+                  <Fragment key={s.id}>
+                    <TableRow className="cursor-pointer" onClick={() => setHistExpanded((p) => { const n = new Set(p); n.has(s.id) ? n.delete(s.id) : n.add(s.id); return n; })}>
+                      <TableCell className="text-muted-foreground">{isOpen ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}</TableCell>
+                      <TableCell className="font-mono font-bold">{s.settlement_no}</TableCell>
+                      <TableCell className="font-mono font-bold">{s.branch_code ?? '—'}</TableCell>
+                      <TableCell className="font-medium" title={s.therapists.join(', ')}>{therapistList(s.therapists)}</TableCell>
+                      <TableCell className="font-medium tabular text-muted-foreground">{s.period_from} → {s.period_to}</TableCell>
+                      <TableCell className="font-medium tabular">{s.posted_at ? fmtDateTime(s.posted_at) : '—'}</TableCell>
+                      <TableCell className="font-bold tabular text-right">{peso(s.subtotal_cents)}</TableCell>
+                      <TableCell><Badge variant={STATUS_VARIANT[s.status] ?? 'secondary'} className="font-bold capitalize">{s.status}</Badge></TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <div className="flex justify-end">
+                          {s.status === 'closed' && (
+                            <Button size="sm" variant="ghost" className="text-destructive" onClick={() => doVoid(s.id)} disabled={pending}>Void</Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                    {isOpen && (
+                      <TableRow>
+                        <TableCell colSpan={9} className="bg-muted/20 p-0">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-44 font-bold pl-12">Therapist</TableHead>
+                                <TableHead className="w-32 font-bold">Date</TableHead>
+                                <TableHead className="font-bold">Order No</TableHead>
+                                <TableHead className="w-36 font-bold text-right pr-4">Amount</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {s.lines.map((l, i) => (
+                                <TableRow key={`${s.id}-${i}`}>
+                                  <TableCell className="font-medium pl-12">{l.therapist}</TableCell>
+                                  <TableCell className="font-medium tabular text-muted-foreground">{l.service_date}</TableCell>
+                                  <TableCell className="font-mono font-bold">{l.order_no}</TableCell>
+                                  <TableCell className="font-bold tabular text-right pr-4">{peso(l.amount_cents)}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </Fragment>
+                );
+              })}
             </TableBody>
           </Table>
         </Card>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { Fragment, useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -50,6 +50,7 @@ export interface CommHistoryRow {
   total_commission_cents: number;
   confirmed_at: string | null;
   therapists: string[];
+  entries: { therapist: string; sessions: number; gross_cents: number; commission_cents: number }[];
 }
 
 export function CommissionSettlementWorkspace({
@@ -75,6 +76,7 @@ export function CommissionSettlementWorkspace({
   const [groups, setGroups] = useState<CommGroup[]>(initialGroups);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [histExpanded, setHistExpanded] = useState<Set<string>>(new Set());
   const [loading, startLoad] = useTransition();
   const [pending, startGen] = useTransition();
 
@@ -266,6 +268,7 @@ export function CommissionSettlementWorkspace({
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-8" />
                 <TableHead className="font-bold">Settlement No</TableHead>
                 <TableHead className="w-16 font-bold">Branch</TableHead>
                 <TableHead className="font-bold">Therapists</TableHead>
@@ -278,25 +281,57 @@ export function CommissionSettlementWorkspace({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {history.map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell className="font-mono font-bold">{p.period_no}</TableCell>
-                  <TableCell className="font-mono font-bold">{p.branch_code ?? '—'}</TableCell>
-                  <TableCell className="font-medium" title={p.therapists.join(', ')}>{therapistList(p.therapists)}</TableCell>
-                  <TableCell className="font-medium tabular text-muted-foreground">{p.period_from} → {p.period_to}</TableCell>
-                  <TableCell className="font-medium tabular">{p.confirmed_at ? fmtDateTime(p.confirmed_at) : '—'}</TableCell>
-                  <TableCell className="font-bold tabular text-right">{p.total_sessions}</TableCell>
-                  <TableCell className="font-bold tabular text-right">{peso(p.total_commission_cents)}</TableCell>
-                  <TableCell><Badge variant={STATUS_VARIANT[p.status] ?? 'secondary'} className="font-bold capitalize">{p.status}</Badge></TableCell>
-                  <TableCell>
-                    <div className="flex justify-end">
-                      {p.status === 'closed' && (
-                        <Button size="sm" variant="ghost" className="text-destructive" onClick={() => doVoid(p.id)} disabled={pending}>Void</Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {history.map((p) => {
+                const isOpen = histExpanded.has(p.id);
+                return (
+                  <Fragment key={p.id}>
+                    <TableRow className="cursor-pointer" onClick={() => setHistExpanded((prev) => { const n = new Set(prev); n.has(p.id) ? n.delete(p.id) : n.add(p.id); return n; })}>
+                      <TableCell className="text-muted-foreground">{isOpen ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}</TableCell>
+                      <TableCell className="font-mono font-bold">{p.period_no}</TableCell>
+                      <TableCell className="font-mono font-bold">{p.branch_code ?? '—'}</TableCell>
+                      <TableCell className="font-medium" title={p.therapists.join(', ')}>{therapistList(p.therapists)}</TableCell>
+                      <TableCell className="font-medium tabular text-muted-foreground">{p.period_from} → {p.period_to}</TableCell>
+                      <TableCell className="font-medium tabular">{p.confirmed_at ? fmtDateTime(p.confirmed_at) : '—'}</TableCell>
+                      <TableCell className="font-bold tabular text-right">{p.total_sessions}</TableCell>
+                      <TableCell className="font-bold tabular text-right">{peso(p.total_commission_cents)}</TableCell>
+                      <TableCell><Badge variant={STATUS_VARIANT[p.status] ?? 'secondary'} className="font-bold capitalize">{p.status}</Badge></TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <div className="flex justify-end">
+                          {p.status === 'closed' && (
+                            <Button size="sm" variant="ghost" className="text-destructive" onClick={() => doVoid(p.id)} disabled={pending}>Void</Button>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                    {isOpen && (
+                      <TableRow>
+                        <TableCell colSpan={10} className="bg-muted/20 p-0">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="font-bold pl-12">Therapist</TableHead>
+                                <TableHead className="w-24 font-bold text-right">Sessions</TableHead>
+                                <TableHead className="w-32 font-bold text-right">Gross</TableHead>
+                                <TableHead className="w-36 font-bold text-right pr-4">Commission</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {p.entries.map((e, i) => (
+                                <TableRow key={`${p.id}-${i}`}>
+                                  <TableCell className="font-medium pl-12">{e.therapist}</TableCell>
+                                  <TableCell className="tabular text-right text-muted-foreground">{e.sessions}</TableCell>
+                                  <TableCell className="tabular text-right text-muted-foreground">{peso(e.gross_cents)}</TableCell>
+                                  <TableCell className="font-bold tabular text-right pr-4">{peso(e.commission_cents)}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </Fragment>
+                );
+              })}
             </TableBody>
           </Table>
         </Card>

@@ -30,17 +30,23 @@ export default async function CommissionSettlementPage({ searchParams }: { searc
     branchId ? loadCommissionGroups(branchId, from, to) : Promise.resolve([]),
     supabase
       .from('commission_periods')
-      .select('id, period_no, status, period_from, period_to, total_sessions, total_commission_cents, confirmed_at, branch:branches!commission_periods_branch_id_fkey ( code ), commission_entries ( therapist:employees!commission_entries_therapist_id_fkey ( name ) )')
+      .select('id, period_no, status, period_from, period_to, total_sessions, total_commission_cents, confirmed_at, branch:branches!commission_periods_branch_id_fkey ( code ), commission_entries ( total_sessions, total_gross_sales_cents, final_amount_cents, therapist:employees!commission_entries_therapist_id_fkey ( name ) )')
       .order('created_at', { ascending: false }),
   ]);
-  const history: CommHistoryRow[] = (histRes.data ?? []).map((p) => ({
-    id: p.id, period_no: p.period_no, status: p.status,
-    period_from: p.period_from, period_to: p.period_to,
-    total_sessions: p.total_sessions ?? 0, total_commission_cents: p.total_commission_cents ?? 0,
-    branch_code: one(p.branch)?.code ?? null,
-    confirmed_at: p.confirmed_at,
-    therapists: (p.commission_entries ?? []).map((e) => one(e.therapist)?.name).filter(Boolean) as string[],
-  }));
+  const history: CommHistoryRow[] = (histRes.data ?? []).map((p) => {
+    const entries = (p.commission_entries ?? [])
+      .map((e) => ({ therapist: one(e.therapist)?.name ?? '—', sessions: e.total_sessions ?? 0, gross_cents: e.total_gross_sales_cents ?? 0, commission_cents: e.final_amount_cents ?? 0 }))
+      .sort((a, b) => b.commission_cents - a.commission_cents);
+    return {
+      id: p.id, period_no: p.period_no, status: p.status,
+      period_from: p.period_from, period_to: p.period_to,
+      total_sessions: p.total_sessions ?? 0, total_commission_cents: p.total_commission_cents ?? 0,
+      branch_code: one(p.branch)?.code ?? null,
+      confirmed_at: p.confirmed_at,
+      therapists: entries.map((e) => e.therapist),
+      entries,
+    };
+  });
 
   if (!branchId) {
     return <div className="p-8 text-center text-sm font-semibold text-muted-foreground">Create a branch first.</div>;
