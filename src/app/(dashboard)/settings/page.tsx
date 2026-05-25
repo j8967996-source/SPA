@@ -15,6 +15,7 @@ import {
   Cog,
   KeySquare,
   UserCog,
+  History,
 } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -51,6 +52,7 @@ const sections = [
       { icon: UserCog, label: 'Users', href: '/settings/users', desc: 'Staff accounts and roles' },
       { icon: KeySquare, label: 'Roles & Permissions', href: '/settings/roles', desc: 'Role-based access (future)' },
       { icon: Cog, label: 'System Settings', href: '/settings/system', desc: 'Magic numbers & thresholds' },
+      { icon: History, label: 'Audit Log', href: '/settings/audit-log', desc: 'Who changed what & when (admin)' },
     ],
   },
 ];

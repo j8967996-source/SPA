@@ -102,6 +102,7 @@ export const mainNavItems: NavItem[] = [
         items: [
           { label: 'Users', href: '/settings/users' },
           { label: 'System Settings', href: '/settings/system' },
+          { label: 'Audit Log', href: '/settings/audit-log' },
         ],
       },
     ],
