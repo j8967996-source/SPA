@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { createServiceClient } from '@/lib/supabase/server';
+import { createAuditedClient } from '@/lib/supabase/server';
 
 const schema = z
   .object({
@@ -34,7 +34,7 @@ export async function createDiscountClass(input: unknown): Promise<ActionResult>
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
 
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('discount_classes').insert({ ...parsed.data, active: true });
   if (error) {
     if (error.code === '23505') return { ok: false, error: `Code "${parsed.data.code}" already exists` };
@@ -48,7 +48,7 @@ export async function updateDiscountClass(input: unknown): Promise<ActionResult>
   const parsed = updateSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const { id, ...patch } = parsed.data;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('discount_classes').update(patch).eq('id', id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/settings/discount-classes');
@@ -56,7 +56,7 @@ export async function updateDiscountClass(input: unknown): Promise<ActionResult>
 }
 
 export async function setDiscountClassActive(id: string, active: boolean): Promise<ActionResult> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('discount_classes').update({ active }).eq('id', id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/settings/discount-classes');

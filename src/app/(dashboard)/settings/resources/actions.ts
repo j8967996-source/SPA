@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { createServiceClient } from '@/lib/supabase/server';
+import { createAuditedClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/database';
 
 type ResourceUpdate = Database['public']['Tables']['resources']['Update'];
@@ -24,7 +24,7 @@ export type ActionResult = { ok: true } | { ok: false; error: string };
 export async function createResource(input: unknown): Promise<ActionResult> {
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('resources').insert({
     ...parsed.data,
     location_zone: parsed.data.location_zone || null,
@@ -46,7 +46,7 @@ export async function updateResource(input: unknown): Promise<ActionResult> {
   if (d.location_zone !== undefined) patch.location_zone = d.location_zone || null;
   if (d.capacity !== undefined) patch.capacity = d.capacity;
   if (d.business_unit_id !== undefined) patch.business_unit_id = d.business_unit_id ?? null;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('resources').update(patch).eq('id', d.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/settings/resources');
@@ -58,7 +58,7 @@ export async function setResourceStatus(
   status: 'active' | 'cleaning' | 'maintenance' | 'closed',
   reason?: string,
 ): Promise<ActionResult> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase
     .from('resources')
     .update({

@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { createServiceClient } from '@/lib/supabase/server';
+import { createAuditedClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/database';
 
 type ServiceItemUpdate = Database['public']['Tables']['service_items']['Update'];
@@ -33,7 +33,7 @@ const PRICE_TO = '2999-12-31';
 
 // Upsert the canonical "Normal" all-branch open-ended price row for an item.
 async function syncNormalPrice(serviceItemId: string, pricePhp: number) {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const priceCents = Math.round(pricePhp * 100);
   const { data: existing } = await supabase
     .from('service_item_prices')
@@ -59,7 +59,7 @@ export async function createServiceItem(input: unknown): Promise<ActionResult> {
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const { price, ...fields } = parsed.data;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data, error } = await supabase
     .from('service_items')
     .insert({
@@ -97,7 +97,7 @@ export async function updateServiceItem(input: unknown): Promise<ActionResult> {
   if (d.commission_applicable !== undefined) patch.commission_applicable = d.commission_applicable;
   if (d.tip_applicable !== undefined) patch.tip_applicable = d.tip_applicable;
   if (d.business_unit_id !== undefined) patch.business_unit_id = d.business_unit_id ?? null;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   if (Object.keys(patch).length > 0) {
     const { error } = await supabase.from('service_items').update(patch).eq('id', d.id);
     if (error) return { ok: false, error: error.message };
@@ -131,7 +131,7 @@ export interface PriceSegment {
 
 /** The Normal / all-branch price timeline for a service item, oldest first. */
 export async function loadPriceSchedule(serviceItemId: string): Promise<PriceSegment[]> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data } = await supabase
     .from('service_item_prices')
     .select('id, price_cents, effective_from, effective_to')
@@ -162,7 +162,7 @@ export async function scheduleServicePriceChange(input: unknown): Promise<Action
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const { service_item_id, price, effective_from } = parsed.data;
   if (effective_from < todayPHT()) return { ok: false, error: 'Effective date cannot be in the past' };
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
 
   // The latest (open) segment is the one we split.
   const { data: open } = await supabase
@@ -196,7 +196,7 @@ export async function scheduleServicePriceChange(input: unknown): Promise<Action
 /** Edit the price of a not-yet-effective (future) segment. */
 export async function updateFuturePrice(priceId: string, pricePhp: number): Promise<ActionResult> {
   if (!(pricePhp > 0)) return { ok: false, error: 'Price must be greater than 0' };
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: row } = await supabase.from('service_item_prices').select('effective_from').eq('id', priceId).maybeSingle();
   if (!row) return { ok: false, error: 'Price not found' };
   if (row.effective_from <= todayPHT()) return { ok: false, error: 'Only a future price change can be edited' };
@@ -208,7 +208,7 @@ export async function updateFuturePrice(priceId: string, pricePhp: number): Prom
 
 /** Cancel the latest future price change, re-opening the prior segment. */
 export async function deleteFuturePrice(priceId: string): Promise<ActionResult> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: row } = await supabase
     .from('service_item_prices')
     .select('id, service_item_id, effective_from, effective_to')
@@ -274,7 +274,7 @@ export async function batchScheduleServicePriceChange(
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const { service_item_ids, mode, value, effective_from } = parsed.data;
   if (effective_from < todayPHT()) return { ok: false, error: 'Effective date cannot be in the past' };
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
 
   const { data: metas } = await supabase.from('service_items').select('id, code, name').in('id', service_item_ids);
   const label = new Map((metas ?? []).map((m) => [m.id, `${m.code} — ${m.name}`]));
@@ -323,7 +323,7 @@ export async function batchScheduleServicePriceChange(
 }
 
 export async function setServiceItemActive(id: string, active: boolean): Promise<ActionResult> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('service_items').update({ active }).eq('id', id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/settings/service-items');

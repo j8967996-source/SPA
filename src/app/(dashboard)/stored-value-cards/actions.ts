@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { createServiceClient } from '@/lib/supabase/server';
+import { createAuditedClient } from '@/lib/supabase/server';
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -17,7 +17,7 @@ const issueSchema = z.object({
 });
 
 async function nextCardNo(): Promise<string> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const ymd = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' })
     .format(new Date()).replace(/-/g, '');
   const prefix = `SVC-${ymd}-`;
@@ -35,7 +35,7 @@ export async function issueCard(input: unknown): Promise<ActionResult> {
   const parsed = issueSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const initialCents = Math.round(d.initial_amount * 100);
   const bonusCents = Math.round(d.bonus_amount * 100);
   const balance = initialCents + bonusCents;
@@ -86,7 +86,7 @@ export async function topUpCard(input: unknown): Promise<ActionResult> {
   const parsed = topUpSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const addCents = Math.round(d.amount * 100);
 
   const { data: card, error: ce } = await supabase
@@ -116,7 +116,7 @@ export async function setCardStatus(
   id: string,
   status: 'active' | 'suspended',
 ): Promise<ActionResult> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: card } = await supabase
     .from('stored_value_cards')
     .select('current_balance_cents, branch_id')

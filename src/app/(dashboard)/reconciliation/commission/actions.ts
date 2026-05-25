@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { createServiceClient } from '@/lib/supabase/server';
+import { createAuditedClient } from '@/lib/supabase/server';
 import { currentSession, isManager } from '@/lib/auth';
 
 export type ActionResult<T = unknown> = { ok: true; data?: T } | { ok: false; error: string };
@@ -33,7 +33,7 @@ export interface CommGroup {
 // Eligible order_items at a branch: parent order paid/closed, within range, has a
 // therapist, the service is commission-applicable, and not yet settled.
 async function loadEligible(from: string, to: string, branchId: string) {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data, error } = await supabase
     .from('order_items')
     .select(`
@@ -61,7 +61,7 @@ async function loadEligible(from: string, to: string, branchId: string) {
 // rate is the warm-up band rate for the day's Nth session (by actual_start), else
 // the therapist's class rate (branch override → global). No DB writes.
 async function computeGroups(branchId: string, from: string, to: string): Promise<CommGroup[]> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const eligible = await loadEligible(from, to, branchId);
   if (eligible.length === 0) return [];
 
@@ -170,7 +170,7 @@ export async function settleCommission(input: unknown): Promise<ActionResult<{ i
   const groups = (await computeGroups(branch_id, from, to)).filter((g) => selectedSet.has(g.therapist_id));
   if (groups.length === 0) return { ok: false, error: 'No eligible commission for the selection' };
 
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: branch } = await supabase.from('branches').select('code').eq('id', branch_id).single();
   const ym = from.replace(/-/g, '').slice(0, 6);
   const prefix = `CP-${branch?.code ?? 'X'}-${ym}-`;
@@ -220,7 +220,7 @@ export async function settleCommission(input: unknown): Promise<ActionResult<{ i
 export async function voidCommissionPeriod(id: string): Promise<ActionResult> {
   const session = await currentSession();
   if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   await supabase.from('order_items').update({ commission_settlement_id: null }).eq('commission_settlement_id', id);
   const { error } = await supabase.from('commission_periods').update({ status: 'void' }).eq('id', id);
   if (error) return { ok: false, error: error.message };

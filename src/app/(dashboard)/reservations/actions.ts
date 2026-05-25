@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { createServiceClient } from '@/lib/supabase/server';
+import { createAuditedClient } from '@/lib/supabase/server';
 import { getReservationGraceMinutes, isReservationOverdue } from '@/lib/reservations';
 import { canPerformAny, matchesGender } from '@/lib/therapist-availability';
 import { addOrderItem } from '@/app/(dashboard)/sales-orders/actions';
@@ -39,7 +39,7 @@ export type ActionResult<T = unknown> = { ok: true; data?: T } | { ok: false; er
 
 // Replace a reservation's service-category set (the multi-select source of truth).
 async function syncReservationCategories(reservationId: string, categoryIds: string[]) {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   await supabase.from('reservation_service_categories').delete().eq('reservation_id', reservationId);
   if (categoryIds.length === 0) return null;
   const { error } = await supabase.from('reservation_service_categories').insert(
@@ -49,7 +49,7 @@ async function syncReservationCategories(reservationId: string, categoryIds: str
 }
 
 async function nextReservationNo(branchCode: string, dateIso: string): Promise<string> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const ymd = dateIso.slice(0, 10).replace(/-/g, '');
   const prefix = `RSV-${branchCode}-${ymd}-`;
   const { data } = await supabase
@@ -70,7 +70,7 @@ export async function createReservation(input: unknown): Promise<ActionResult> {
   if (new Date(d.desired_service_end) <= new Date(d.desired_service_start)) {
     return { ok: false, error: 'End time must be after start time' };
   }
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: branch, error: be } = await supabase.from('branches').select('code').eq('id', d.branch_id).single();
   if (be || !branch) return { ok: false, error: 'Branch not found' };
 
@@ -153,7 +153,7 @@ export async function updateReservation(input: unknown): Promise<ActionResult> {
   if (new Date(d.desired_service_end) <= new Date(d.desired_service_start)) {
     return { ok: false, error: 'End time must be after start time' };
   }
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: existing } = await supabase.from('reservations').select('status').eq('id', d.id).maybeSingle();
   if (!existing) return { ok: false, error: 'Reservation not found' };
   if (['converted', 'cancelled', 'no_show'].includes(existing.status)) {
@@ -213,7 +213,7 @@ export async function getReservationAvailability(input: {
   exclude_id?: string | null;
 }): Promise<ActionResult<{ byType: Record<string, { capacity: number; used: number }> }>> {
   if (!input.branch_id || !input.start || !input.end) return { ok: false, error: 'Missing input' };
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
 
   // Capacity = active resources of each type at the branch.
   const { data: resources } = await supabase
@@ -255,7 +255,7 @@ export async function getReservationAvailability(input: {
 
 // Replace a reservation's pinned beds (hybrid optional binding).
 async function syncReservationResources(reservationId: string, resourceIds: string[]) {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   await supabase.from('reservation_resources').delete().eq('reservation_id', reservationId);
   if (resourceIds.length === 0) return null;
   const { error } = await supabase.from('reservation_resources').insert(
@@ -276,7 +276,7 @@ async function computeBusyResourceIds(
   end: string,
   excludeReservationId?: string | null,
 ): Promise<Set<string>> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const startMs = Date.parse(start);
   const endMs = Date.parse(end);
   const busy = new Set<string>();
@@ -343,7 +343,7 @@ export async function nextAvailableSlot(input: {
   service_group?: string | null; // narrower: a specific service group within it
 }): Promise<ActionResult<{ start: string | null; availableNow: boolean }>> {
   if (!input.branch_id || !input.resource_type) return { ok: false, error: 'Missing input' };
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const pad2 = (n: number) => String(n).padStart(2, '0');
   const phtDate = (ms: number) => {
     const p = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(ms));
@@ -477,7 +477,7 @@ export async function getFreeBeds(input: {
 }): Promise<ActionResult<{ beds: { id: string; name: string; type: string; zone: string; free: boolean }[] }>> {
   if (!input.branch_id || !input.start || !input.end) return { ok: false, error: 'Missing input' };
   if (new Date(input.end) <= new Date(input.start)) return { ok: false, error: 'Bad window' };
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: resources } = await supabase
     .from('resources')
     .select('id, resource_name, resource_type, location_zone')
@@ -504,7 +504,7 @@ async function resolvePinnedBeds(
 ): Promise<{ ok: true; ids: string[] } | { ok: false; error: string }> {
   if (locationType === 'external_hotel' || resourceIds.length === 0) return { ok: true, ids: [] };
   if (resourceIds.length > pax) return { ok: false, error: `Can't pin more beds (${resourceIds.length}) than pax (${pax})` };
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: rows } = await supabase
     .from('resources')
     .select('id, resource_name')
@@ -535,7 +535,7 @@ async function autoAssignAdjacentBeds(
   excludeReservationId?: string | null,
 ): Promise<string[]> {
   if (pax < 1) return [];
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: cats } = await supabase
     .from('service_categories').select('required_resource_type').in('id', categoryIds);
   const types = [...new Set((cats ?? []).map((c) => c.required_resource_type).filter(Boolean) as string[])];
@@ -599,7 +599,7 @@ export async function setReservationStatus(
   id: string,
   status: 'reserved' | 'confirmed' | 'cancelled' | 'no_show',
 ): Promise<ActionResult> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('reservations').update({ status }).eq('id', id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/reservations');
@@ -612,7 +612,7 @@ export async function setReservationStatus(
 // occupancy: explicit pins must still be free (else error → adjust & retry); a
 // seat-together group is auto-assigned fresh adjacent beds now.
 export async function confirmReservation(id: string): Promise<ActionResult> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: r } = await supabase
     .from('reservations')
     .select('id, branch_id, status, pax, seat_together, service_location_type, desired_service_start, desired_service_end, reservation_service_categories ( service_category_id ), reservation_resources ( resource_id )')
@@ -641,7 +641,7 @@ export async function confirmReservation(id: string): Promise<ActionResult> {
 
 // Create a draft Sales Order from a reservation and mark it converted.
 export async function convertReservationToOrder(id: string): Promise<ActionResult<{ orderId: string }>> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: r, error: re } = await supabase
     .from('reservations')
     .select('id, branch_id, source_id, billing_to_id, desired_service_start, status, guest_name, guest_phone, pax, note, service_item_id, seat_together')

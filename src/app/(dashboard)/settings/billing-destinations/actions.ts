@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { createServiceClient } from '@/lib/supabase/server';
+import { createAuditedClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/database';
 
 type BillingUpdate = Database['public']['Tables']['billing_destinations']['Update'];
@@ -27,7 +27,7 @@ export type ActionResult = { ok: true } | { ok: false; error: string };
 export async function createBillingDestination(input: unknown): Promise<ActionResult> {
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('billing_destinations').insert({
     code: parsed.data.code,
     name: parsed.data.name,
@@ -58,7 +58,7 @@ export async function updateBillingDestination(input: unknown): Promise<ActionRe
   if (d.default_payment_method_id !== undefined)
     patch.default_payment_method_id = d.default_payment_method_id || null;
   if (d.credit_terms_days !== undefined) patch.credit_terms_days = d.credit_terms_days;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('billing_destinations').update(patch).eq('id', d.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/settings/billing-destinations');
@@ -66,7 +66,7 @@ export async function updateBillingDestination(input: unknown): Promise<ActionRe
 }
 
 export async function setBillingDestinationActive(id: string, active: boolean): Promise<ActionResult> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('billing_destinations').update({ active }).eq('id', id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/settings/billing-destinations');

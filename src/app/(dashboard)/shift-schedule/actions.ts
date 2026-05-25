@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { createServiceClient } from '@/lib/supabase/server';
+import { createAuditedClient } from '@/lib/supabase/server';
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -37,7 +37,7 @@ export async function setShift(input: unknown): Promise<ActionResult> {
     return { ok: false, error: 'Pick a leave type' };
   }
 
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
 
   await supabase
     .from('employee_shifts')
@@ -66,7 +66,7 @@ export async function clearShift(
   branchId: string,
   shiftDate: string,
 ): Promise<ActionResult> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase
     .from('employee_shifts')
     .delete()

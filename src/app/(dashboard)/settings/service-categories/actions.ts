@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { createServiceClient } from '@/lib/supabase/server';
+import { createAuditedClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/database';
 
 type CategoryUpdate = Database['public']['Tables']['service_categories']['Update'];
@@ -23,7 +23,7 @@ const updateSchema = schema.partial({ code: true }).extend({ id: z.string().uuid
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
 async function syncJunction(categoryId: string, businessUnitIds: string[]) {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const del = await supabase
     .from('service_category_business_units')
     .delete()
@@ -42,7 +42,7 @@ async function syncJunction(categoryId: string, businessUnitIds: string[]) {
 export async function createServiceCategory(input: unknown): Promise<ActionResult> {
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data, error } = await supabase
     .from('service_categories')
     .insert({
@@ -78,7 +78,7 @@ export async function updateServiceCategory(input: unknown): Promise<ActionResul
   if (d.tip_applicable !== undefined) patch.tip_applicable = d.tip_applicable;
   if (d.revenue_account !== undefined) patch.revenue_account = d.revenue_account || null;
   if (d.required_resource_type !== undefined) patch.required_resource_type = d.required_resource_type || null;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   if (Object.keys(patch).length > 0) {
     const { error } = await supabase.from('service_categories').update(patch).eq('id', d.id);
     if (error) return { ok: false, error: error.message };
@@ -94,7 +94,7 @@ export async function updateServiceCategory(input: unknown): Promise<ActionResul
 }
 
 export async function setServiceCategoryActive(id: string, active: boolean): Promise<ActionResult> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('service_categories').update({ active }).eq('id', id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/settings/service-categories');

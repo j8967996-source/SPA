@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { createServiceClient } from '@/lib/supabase/server';
+import { createAuditedClient } from '@/lib/supabase/server';
 import { currentSession, isManager } from '@/lib/auth';
 
 export type ActionResult<T = unknown> = { ok: true; data?: T } | { ok: false; error: string };
@@ -19,7 +19,7 @@ export interface SoaCandidate {
 
 /** Closed AR orders for a billing destination in range, not yet on any SOA. */
 export async function loadSoaCandidates(billingToId: string, from: string, to: string): Promise<SoaCandidate[]> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const [{ data: orders }, { data: taken }] = await Promise.all([
     supabase
       .from('orders')
@@ -112,7 +112,7 @@ export interface SoaHistoryRow {
 
 /** All statements, newest first, each with its stated-orders detail. */
 export async function loadSoaHistory(): Promise<SoaHistoryRow[]> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data } = await supabase
     .from('revenue_soa')
     .select(`
@@ -147,7 +147,7 @@ export async function loadSoaHistory(): Promise<SoaHistoryRow[]> {
  * SOA yet — grouped, with per-guest detail. Drives the "Generate SOA" workspace.
  */
 export async function loadSoaWorkspace(from: string, to: string): Promise<SoaGroup[]> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: arMethod } = await supabase.from('payment_methods').select('id').eq('code', 'ar').maybeSingle();
   const arId = arMethod?.id ?? null;
   if (!arId) return [];
@@ -217,7 +217,7 @@ export async function generateSOA(input: unknown): Promise<ActionResult<{ id: st
   const { billing_to_id, period_from, period_to } = parsed.data;
   if (period_to < period_from) return { ok: false, error: 'End date must be on/after start date' };
 
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: billing } = await supabase
     .from('billing_destinations')
     .select('code, settlement_type, credit_terms_days')
@@ -260,7 +260,7 @@ export async function generateSOA(input: unknown): Promise<ActionResult<{ id: st
 export async function issueSOA(id: string): Promise<ActionResult> {
   const session = await currentSession();
   if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: soa } = await supabase
     .from('revenue_soa')
     .select('status, period_to, settlement_type, billing:billing_destinations!revenue_soa_billing_to_id_fkey ( credit_terms_days )')
@@ -282,7 +282,7 @@ export async function issueSOA(id: string): Promise<ActionResult> {
 export async function settleSOA(id: string): Promise<ActionResult> {
   const session = await currentSession();
   if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: soa } = await supabase.from('revenue_soa').select('status, total_cents').eq('id', id).single();
   if (!soa) return { ok: false, error: 'SOA not found' };
   if (!['issued', 'partial_paid'].includes(soa.status)) return { ok: false, error: 'Only an issued SOA can be settled' };
@@ -316,7 +316,7 @@ export async function settleSOABatch(ids: string[]): Promise<ActionResult<{ sett
 export async function voidSOA(id: string): Promise<ActionResult> {
   const session = await currentSession();
   if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   // Release the orders so they can be re-stated.
   await supabase.from('revenue_soa_orders').delete().eq('soa_id', id);
   const { error } = await supabase.from('revenue_soa').update({ status: 'void' }).eq('id', id);

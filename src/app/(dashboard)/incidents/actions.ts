@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { createServiceClient } from '@/lib/supabase/server';
+import { createAuditedClient } from '@/lib/supabase/server';
 import { currentSession, isManager } from '@/lib/auth';
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -23,7 +23,7 @@ export async function reportIncident(input: unknown): Promise<ActionResult> {
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
   const session = await currentSession();
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('incident_log').insert({
     related_order_id: d.related_order_id || null,
     customer_name: d.customer_name,
@@ -44,7 +44,7 @@ export async function reportIncident(input: unknown): Promise<ActionResult> {
 export async function resolveIncident(id: string, action: string): Promise<ActionResult> {
   const session = await currentSession();
   if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase
     .from('incident_log')
     .update({ resolved: true, resolved_at: new Date().toISOString(), resolved_by_staff_id: session!.staffUserId, resolution_action: action || null })

@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { createServiceClient } from '@/lib/supabase/server';
+import { createAuditedClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/database';
 
 type PolicyUpdate = Database['public']['Tables']['commission_policies']['Update'];
@@ -26,7 +26,7 @@ export type ActionResult = { ok: true } | { ok: false; error: string };
 
 // Replace a policy's duration bands, ordered by ceiling (NULL open-end last).
 async function syncBands(policyId: string, bands: { min_minutes: number | null; up_to_minutes: number | null; commission_rate: number }[]) {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   await supabase.from('commission_policy_bands').delete().eq('policy_id', policyId);
   if (bands.length === 0) return null;
   const sorted = [...bands].sort((a, b) => {
@@ -44,7 +44,7 @@ export async function createCommissionPolicy(input: unknown): Promise<ActionResu
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data, error } = await supabase
     .from('commission_policies')
     .insert({ code: d.code, name: d.name, warmup_enabled: d.warmup_enabled, warmup_occurrence: d.warmup_occurrence, active: true })
@@ -68,7 +68,7 @@ export async function updateCommissionPolicy(input: unknown): Promise<ActionResu
   if (d.name !== undefined) patch.name = d.name;
   if (d.warmup_enabled !== undefined) patch.warmup_enabled = d.warmup_enabled;
   if (d.warmup_occurrence !== undefined) patch.warmup_occurrence = d.warmup_occurrence;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   if (Object.keys(patch).length > 0) {
     const { error } = await supabase.from('commission_policies').update(patch).eq('id', d.id);
     if (error) return { ok: false, error: error.message };
@@ -82,7 +82,7 @@ export async function updateCommissionPolicy(input: unknown): Promise<ActionResu
 }
 
 export async function setCommissionPolicyActive(id: string, active: boolean): Promise<ActionResult> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('commission_policies').update({ active }).eq('id', id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/settings/commission-policies');

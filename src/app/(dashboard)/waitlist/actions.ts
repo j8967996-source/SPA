@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { createServiceClient } from '@/lib/supabase/server';
+import { createAuditedClient } from '@/lib/supabase/server';
 
 export type ActionResult<T = unknown> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -19,7 +19,7 @@ export async function addToWaitlist(input: unknown): Promise<ActionResult> {
   const parsed = addSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: last } = await supabase
     .from('waitlist').select('position').eq('branch_id', d.branch_id).eq('status', 'waiting')
     .order('position', { ascending: false }).limit(1);
@@ -39,7 +39,7 @@ export async function addToWaitlist(input: unknown): Promise<ActionResult> {
 }
 
 export async function setWaitlistStatus(id: string, status: 'notified' | 'cancelled' | 'walked_away'): Promise<ActionResult> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const patch: { status: string; notified_at?: string } = { status };
   if (status === 'notified') patch.notified_at = new Date().toISOString();
   const { error } = await supabase.from('waitlist').update(patch).eq('id', id);
@@ -51,7 +51,7 @@ export async function setWaitlistStatus(id: string, status: 'notified' | 'cancel
 // Seat the party: open a walk-in draft order for the branch with the guest as
 // the first customer and link it back to the waitlist entry.
 export async function convertWaitlistToOrder(id: string): Promise<ActionResult<{ orderId: string }>> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: w } = await supabase
     .from('waitlist').select('branch_id, customer_name, customer_phone, status').eq('id', id).single();
   if (!w) return { ok: false, error: 'Waitlist entry not found' };

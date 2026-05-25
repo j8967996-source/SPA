@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { createServiceClient } from '@/lib/supabase/server';
+import { createAuditedClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/database';
 
 type SourceUpdate = Database['public']['Tables']['customer_sources']['Update'];
@@ -30,7 +30,7 @@ async function variableLockError(
   defaultDiscountId: string | null | undefined,
 ): Promise<string | null> {
   if (!locked || !defaultDiscountId) return null;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data } = await supabase.from('discount_classes').select('code').eq('id', defaultDiscountId).maybeSingle();
   if (data && VARIABLE_DISCOUNT_CODES.includes(data.code)) {
     return `${data.code} is a manual/variable discount and can't be a locked group rate. Pick a fixed-rate discount, or turn off Lock.`;
@@ -43,7 +43,7 @@ export async function createCustomerSource(input: unknown): Promise<ActionResult
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const lockErr = await variableLockError(parsed.data.discount_locked, parsed.data.default_discount_class_id);
   if (lockErr) return { ok: false, error: lockErr };
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('customer_sources').insert({
     code: parsed.data.code,
     name: parsed.data.name,
@@ -75,7 +75,7 @@ export async function updateCustomerSource(input: unknown): Promise<ActionResult
     patch.default_discount_class_id = d.default_discount_class_id || null;
   if (d.discount_locked !== undefined) patch.discount_locked = d.discount_locked;
   if (d.phone_required !== undefined) patch.phone_required = d.phone_required;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('customer_sources').update(patch).eq('id', d.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/settings/customer-sources');
@@ -83,7 +83,7 @@ export async function updateCustomerSource(input: unknown): Promise<ActionResult
 }
 
 export async function setCustomerSourceActive(id: string, active: boolean): Promise<ActionResult> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('customer_sources').update({ active }).eq('id', id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/settings/customer-sources');

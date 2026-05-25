@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { createServiceClient } from '@/lib/supabase/server';
+import { createAuditedClient } from '@/lib/supabase/server';
 import { currentSession, isManager } from '@/lib/auth';
 import { isDayCashClosed } from '@/app/(dashboard)/reconciliation/cash/actions';
 
@@ -48,7 +48,7 @@ function mapOrderRow(o: any, arMethodId: string | null): ConfirmableOrder {
 
 /** Orders for a branch+date that the daily close will move to Closed. */
 export async function loadConfirmable(branchId: string, date: string): Promise<ConfirmableOrder[]> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const arMethod = await supabase.from('payment_methods').select('id').eq('code', 'ar').maybeSingle();
   const arMethodId = arMethod.data?.id ?? null;
 
@@ -65,7 +65,7 @@ export async function loadConfirmable(branchId: string, date: string): Promise<C
 
 /** Already-confirmed (Closed) orders for a branch — the Revenue Confirm history. */
 export async function loadConfirmedHistory(branchId: string): Promise<ConfirmableOrder[]> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const arMethod = await supabase.from('payment_methods').select('id').eq('code', 'ar').maybeSingle();
   const arMethodId = arMethod.data?.id ?? null;
 
@@ -100,7 +100,7 @@ export async function confirmRevenue(input: unknown): Promise<ActionResult<{ clo
   const eligible = await loadConfirmable(branch_id, date);
   if (eligible.length === 0) return { ok: false, error: 'No orders to confirm for this branch/day' };
 
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const now = new Date().toISOString();
   for (const o of eligible) {
     // NOTE: ERP/GL posting is deferred — Revenue Confirm only closes the orders

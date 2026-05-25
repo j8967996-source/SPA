@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { createServiceClient } from '@/lib/supabase/server';
+import { createAuditedClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/database';
 
 type EmployeeUpdate = Database['public']['Tables']['employees']['Update'];
@@ -31,7 +31,7 @@ export type ActionResult = { ok: true } | { ok: false; error: string };
 // Replace an employee's service-group skill set (delete then insert).
 async function syncServiceGroups(employeeId: string, groups: string[] | undefined) {
   if (!groups) return null;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const del = await supabase.from('employee_service_groups').delete().eq('employee_id', employeeId);
   if (del.error) return del.error;
   const unique = [...new Set(groups.map((g) => g.trim()).filter(Boolean))];
@@ -59,7 +59,7 @@ function normalize(input: z.infer<typeof baseSchema>) {
 // branch). Each branch has its own running sequence, so managers never need to
 // know another branch's numbering.
 export async function nextEmployeeCode(homeBranchId: string | null): Promise<string> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   let prefix = 'STAFF';
   if (homeBranchId) {
     const { data: br } = await supabase.from('branches').select('code').eq('id', homeBranchId).single();
@@ -80,7 +80,7 @@ export async function nextEmployeeCode(homeBranchId: string | null): Promise<str
 export async function createEmployee(input: unknown): Promise<ActionResult> {
   const parsed = baseSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const base = normalize(parsed.data);
   // Retry on the off chance two managers grab the same number simultaneously.
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -114,7 +114,7 @@ export async function updateEmployee(input: unknown): Promise<ActionResult> {
   if (d.commission_class_id !== undefined) patch.commission_class_id = d.commission_class_id || null;
   if (d.position_id !== undefined) patch.position_id = d.position_id || null;
   if (d.status !== undefined) patch.status = d.status;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   if (Object.keys(patch).length > 0) {
     const { error } = await supabase.from('employees').update(patch).eq('id', d.id);
     if (error) {
@@ -132,7 +132,7 @@ export async function setEmployeeStatus(
   id: string,
   status: 'active' | 'inactive' | 'on_leave',
 ): Promise<ActionResult> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('employees').update({ status }).eq('id', id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/settings/employees');

@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { createServiceClient } from '@/lib/supabase/server';
+import { createAuditedClient } from '@/lib/supabase/server';
 import { currentSession, isManager, isAdmin } from '@/lib/auth';
 import { SHIFT_LABELS, WINDOW, CASH_SHIFTS_SETTING_KEY as SETTING_KEY, type ShiftLabel, type ShiftStatus } from './shifts';
 
@@ -27,7 +27,7 @@ function nextDate(date: string): string {
 /** Which shifts a branch runs (ordered by start). Resolution order:
  *  branch-specific override → global default → single FullDay. */
 export async function getBranchShifts(branchId: string): Promise<ShiftLabel[]> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: rows } = await supabase
     .from('settings').select('value, branch_id').eq('key', SETTING_KEY)
     .or(`branch_id.eq.${branchId},branch_id.is.null`);
@@ -45,7 +45,7 @@ export async function setCashShifts(input: { shifts: string[]; branchId: string 
   if (!isAdmin(await currentSession())) return { ok: false, error: 'Admin permission required' };
   const valid = input.shifts.filter((s): s is ShiftLabel => (SHIFT_LABELS as readonly string[]).includes(s));
   if (valid.length === 0) return { ok: false, error: 'Pick at least one shift' };
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const value = valid.join(',');
 
   if (input.branchId) {
@@ -70,7 +70,7 @@ export async function setCashShifts(input: { shifts: string[]; branchId: string 
 
 /** Cash received during a shift window on a date (by payment time, PHT). */
 async function cashReceivedCents(branchId: string, date: string, label: ShiftLabel): Promise<number> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data } = await supabase
     .from('payments')
     .select('amount_cents, paid_at, method:payment_methods!payments_payment_method_id_fkey ( code ), order:orders!payments_order_id_fkey ( branch_id, status )')
@@ -91,7 +91,7 @@ async function cashReceivedCents(branchId: string, date: string, label: ShiftLab
 /** Per-shift status for a branch/day, with opening float inherited from the
  * previous closed shift. */
 export async function loadDayShifts(branchId: string, date: string): Promise<ShiftStatus[]> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const shifts = await getBranchShifts(branchId);
   const { data: rows } = await supabase
     .from('cash_reconciliations')
@@ -143,7 +143,7 @@ export async function reopenCashReconciliation(input: unknown): Promise<ActionRe
   const parsed = reopenSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase
     .from('cash_reconciliations')
     .update({
@@ -179,7 +179,7 @@ export async function closeCashReconciliation(input: unknown): Promise<ActionRes
     return { ok: false, error: 'A variance reason is required when the count does not match' };
   }
 
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('cash_reconciliations').upsert(
     {
       branch_id: d.branch_id, reconciliation_date: d.date, shift_label: d.shift_label,

@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { createServiceClient } from '@/lib/supabase/server';
+import { createAuditedClient } from '@/lib/supabase/server';
 
 const branchSchema = z.object({
   code: z.string().min(1).max(20).regex(/^[A-Z0-9_-]+$/, 'Uppercase letters, digits, - and _ only'),
@@ -29,7 +29,7 @@ export type ActionResult<T = unknown> =
 // Replace a branch's per-class rate overrides (delete then insert).
 async function syncRateOverrides(branchId: string, overrides: { commission_class_id: string; rate: number }[] | undefined) {
   if (!overrides) return null;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const del = await supabase.from('branch_commission_rates').delete().eq('branch_id', branchId);
   if (del.error) return del.error;
   if (overrides.length === 0) return null;
@@ -40,7 +40,7 @@ async function syncRateOverrides(branchId: string, overrides: { commission_class
 }
 
 async function syncJunction(branchId: string, businessUnitIds: string[]) {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const del = await supabase
     .from('branch_business_units')
     .delete()
@@ -58,7 +58,7 @@ export async function createBranch(input: unknown): Promise<ActionResult> {
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   }
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data, error } = await supabase
     .from('branches')
     .insert({ code: parsed.data.code, name: parsed.data.name, active: true, reservation_enabled: parsed.data.reservation_enabled ?? true, therapist_share_group: parsed.data.therapist_share_group?.trim() || null, commission_policy_id: parsed.data.commission_policy_id ?? null })
@@ -85,7 +85,7 @@ export async function updateBranch(input: unknown): Promise<ActionResult> {
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   }
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const patch: { name?: string; reservation_enabled?: boolean; commission_policy_id?: string | null; therapist_share_group?: string | null } = {};
   if (parsed.data.name) patch.name = parsed.data.name;
   if (parsed.data.reservation_enabled !== undefined) patch.reservation_enabled = parsed.data.reservation_enabled;
@@ -111,7 +111,7 @@ export async function setBranchActive(
   id: string,
   active: boolean,
 ): Promise<ActionResult> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('branches').update({ active }).eq('id', id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/settings/branches');
@@ -124,7 +124,7 @@ export async function setBranchActive(
 export async function setBranchShareGroup(id: string, group: string | null): Promise<ActionResult> {
   if (!id) return { ok: false, error: 'Missing branch' };
   const value = (group ?? '').trim().slice(0, 60) || null;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('branches').update({ therapist_share_group: value }).eq('id', id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/settings/therapist-groups');

@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 
-import { createServiceClient } from '@/lib/supabase/server';
+import { createAuditedClient } from '@/lib/supabase/server';
 import { currentSession, isAdmin } from '@/lib/auth';
 import type { Database } from '@/types/database';
 
@@ -45,7 +45,7 @@ const pinSchema = z.object({
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
 async function syncBranches(staffUserId: string, branchIds: string[]) {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const del = await supabase
     .from('staff_user_branches')
     .delete()
@@ -65,7 +65,7 @@ export async function createStaffUser(input: unknown): Promise<ActionResult> {
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
   const email = `${d.acumatica_user_id.toLowerCase()}@acumatica.local`;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data, error } = await supabase
     .from('staff_users')
     .insert({
@@ -101,7 +101,7 @@ export async function updateStaffUser(input: unknown): Promise<ActionResult> {
   if (d.role !== undefined) patch.role = d.role;
   if (d.home_branch_id !== undefined) patch.home_branch_id = d.home_branch_id || null;
   if (d.active !== undefined) patch.active = d.active;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   if (Object.keys(patch).length > 0) {
     const { error } = await supabase.from('staff_users').update(patch).eq('id', d.id);
     if (error) return { ok: false, error: error.message };
@@ -119,7 +119,7 @@ export async function updateStaffUser(input: unknown): Promise<ActionResult> {
 export async function setStaffUserActive(id: string, active: boolean): Promise<ActionResult> {
   const denied = await requireAdmin();
   if (denied) return { ok: false, error: denied };
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('staff_users').update({ active }).eq('id', id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/settings/users');
@@ -132,7 +132,7 @@ export async function setStaffUserPassword(input: unknown): Promise<ActionResult
   const parsed = passwordSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid password' };
   const hash = await bcrypt.hash(parsed.data.password, 10);
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase
     .from('staff_users')
     .update({ password_hash: hash })
@@ -148,7 +148,7 @@ export async function setManagerPin(input: unknown): Promise<ActionResult> {
   const parsed = pinSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid PIN' };
   const hash = await bcrypt.hash(parsed.data.pin, 10);
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase
     .from('staff_users')
     .update({
@@ -166,7 +166,7 @@ export async function setManagerPin(input: unknown): Promise<ActionResult> {
 export async function clearManagerPin(id: string): Promise<ActionResult> {
   const denied = await requireAdmin();
   if (denied) return { ok: false, error: denied };
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase
     .from('staff_users')
     .update({

@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { createServiceClient } from '@/lib/supabase/server';
+import { createAuditedClient } from '@/lib/supabase/server';
 import { currentSession, isAdmin } from '@/lib/auth';
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -24,7 +24,7 @@ export async function createHelpArticle(input: unknown): Promise<ActionResult> {
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('help_articles').insert({
     title: d.title,
     slug: `${slugify(d.title)}-${Math.random().toString(36).slice(2, 6)}`,

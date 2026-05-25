@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { createServiceClient } from '@/lib/supabase/server';
+import { createAuditedClient } from '@/lib/supabase/server';
 import { currentSession, isManager } from '@/lib/auth';
 
 export type ActionResult<T = unknown> = { ok: true; data?: T } | { ok: false; error: string };
@@ -21,7 +21,7 @@ export interface TipGroup {
 
 /** Open (unsettled) PAYMAYA tips for a branch in range, grouped by therapist. */
 export async function loadOpenTipGroups(branchId: string, from: string, to: string): Promise<TipGroup[]> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data } = await supabase
     .from('tips')
     .select(`
@@ -61,7 +61,7 @@ export async function settleTips(input: unknown): Promise<ActionResult<{ id: str
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const { branch_id, tip_ids } = parsed.data;
 
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: rows } = await supabase
     .from('tips')
     .select('id, amount_cents, status, settlement_id, order:orders!tips_order_id_fkey ( service_date, branch_id )')
@@ -100,7 +100,7 @@ export async function settleTips(input: unknown): Promise<ActionResult<{ id: str
 export async function voidTipSettlement(id: string): Promise<ActionResult> {
   const session = await currentSession();
   if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   // Release the tips back to open so they can be re-settled.
   await supabase.from('tips').update({ settlement_id: null, status: 'open' }).eq('settlement_id', id);
   const { error } = await supabase.from('tip_settlements').update({ status: 'void' }).eq('id', id);

@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { createServiceClient } from '@/lib/supabase/server';
+import { createServiceClient, createAuditedClient } from '@/lib/supabase/server';
 import { currentSession, isManager } from '@/lib/auth';
 import { isBusinessDayClosed } from '@/app/(dashboard)/reconciliation/end-of-day/actions';
 
@@ -15,7 +15,7 @@ async function logStatus(
   reason: string | null,
   staffId: string | null,
 ) {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   await supabase.from('order_status_log').insert({
     entity_type: 'order',
     entity_id: orderId,
@@ -39,7 +39,7 @@ const schema = z.object({
 export type ActionResult<T = unknown> = { ok: true; data?: T } | { ok: false; error: string };
 
 async function nextOrderNo(branchCode: string, serviceDate: string): Promise<string> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const ymd = serviceDate.replace(/-/g, '');
   const prefix = `SO-${branchCode}-${ymd}-`;
   const { data } = await supabase
@@ -58,7 +58,7 @@ export async function createDraftOrder(input: unknown): Promise<ActionResult<{ i
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
 
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
 
   const { data: branch, error: be } = await supabase
     .from('branches')
@@ -120,7 +120,7 @@ export async function voidOrder(id: string, reason: string): Promise<ActionResul
   const session = await currentSession();
   if (!isManager(session)) return { ok: false, error: 'Manager permission required to void' };
   if (!reason || reason.trim().length < 3) return { ok: false, error: 'A reason is required to void' };
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: order } = await supabase.from('orders').select('status').eq('id', id).single();
   if (!order) return { ok: false, error: 'Order not found' };
   if (['closed', 'void'].includes(order.status)) {
@@ -140,7 +140,7 @@ export async function reopenOrder(id: string, reason: string): Promise<ActionRes
   const session = await currentSession();
   if (!isManager(session)) return { ok: false, error: 'Manager permission required to reopen' };
   if (!reason || reason.trim().length < 3) return { ok: false, error: 'A reason is required to reopen' };
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: order } = await supabase
     .from('orders')
     .select('id, status, total_cents, paid_cents, subtotal_cents, discount_cents')
@@ -172,7 +172,7 @@ export async function reopenOrder(id: string, reason: string): Promise<ActionRes
 // ---------------------------------------------------------------------------
 
 async function recomputeTotals(orderId: string) {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: items } = await supabase
     .from('order_items')
     .select('list_price_cents, discount_amount_cents, final_amount_cents')
@@ -189,7 +189,7 @@ async function recomputeTotals(orderId: string) {
 
 // Complete an in-service order once no line is still scheduled or running.
 async function maybeAutoComplete(orderId: string) {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: remaining } = await supabase
     .from('order_items')
     .select('id')
@@ -215,7 +215,7 @@ export async function addOrderCustomer(input: unknown): Promise<ActionResult> {
   const parsed = addCustomerSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: existing } = await supabase
     .from('order_customers')
     .select('seq_no')
@@ -236,7 +236,7 @@ export async function addOrderCustomer(input: unknown): Promise<ActionResult> {
 }
 
 export async function removeOrderCustomer(customerId: string, orderId: string): Promise<ActionResult> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('order_customers').delete().eq('id', customerId);
   if (error) return { ok: false, error: error.message };
   await recomputeTotals(orderId);
@@ -257,7 +257,7 @@ export async function updateOrderCustomer(input: unknown): Promise<ActionResult>
   const parsed = updateCustomerSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase
     .from('order_customers')
     .update({ customer_name: d.customer_name, customer_phone: d.customer_phone || null })
@@ -417,7 +417,7 @@ export async function addOrderItem(input: unknown): Promise<ActionResult> {
   const parsed = addItemSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
 
   const res = await resolveLinePricing(supabase, d);
   if ('error' in res) return { ok: false, error: res.error };
@@ -451,7 +451,7 @@ export async function updateOrderItem(input: unknown): Promise<ActionResult> {
   const parsed = updateItemSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
 
   const { data: existing } = await supabase.from('order_items').select('status').eq('id', d.id).single();
   if (!existing) return { ok: false, error: 'Service line not found' };
@@ -468,7 +468,7 @@ export async function updateOrderItem(input: unknown): Promise<ActionResult> {
 }
 
 export async function removeOrderItem(itemId: string, orderId: string): Promise<ActionResult> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('order_items').delete().eq('id', itemId);
   if (error) return { ok: false, error: error.message };
   await recomputeTotals(orderId);
@@ -482,7 +482,7 @@ export async function startOrderItem(
   orderId: string,
   allowConcurrent = false,
 ): Promise<ActionResult> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const now = new Date().toISOString();
 
   // No double-booking: the therapist and the station can't already be mid-service
@@ -551,7 +551,7 @@ export async function startOrderItem(
 // their first line). Reuses startOrderItem so all the busy/booking checks and
 // the order auto-advance apply.
 export async function startAllServices(orderId: string): Promise<ActionResult<{ started: number; skipped: number }>> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: items } = await supabase
     .from('order_items')
     .select('id, order_customer_id, status, created_at')
@@ -579,7 +579,7 @@ export async function startAllServices(orderId: string): Promise<ActionResult<{ 
 }
 
 export async function finishOrderItem(itemId: string, orderId: string): Promise<ActionResult> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const now = new Date().toISOString();
   const { data: item } = await supabase
     .from('order_items')
@@ -608,7 +608,7 @@ export async function finishOrderItem(itemId: string, orderId: string): Promise<
 // A finished line holds its bed for the service's cleanup_after_minutes (the bed
 // auto-frees when that window passes); stamping bed_released_at frees it at once.
 export async function releaseBed(itemId: string): Promise<ActionResult> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: item } = await supabase
     .from('order_items')
     .select('order_id, actual_end, resource_id, bed_released_at')
@@ -631,7 +631,7 @@ export async function releaseBed(itemId: string): Promise<ActionResult> {
 // Skip a not-yet-started service line (guest decides not to do it). It's marked
 // cancelled, drops out of the totals, and no longer blocks auto-completion.
 export async function skipOrderItem(itemId: string, orderId: string): Promise<ActionResult> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: item } = await supabase.from('order_items').select('status').eq('id', itemId).single();
   if (!item) return { ok: false, error: 'Service line not found' };
   if (item.status !== 'scheduled') {
@@ -658,7 +658,7 @@ export async function interruptOrderItem(input: unknown): Promise<ActionResult> 
   const parsed = interruptSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
 
   const { data: item } = await supabase
     .from('order_items')
@@ -721,7 +721,7 @@ export async function submitFeedback(input: unknown): Promise<ActionResult> {
   const parsed = feedbackSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'A score (1-10) is required' };
   const d = parsed.data;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
 
   const { data: item } = await supabase
     .from('order_items')
@@ -763,7 +763,7 @@ export async function requestOrderAdjustment(orderId: string, reason: string): P
   const session = await currentSession();
   if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
   if (!reason || reason.trim().length < 3) return { ok: false, error: 'A reason is required' };
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: order } = await supabase
     .from('orders')
     .select('status, total_cents, service_date')
@@ -798,7 +798,7 @@ const ALLOWED_NEXT: Record<string, string[]> = {
 
 export async function setOrderStatus(orderId: string, next: string): Promise<ActionResult> {
   const session = await currentSession();
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: order, error: oe } = await supabase
     .from('orders')
     .select('status, total_cents, paid_cents')
@@ -839,7 +839,7 @@ export async function takePayment(input: unknown): Promise<ActionResult> {
   const parsed = paymentSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const amountCents = Math.round(d.amount * 100);
 
   const { data: order, error: oe } = await supabase
@@ -948,7 +948,7 @@ export async function takePayment(input: unknown): Promise<ActionResult> {
 // Reverse a recorded payment: drop it (and its open tips), refund the order's
 // paid total, and step a fully-paid order back to completed if it no longer is.
 export async function voidPayment(paymentId: string, orderId: string): Promise<ActionResult> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: order, error: oe } = await supabase
     .from('orders')
     .select('status, total_cents')

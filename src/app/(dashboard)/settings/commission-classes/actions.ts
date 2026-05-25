@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { createServiceClient } from '@/lib/supabase/server';
+import { createAuditedClient } from '@/lib/supabase/server';
 
 const schema = z.object({
   class_code: z.string().min(1).max(10),
@@ -22,7 +22,7 @@ export async function createCommissionClass(input: unknown): Promise<ActionResul
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
 
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('commission_classes').insert({
     class_code: parsed.data.class_code,
     name: parsed.data.name,
@@ -45,7 +45,7 @@ export async function updateCommissionClass(input: unknown): Promise<ActionResul
   if (parsed.data.name) patch.name = parsed.data.name;
   if (parsed.data.rate_percent !== undefined) patch.commission_rate = parsed.data.rate_percent / 100;
 
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('commission_classes').update(patch).eq('id', parsed.data.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/settings/commission-classes');
@@ -53,7 +53,7 @@ export async function updateCommissionClass(input: unknown): Promise<ActionResul
 }
 
 export async function setCommissionClassActive(id: string, active: boolean): Promise<ActionResult> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('commission_classes').update({ active }).eq('id', id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/settings/commission-classes');

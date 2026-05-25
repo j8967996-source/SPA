@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { createServiceClient } from '@/lib/supabase/server';
+import { createAuditedClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/database';
 
 type TxCodeUpdate = Database['public']['Tables']['transaction_codes']['Update'];
@@ -31,7 +31,7 @@ export async function createTransactionCode(input: unknown): Promise<ActionResul
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('transaction_codes').insert({
     code: d.code,
     branch_id: d.branch_id,
@@ -67,7 +67,7 @@ export async function updateTransactionCode(input: unknown): Promise<ActionResul
   if (d.credit_account !== undefined) patch.credit_account = d.credit_account || null;
   if (d.credit_subaccount !== undefined) patch.credit_subaccount = d.credit_subaccount || null;
   if (d.credit_branch_id !== undefined) patch.credit_branch_id = d.credit_branch_id || null;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('transaction_codes').update(patch).eq('id', d.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/settings/transaction-codes');
@@ -75,7 +75,7 @@ export async function updateTransactionCode(input: unknown): Promise<ActionResul
 }
 
 export async function setTransactionCodeActive(id: string, active: boolean): Promise<ActionResult> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('transaction_codes').update({ active }).eq('id', id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/settings/transaction-codes');

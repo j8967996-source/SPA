@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { createServiceClient } from '@/lib/supabase/server';
+import { createAuditedClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/database';
 
 type CustomerUpdate = Database['public']['Tables']['customers']['Update'];
@@ -26,7 +26,7 @@ export async function createCustomer(input: unknown): Promise<ActionResult> {
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('customers').insert({
     phone: d.phone,
     name: d.name,
@@ -56,7 +56,7 @@ export async function updateCustomer(input: unknown): Promise<ActionResult> {
   if (d.dob !== undefined) patch.dob = d.dob || null;
   if (d.customer_type !== undefined) patch.customer_type = d.customer_type || null;
   if (d.primary_business_unit_id !== undefined) patch.primary_business_unit_id = d.primary_business_unit_id || null;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('customers').update(patch).eq('id', d.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/customers');
@@ -64,7 +64,7 @@ export async function updateCustomer(input: unknown): Promise<ActionResult> {
 }
 
 export async function setCustomerStatus(id: string, status: 'active' | 'inactive'): Promise<ActionResult> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('customers').update({ status }).eq('id', id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/customers');

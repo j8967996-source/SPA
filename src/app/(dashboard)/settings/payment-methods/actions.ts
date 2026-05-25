@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { createServiceClient } from '@/lib/supabase/server';
+import { createAuditedClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/database';
 
 type PaymentMethodUpdate = Database['public']['Tables']['payment_methods']['Update'];
@@ -24,7 +24,7 @@ export type ActionResult = { ok: true } | { ok: false; error: string };
 export async function createPaymentMethod(input: unknown): Promise<ActionResult> {
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('payment_methods').insert({ ...parsed.data, active: true });
   if (error) {
     if (error.code === '23505') return { ok: false, error: `Code "${parsed.data.code}" already exists` };
@@ -44,7 +44,7 @@ export async function updatePaymentMethod(input: unknown): Promise<ActionResult>
   if (d.method_type !== undefined) patch.method_type = d.method_type;
   if (d.manual_reconciliation !== undefined) patch.manual_reconciliation = d.manual_reconciliation;
   if (d.requires_reference !== undefined) patch.requires_reference = d.requires_reference;
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('payment_methods').update(patch).eq('id', d.id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/settings/payment-methods');
@@ -52,7 +52,7 @@ export async function updatePaymentMethod(input: unknown): Promise<ActionResult>
 }
 
 export async function setPaymentMethodActive(id: string, active: boolean): Promise<ActionResult> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('payment_methods').update({ active }).eq('id', id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/settings/payment-methods');

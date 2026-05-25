@@ -3,7 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-import { createServiceClient } from '@/lib/supabase/server';
+import { createAuditedClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/database';
 
 type SettingUpdate = Database['public']['Tables']['settings']['Update'];
@@ -43,7 +43,7 @@ export async function createSetting(input: unknown): Promise<ActionResult> {
   const typeErr = validateValueForType(d.value, d.value_type);
   if (typeErr) return { ok: false, error: typeErr };
 
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('settings').insert({
     key: d.key,
     value: d.value,
@@ -65,7 +65,7 @@ export async function updateSetting(input: unknown): Promise<ActionResult> {
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
 
   // Load existing to check type
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { data: existing, error: e1 } = await supabase
     .from('settings')
     .select('value_type')
@@ -84,7 +84,7 @@ export async function updateSetting(input: unknown): Promise<ActionResult> {
 }
 
 export async function deleteSetting(id: string): Promise<ActionResult> {
-  const supabase = createServiceClient();
+  const supabase = await createAuditedClient();
   const { error } = await supabase.from('settings').delete().eq('id', id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/settings/system');
