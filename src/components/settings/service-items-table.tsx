@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useState } from 'react';
-import { Clock, Tag } from 'lucide-react';
+import { Tag } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -23,7 +23,6 @@ export interface ServiceRowVM {
   code: string;
   name: string;
   duration_minutes: number;
-  slot: number;
   priceCents: number | null;
   validFrom: string | null;
   validTo: string | null;
@@ -100,7 +99,6 @@ export function ServiceItemsTable({
               <TableHead className="w-24 font-bold">Duration</TableHead>
               <TableHead className="w-28 font-bold text-right">Price</TableHead>
               <TableHead className="w-64 font-bold">Validity</TableHead>
-              <TableHead className="w-28 font-bold">Slot</TableHead>
               <TableHead className="w-52 font-bold">Station</TableHead>
               <TableHead className="w-32 font-bold">Status</TableHead>
               <TableHead className="w-16" />
@@ -109,7 +107,7 @@ export function ServiceItemsTable({
           <TableBody>
             {allRows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} className="text-center py-12">
+                <TableCell colSpan={9} className="text-center py-12">
                   <p className="text-sm font-semibold text-muted-foreground">No service items yet.</p>
                 </TableCell>
               </TableRow>
@@ -143,12 +141,6 @@ export function ServiceItemsTable({
                             → ₱{(r.future.price_cents / 100).toLocaleString('en-PH')} from {r.future.effective_from}
                           </div>
                         )}
-                      </TableCell>
-                      <TableCell>
-                        <span className="inline-flex items-center gap-1 font-semibold text-muted-foreground tabular">
-                          <Clock className="size-3" />
-                          {r.slot} min
-                        </span>
                       </TableCell>
                       <TableCell className="font-mono font-medium text-muted-foreground">
                         {r.requiredResourceType ?? '—'}

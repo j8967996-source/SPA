@@ -47,7 +47,6 @@ export default async function ServiceItemsPage() {
   const groupMap = new Map<string, ServiceGroupVM>();
   for (const i of items) {
     const category = Array.isArray(i.category) ? i.category[0] : i.category;
-    const slot = i.duration_minutes + i.prep_before_minutes + i.cleanup_after_minutes;
     const normalRows = (i.service_item_prices ?? []).filter((p) => p.price_class === 'Normal' && p.branch_id === null);
     // Current = the segment whose period covers today; future = the next one scheduled to start after today.
     const current = normalRows.find((p) => p.effective_from <= today && p.effective_to >= today) ?? null;
@@ -80,7 +79,6 @@ export default async function ServiceItemsPage() {
       code: i.code,
       name: i.name,
       duration_minutes: i.duration_minutes,
-      slot,
       priceCents,
       validFrom: current?.effective_from ?? null,
       validTo: current?.effective_to ?? null,
