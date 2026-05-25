@@ -82,6 +82,8 @@ export default async function ServiceItemsPage() {
       duration_minutes: i.duration_minutes,
       slot,
       priceCents,
+      validFrom: current?.effective_from ?? null,
+      validTo: current?.effective_to ?? null,
       future: future ? { price_cents: future.price_cents, effective_from: future.effective_from } : null,
       requiredResourceType: i.required_resource_type,
       active: i.active,

@@ -25,6 +25,8 @@ export interface ServiceRowVM {
   duration_minutes: number;
   slot: number;
   priceCents: number | null;
+  validFrom: string | null;
+  validTo: string | null;
   future: { price_cents: number; effective_from: string } | null;
   requiredResourceType: string | null;
   active: boolean;
@@ -92,6 +94,7 @@ export function ServiceItemsTable({
               <TableHead className="w-24 font-bold">Code</TableHead>
               <TableHead className="w-28 font-bold">Duration</TableHead>
               <TableHead className="w-36 font-bold text-right">Price</TableHead>
+              <TableHead className="w-52 font-bold">Validity</TableHead>
               <TableHead className="w-24 font-bold">Slot</TableHead>
               <TableHead className="font-bold">Station</TableHead>
               <TableHead className="w-28 font-bold">Status</TableHead>
@@ -101,7 +104,7 @@ export function ServiceItemsTable({
           <TableBody>
             {allRows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-12">
+                <TableCell colSpan={10} className="text-center py-12">
                   <p className="text-sm font-semibold text-muted-foreground">No service items yet.</p>
                 </TableCell>
               </TableRow>
@@ -128,6 +131,13 @@ export function ServiceItemsTable({
                             → ₱{(r.future.price_cents / 100).toLocaleString('en-PH')} · {r.future.effective_from}
                           </div>
                         )}
+                      </TableCell>
+                      <TableCell className="font-medium tabular text-sm text-muted-foreground">
+                        {r.validFrom ? (
+                          <>
+                            {r.validFrom} <span className="text-muted-foreground/50">to</span> {r.validTo === '2999-12-31' ? 'open' : r.validTo}
+                          </>
+                        ) : '—'}
                       </TableCell>
                       <TableCell>
                         <span className="inline-flex items-center gap-1 font-semibold text-muted-foreground tabular">
