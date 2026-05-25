@@ -96,8 +96,8 @@ export function ServiceItemsTable({
               <TableHead className="w-36 font-bold text-right">Price</TableHead>
               <TableHead className="w-52 font-bold">Validity</TableHead>
               <TableHead className="w-24 font-bold">Slot</TableHead>
-              <TableHead className="font-bold">Station</TableHead>
               <TableHead className="w-28 font-bold">Status</TableHead>
+              <TableHead className="w-36 font-bold">Station</TableHead>
               <TableHead className="w-12" />
             </TableRow>
           </TableHeader>
@@ -145,15 +145,15 @@ export function ServiceItemsTable({
                           {r.slot} min
                         </span>
                       </TableCell>
-                      <TableCell className="font-mono font-medium text-muted-foreground">
-                        {r.requiredResourceType ?? '—'}
-                      </TableCell>
                       <TableCell>
                         {r.active ? (
                           <Badge className="font-bold">Active</Badge>
                         ) : (
                           <Badge variant="secondary" className="font-bold">Inactive</Badge>
                         )}
+                      </TableCell>
+                      <TableCell className="font-mono font-medium text-muted-foreground">
+                        {r.requiredResourceType ?? '—'}
                       </TableCell>
                       <TableCell>
                         <ServiceItemRowActions item={{ ...r.itemRecord, active: r.active }} categories={categories} businessUnits={businessUnits} groups={groupNames} />

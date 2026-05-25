@@ -28,7 +28,7 @@ const updateSchema = schema.partial().extend({ id: z.string().uuid() });
 
 export type ActionResult<T = void> = { ok: true; data?: T } | { ok: false; error: string };
 
-const PRICE_FROM = '2020-01-01';
+const PRICE_FROM = '2026-05-01'; // SPA go-live baseline for a new item's opening price
 const PRICE_TO = '2999-12-31';
 
 // Upsert the canonical "Normal" all-branch open-ended price row for an item.
