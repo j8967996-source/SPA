@@ -89,20 +89,21 @@ export function ServiceItemsTable({
         <Table className="table-fixed">
           <TableHeader>
             <TableRow>
-              <TableHead className="w-10">
+              <TableHead className="w-12">
                 <input type="checkbox" className="size-4 cursor-pointer accent-primary" checked={allSelected} onChange={toggleAll} aria-label="Select all" />
               </TableHead>
-              <TableHead className="w-52 font-bold">Service Group</TableHead>
-              <TableHead className="w-24 font-bold">Code</TableHead>
-              <TableHead className="w-20 font-bold">Duration</TableHead>
-              <TableHead className="w-24 font-bold text-right">Price</TableHead>
-              <TableHead className="w-52 font-bold">Validity</TableHead>
-              <TableHead className="w-20 font-bold">Slot</TableHead>
-              {/* Station has no width so it soaks up the leftover space — keeps the
-                  left columns tight (Price sits close to Duration). */}
-              <TableHead className="font-bold">Station</TableHead>
-              <TableHead className="w-24 font-bold">Status</TableHead>
-              <TableHead className="w-12" />
+              {/* Every column has an explicit width; the content columns (Service
+                  Group / Validity / Station) are wider so they absorb the slack on
+                  wide screens instead of one column leaving a big gap. */}
+              <TableHead className="w-64 font-bold">Service Group</TableHead>
+              <TableHead className="w-28 font-bold">Code</TableHead>
+              <TableHead className="w-24 font-bold">Duration</TableHead>
+              <TableHead className="w-28 font-bold text-right">Price</TableHead>
+              <TableHead className="w-64 font-bold">Validity</TableHead>
+              <TableHead className="w-28 font-bold">Slot</TableHead>
+              <TableHead className="w-52 font-bold">Station</TableHead>
+              <TableHead className="w-32 font-bold">Status</TableHead>
+              <TableHead className="w-16" />
             </TableRow>
           </TableHeader>
           <TableBody>
