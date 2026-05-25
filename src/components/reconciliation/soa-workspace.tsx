@@ -305,7 +305,9 @@ export function SoaWorkspace({
           )}
 
           <Card className="p-0 overflow-hidden">
-            <Table>
+            {/* table-fixed: exact column widths so the nested detail's Net lines
+                up under Total (same w-32 + trailing w-28 + w-44). */}
+            <Table className="table-fixed">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-8" />
@@ -315,7 +317,7 @@ export function SoaWorkspace({
                   <TableHead className="w-28 font-bold">Type</TableHead>
                   <TableHead className="font-bold">Period</TableHead>
                   <TableHead className="w-32 font-bold text-right">Total</TableHead>
-                  <TableHead className="w-28 font-bold">Status</TableHead>
+                  <TableHead className="w-28 font-bold pl-6">Status</TableHead>
                   <TableHead className="w-44" />
                 </TableRow>
               </TableHeader>
@@ -341,7 +343,7 @@ export function SoaWorkspace({
                         <TableCell><Badge variant="secondary" className="font-bold capitalize">{(s.settlement_type ?? '').replace('_', '-')}</Badge></TableCell>
                         <TableCell className="font-medium tabular text-muted-foreground">{s.period_from} → {s.period_to}</TableCell>
                         <TableCell className="font-bold tabular text-right">{peso(s.total_cents)}</TableCell>
-                        <TableCell><Badge variant={STATUS_VARIANT[s.status] ?? 'secondary'} className="font-bold capitalize">{s.status.replace('_', ' ')}</Badge></TableCell>
+                        <TableCell className="pl-6"><Badge variant={STATUS_VARIANT[s.status] ?? 'secondary'} className="font-bold capitalize">{s.status.replace('_', ' ')}</Badge></TableCell>
                         <TableCell><div className="flex justify-end"><SoaActions id={s.id} status={s.status} /></div></TableCell>
                       </TableRow>
                       {isOpen && (
@@ -352,18 +354,29 @@ export function SoaWorkspace({
                                 {s.status === 'void' ? 'Voided — orders released back to Generate.' : 'No order detail.'}
                               </p>
                             ) : (
-                              <Table>
+                              <Table className="table-fixed">
+                                {/* Net column + trailing spacers mirror the parent's
+                                    Total (w-32) + Status (w-28) + Actions (w-44). */}
+                                <colgroup>
+                                  <col className="w-32" />
+                                  <col className="w-48" />
+                                  <col />
+                                  <col />
+                                  <col className="w-20" />
+                                  <col className="w-32" />
+                                  <col className="w-28" />
+                                  <col className="w-44" />
+                                </colgroup>
                                 <TableHeader>
                                   <TableRow>
-                                    <TableHead className="w-32 font-bold pl-6">Date</TableHead>
-                                    <TableHead className="w-44 font-bold">Order No</TableHead>
+                                    <TableHead className="font-bold pl-6">Date</TableHead>
+                                    <TableHead className="font-bold">Order No</TableHead>
                                     <TableHead className="font-bold">Guest Name</TableHead>
                                     <TableHead className="font-bold">Service</TableHead>
-                                    <TableHead className="w-20 font-bold text-right">Mins</TableHead>
-                                    {/* Net aligns under the parent Total: trailing spacers match Status (w-28) + Actions (w-44). */}
-                                    <TableHead className="w-32 font-bold text-right">Net</TableHead>
-                                    <TableHead className="w-28" />
-                                    <TableHead className="w-44" />
+                                    <TableHead className="font-bold text-right">Mins</TableHead>
+                                    <TableHead className="font-bold text-right">Net</TableHead>
+                                    <TableHead />
+                                    <TableHead />
                                   </TableRow>
                                 </TableHeader>
                                 <TableBody>

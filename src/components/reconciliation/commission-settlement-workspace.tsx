@@ -266,7 +266,9 @@ export function CommissionSettlementWorkspace({
         </Card>
       ) : (
         <Card className="p-0 overflow-hidden">
-          <Table>
+          {/* table-fixed: column widths are exact, so the nested detail (same
+              fixed right-side widths) lines its Commission up under this one. */}
+          <Table className="table-fixed">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-8" />
@@ -274,7 +276,7 @@ export function CommissionSettlementWorkspace({
                 <TableHead className="w-16 font-bold">Branch</TableHead>
                 <TableHead className="font-bold pl-6">Period</TableHead>
                 <TableHead className="w-40 font-bold">Settle Date</TableHead>
-                <TableHead className="w-16 font-bold text-right">Sessions</TableHead>
+                <TableHead className="w-20 font-bold text-right">Sessions</TableHead>
                 <TableHead className="w-32 font-bold text-right">Commission</TableHead>
                 <TableHead className="w-24 font-bold pl-6">Status</TableHead>
                 <TableHead className="w-20" />
@@ -305,7 +307,19 @@ export function CommissionSettlementWorkspace({
                     {isOpen && (
                       <TableRow>
                         <TableCell colSpan={9} className="bg-muted/20 p-0">
-                          <Table>
+                          {/* Mirrors the parent's right-side widths (Commission w-32,
+                              then w-24 + w-20) so amounts align across both tables. */}
+                          <Table className="table-fixed">
+                            <colgroup>
+                              <col className="w-32" />
+                              <col className="w-48" />
+                              <col />
+                              <col className="w-28" />
+                              <col className="w-16" />
+                              <col className="w-32" />
+                              <col className="w-24" />
+                              <col className="w-20" />
+                            </colgroup>
                             <TableBody>
                               {p.detail.map((g) => {
                                 const initials = g.therapist.split(/\s+/).map((w) => w[0]).slice(0, 2).join('').toUpperCase();

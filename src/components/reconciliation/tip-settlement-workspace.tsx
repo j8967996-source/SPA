@@ -253,7 +253,9 @@ export function TipSettlementWorkspace({
         </Card>
       ) : (
         <Card className="p-0 overflow-hidden">
-          <Table>
+          {/* table-fixed: exact widths so the nested detail's Amount lines up
+              under Total (same w-32 + trailing w-24 + w-20). */}
+          <Table className="table-fixed">
             <TableHeader>
               <TableRow>
                 <TableHead className="w-8" />
@@ -290,15 +292,25 @@ export function TipSettlementWorkspace({
                     {isOpen && (
                       <TableRow>
                         <TableCell colSpan={8} className="bg-muted/20 p-0">
-                          <Table>
+                          {/* Amount + trailing spacers mirror the parent's Total
+                              (w-32) + Status (w-24) + Actions (w-20). */}
+                          <Table className="table-fixed">
+                            <colgroup>
+                              <col className="w-44" />
+                              <col className="w-32" />
+                              <col />
+                              <col className="w-32" />
+                              <col className="w-24" />
+                              <col className="w-20" />
+                            </colgroup>
                             <TableHeader>
                               <TableRow>
-                                <TableHead className="w-44 font-bold pl-12">Therapist</TableHead>
-                                <TableHead className="w-32 font-bold">Date</TableHead>
+                                <TableHead className="font-bold pl-12">Therapist</TableHead>
+                                <TableHead className="font-bold">Date</TableHead>
                                 <TableHead className="font-bold">Order No</TableHead>
                                 <TableHead className="font-bold text-right">Amount</TableHead>
-                                <TableHead className="w-24" />
-                                <TableHead className="w-20" />
+                                <TableHead />
+                                <TableHead />
                               </TableRow>
                             </TableHeader>
                             <TableBody>
