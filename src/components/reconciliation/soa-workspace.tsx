@@ -360,7 +360,10 @@ export function SoaWorkspace({
                                     <TableHead className="font-bold">Guest Name</TableHead>
                                     <TableHead className="font-bold">Service</TableHead>
                                     <TableHead className="w-20 font-bold text-right">Mins</TableHead>
-                                    <TableHead className="w-32 font-bold text-right pr-6">Net</TableHead>
+                                    {/* Net aligns under the parent Total: trailing spacers match Status (w-28) + Actions (w-44). */}
+                                    <TableHead className="w-32 font-bold text-right">Net</TableHead>
+                                    <TableHead className="w-28" />
+                                    <TableHead className="w-44" />
                                   </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -374,7 +377,9 @@ export function SoaWorkspace({
                                         <TableCell className="font-medium">{ln.guest}</TableCell>
                                         <TableCell className="font-medium">{ln.service}</TableCell>
                                         <TableCell className="tabular text-right text-muted-foreground">{ln.duration_minutes ?? '—'}</TableCell>
-                                        <TableCell className="font-bold tabular text-right pr-6">{peso(ln.net_cents)}</TableCell>
+                                        <TableCell className="font-bold tabular text-right">{peso(ln.net_cents)}</TableCell>
+                                        <TableCell className="w-28" />
+                                        <TableCell className="w-44" />
                                       </TableRow>
                                     )),
                                   )}
