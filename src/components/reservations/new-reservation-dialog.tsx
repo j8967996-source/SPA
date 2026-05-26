@@ -73,8 +73,11 @@ interface Props {
   // hides the manual Start/End + Location fields.
   walkIn?: boolean;
   // Create the reservation as confirmed without the walk-in auto-find flow — used
-  // by the schedule board's "Walk-in here" on a hand-picked bed/time.
+  // by the schedule board on a hand-picked bed/time.
   prefillConfirmed?: boolean;
+  // Opened from the schedule board on a specific bed: lock + show that bed
+  // (hide the picker and the Location selector) so the booking is clearly tied.
+  lockedBed?: { name: string };
 }
 
 const LOCATION_TYPES = [
@@ -102,6 +105,7 @@ export function NewReservationDialog({
   onOpenChange: controlledOnOpenChange,
   walkIn = false,
   prefillConfirmed = false,
+  lockedBed,
 }: Props) {
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
@@ -364,6 +368,16 @@ export function NewReservationDialog({
           </DialogHeader>
 
           <div className="grid grid-cols-2 gap-4 py-4">
+            {lockedBed && (
+              <div className="col-span-2 flex items-center gap-2 rounded-lg border border-primary/40 bg-primary/5 px-3 py-2">
+                <span className="text-base">📍</span>
+                <div className="text-sm">
+                  <span className="font-bold">Station · {lockedBed.name}</span>
+                  {start && <span className="text-muted-foreground"> · {start.slice(5, 10)} {start.slice(11, 16)}</span>}
+                </div>
+                <span className="ml-auto text-[11px] font-bold uppercase tracking-wide text-primary">Bed locked</span>
+              </div>
+            )}
             <div className={`flex flex-col gap-2${walkIn ? ' col-span-2' : ''}`}>
               <Label className="font-semibold">Branch *</Label>
               <Select items={branchOptions} value={branchId} onValueChange={(v) => v && pickBranch(v)}>
@@ -460,8 +474,9 @@ export function NewReservationDialog({
 
             {/* Beds: the booker only chooses "sit together" for a group — the
                 system auto-assigns adjacent beds. Staff can override the actual
-                beds via the optional picker. In-room (external) uses no bed. */}
-            {locationType === 'on_site' && (
+                beds via the optional picker. In-room (external) uses no bed.
+                Hidden when the board already locked a specific bed. */}
+            {locationType === 'on_site' && !lockedBed && (
               <div className="col-span-2 rounded-lg border border-border bg-muted/30 p-3">
                 {paxNum > 1 ? (
                   <label className="flex items-start gap-2 cursor-pointer">
@@ -594,7 +609,7 @@ export function NewReservationDialog({
                 </div>
               </>
             )}
-            {!walkIn && (
+            {!walkIn && !lockedBed && (
               <div className="flex flex-col gap-2 col-span-2">
                 <Label className="font-semibold">Location</Label>
                 <Select items={LOCATION_TYPES} value={locationType} onValueChange={(v) => v && pickLocation(v)}>

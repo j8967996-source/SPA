@@ -321,6 +321,7 @@ export function ScheduleBoard({
           serviceItems={dialog.serviceItems}
           reservation={synthetic}
           prefillConfirmed
+          lockedBed={{ name: beds.find((b) => b.id === add.bedId)?.name ?? 'Bed' }}
           open
           onOpenChange={(o) => { if (!o) { setAdd(null); router.refresh(); } }}
         />
