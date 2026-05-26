@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import { SoaActions } from '@/components/reconciliation/soa-actions';
-import { loadSoaWorkspace, generateSOAForBillings, settleSOABatch, type SoaGroup, type SoaHistoryRow } from '@/app/(dashboard)/reconciliation/soa/actions';
+import { loadSoaWorkspace, generateSOAGroups, settleSOABatch, type SoaGroup, type SoaHistoryRow } from '@/app/(dashboard)/reconciliation/soa/actions';
 
 export type { SoaHistoryRow };
 
@@ -84,10 +84,10 @@ export function SoaWorkspace({
   }
   const allSelected = groups.length > 0 && selected.size === groups.length;
   function toggleAll() {
-    setSelected(allSelected ? new Set() : new Set(groups.map((g) => g.billing_id)));
+    setSelected(allSelected ? new Set() : new Set(groups.map((g) => g.key)));
   }
 
-  const selTotal = groups.filter((g) => selected.has(g.billing_id)).reduce((s, g) => s + g.total_cents, 0);
+  const selTotal = groups.filter((g) => selected.has(g.key)).reduce((s, g) => s + g.total_cents, 0);
 
   // Semi-monthly cadence: settle each half-month (1–15, 16–EOM). It's "due" when
   // un-stated closed AR exists from a half-month that has already ended.
@@ -95,9 +95,10 @@ export function SoaWorkspace({
   const settleOverdue = groups.some((g) => g.orders.some((o) => o.service_date < halfStart));
 
   function doGenerate() {
-    if (selected.size === 0) return toast.error('Select at least one billing destination');
+    if (selected.size === 0) return toast.error('Select at least one statement to generate');
+    const sel = groups.filter((g) => selected.has(g.key)).map((g) => ({ billing_to_id: g.billing_id, branch_id: g.branch_id }));
     startGen(async () => {
-      const r = await generateSOAForBillings([...selected], from, to);
+      const r = await generateSOAGroups(sel, from, to);
       if (r.ok) {
         toast.success(`Generated ${r.data?.created} SOA${(r.data?.created ?? 0) > 1 ? 's' : ''}`);
         setSelected(new Set());
@@ -195,7 +196,7 @@ export function SoaWorkspace({
                 <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-44" />
               </div>
               <p className="ml-auto text-sm font-semibold text-muted-foreground">
-                {groups.length} billing · {groups.reduce((s, g) => s + g.bookings, 0)} bookings · {peso(groups.reduce((s, g) => s + g.total_cents, 0))}
+                {groups.length} statement{groups.length === 1 ? '' : 's'} (billing × branch) · {groups.reduce((s, g) => s + g.bookings, 0)} bookings · {peso(groups.reduce((s, g) => s + g.total_cents, 0))}
               </p>
             </div>
           </Card>
@@ -218,29 +219,30 @@ export function SoaWorkspace({
                 </label>
                 {selected.size > 0 && (
                   <div className="flex items-center gap-3">
-                    <span className="text-sm font-bold">{selected.size} billing · {peso(selTotal)}</span>
+                    <span className="text-sm font-bold">{selected.size} statement{selected.size > 1 ? 's' : ''} · {peso(selTotal)}</span>
                     <Button size="sm" onClick={doGenerate} disabled={pending}>{pending ? 'Generating…' : `Generate SOA (${selected.size})`}</Button>
                   </div>
                 )}
               </div>
 
               {groups.map((g) => {
-                const isOpen = expanded.has(g.billing_id);
+                const isOpen = expanded.has(g.key);
                 return (
-                  <Card key={g.billing_id} className="p-0 overflow-hidden">
+                  <Card key={g.key} className="p-0 overflow-hidden">
                     <div className="flex items-center gap-3 px-4 py-3 bg-muted/30">
                       <input
                         type="checkbox"
                         className="size-4 cursor-pointer accent-primary"
-                        checked={selected.has(g.billing_id)}
-                        onChange={() => toggleSel(g.billing_id)}
+                        checked={selected.has(g.key)}
+                        onChange={() => toggleSel(g.key)}
                       />
-                      <button type="button" onClick={() => toggleExp(g.billing_id)} className="text-muted-foreground hover:text-foreground">
+                      <button type="button" onClick={() => toggleExp(g.key)} className="text-muted-foreground hover:text-foreground">
                         {isOpen ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
                       </button>
-                      <button type="button" onClick={() => toggleExp(g.billing_id)} className="flex items-center gap-2 text-left">
+                      <button type="button" onClick={() => toggleExp(g.key)} className="flex items-center gap-2 text-left">
                         <span className="font-bold">{g.code}</span>
                         <span className="text-sm text-muted-foreground">{g.name}</span>
+                        <span className="inline-flex items-center rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-bold text-primary font-mono">{g.branch_code}</span>
                         <span className="text-xs font-medium text-muted-foreground">({g.bookings} booking{g.bookings > 1 ? 's' : ''})</span>
                         <Badge variant="secondary" className="font-bold capitalize">{g.settlement_type.replace('_', '-')}</Badge>
                       </button>

@@ -17,14 +17,15 @@ export interface SoaCandidate {
   total_cents: number;
 }
 
-/** Closed AR orders for a billing destination in range, not yet on any SOA. */
-export async function loadSoaCandidates(billingToId: string, from: string, to: string): Promise<SoaCandidate[]> {
+/** Closed AR orders for a billing destination AT ONE BRANCH in range, not yet on any SOA. */
+export async function loadSoaCandidates(billingToId: string, branchId: string, from: string, to: string): Promise<SoaCandidate[]> {
   const supabase = await createAuditedClient();
   const [{ data: orders }, { data: taken }] = await Promise.all([
     supabase
       .from('orders')
       .select('id, order_no, service_date, total_cents, status')
       .eq('billing_to_id', billingToId)
+      .eq('branch_id', branchId)
       .eq('status', 'closed')
       .is('deleted_at', null)
       .gte('service_date', from)
@@ -47,7 +48,10 @@ export interface SoaItemLine {
 }
 export interface SoaOrderLine { id: string; order_no: string; service_date: string; total_cents: number; lines: SoaItemLine[] }
 export interface SoaGroup {
+  key: string; // `${billing_id}:${branch_id}` — one statement per billing × branch
   billing_id: string;
+  branch_id: string;
+  branch_code: string;
   code: string;
   name: string;
   settlement_type: string;
@@ -163,7 +167,7 @@ export async function loadSoaWorkspace(from: string, to: string): Promise<SoaGro
   const [{ data: orders }, { data: taken }] = await Promise.all([
     supabase
       .from('orders')
-      .select('id, order_no, service_date, total_cents, billing_to_id, order_customers ( id, customer_name, seq_no ), order_items ( order_customer_id, duration_minutes, list_price_cents, discount_amount_cents, final_amount_cents, status, service:service_items ( name ) )')
+      .select('id, order_no, service_date, total_cents, billing_to_id, branch_id, branch:branches ( code, name ), order_customers ( id, customer_name, seq_no ), order_items ( order_customer_id, duration_minutes, list_price_cents, discount_amount_cents, final_amount_cents, status, service:service_items ( name ) )')
       .in('billing_to_id', [...billMap.keys()])
       .eq('status', 'closed')
       .is('deleted_at', null)
@@ -174,29 +178,35 @@ export async function loadSoaWorkspace(from: string, to: string): Promise<SoaGro
   ]);
   const takenIds = new Set((taken ?? []).map((t) => t.order_id));
 
+  // One group (→ one statement) per billing × branch — a statement never mixes branches.
   const groups = new Map<string, SoaGroup>();
   for (const o of orders ?? []) {
-    if (takenIds.has(o.id) || !o.billing_to_id) continue;
+    if (takenIds.has(o.id) || !o.billing_to_id || !o.branch_id) continue;
     const b = billMap.get(o.billing_to_id);
     if (!b) continue;
-    const g = groups.get(b.id) ?? { billing_id: b.id, code: b.code, name: b.name, settlement_type: b.settlement_type, bookings: 0, total_cents: 0, orders: [] };
+    const br = one(o.branch);
+    const key = `${b.id}:${o.branch_id}`;
+    const g = groups.get(key) ?? {
+      key, billing_id: b.id, branch_id: o.branch_id, branch_code: br?.code ?? '—',
+      code: b.code, name: b.name, settlement_type: b.settlement_type, bookings: 0, total_cents: 0, orders: [],
+    };
     g.bookings += 1;
     g.total_cents += o.total_cents;
     g.orders.push(toSoaOrderLine(o as unknown as RawSoaOrder));
-    groups.set(b.id, g);
+    groups.set(key, g);
   }
-  return [...groups.values()].sort((a, b) => b.total_cents - a.total_cents);
+  return [...groups.values()].sort((a, b) => a.code.localeCompare(b.code) || a.branch_code.localeCompare(b.branch_code));
 }
 
-/** Generate one SOA per selected billing destination over the same period. */
-export async function generateSOAForBillings(billingIds: string[], from: string, to: string): Promise<ActionResult<{ created: number }>> {
+/** Generate one SOA per selected (billing × branch) group over the same period. */
+export async function generateSOAGroups(groups: { billing_to_id: string; branch_id: string }[], from: string, to: string): Promise<ActionResult<{ created: number }>> {
   const session = await currentSession();
   if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
-  if (!billingIds.length) return { ok: false, error: 'Select at least one billing destination' };
+  if (!groups.length) return { ok: false, error: 'Select at least one statement to generate' };
   let created = 0;
   const errors: string[] = [];
-  for (const id of billingIds) {
-    const r = await generateSOA({ billing_to_id: id, period_from: from, period_to: to });
+  for (const g of groups) {
+    const r = await generateSOA({ billing_to_id: g.billing_to_id, branch_id: g.branch_id, period_from: from, period_to: to });
     if (r.ok) created += 1;
     else errors.push(r.error);
   }
@@ -207,6 +217,7 @@ export async function generateSOAForBillings(billingIds: string[], from: string,
 
 const createSchema = z.object({
   billing_to_id: z.string().uuid(),
+  branch_id: z.string().uuid(),
   period_from: z.string().min(1),
   period_to: z.string().min(1),
 });
@@ -216,7 +227,7 @@ export async function generateSOA(input: unknown): Promise<ActionResult<{ id: st
   if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
   const parsed = createSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
-  const { billing_to_id, period_from, period_to } = parsed.data;
+  const { billing_to_id, branch_id, period_from, period_to } = parsed.data;
   if (period_to < period_from) return { ok: false, error: 'End date must be on/after start date' };
 
   const supabase = await createAuditedClient();
@@ -226,13 +237,15 @@ export async function generateSOA(input: unknown): Promise<ActionResult<{ id: st
     .eq('id', billing_to_id)
     .single();
   if (!billing) return { ok: false, error: 'Billing destination not found' };
+  const { data: branch } = await supabase.from('branches').select('code').eq('id', branch_id).single();
+  if (!branch) return { ok: false, error: 'Branch not found' };
 
-  const candidates = await loadSoaCandidates(billing_to_id, period_from, period_to);
-  if (candidates.length === 0) return { ok: false, error: 'No un-SOA’d closed orders for this billing/period' };
+  const candidates = await loadSoaCandidates(billing_to_id, branch_id, period_from, period_to);
+  if (candidates.length === 0) return { ok: false, error: 'No un-SOA’d closed orders for this billing/branch/period' };
   const subtotal = candidates.reduce((s, c) => s + c.total_cents, 0);
 
   const ym = period_from.replace(/-/g, '').slice(0, 6);
-  const prefix = `SOA-${ym}-${billing.code}-`;
+  const prefix = `SOA-${ym}-${billing.code}-${branch.code}-`;
   const { data: last } = await supabase
     .from('revenue_soa').select('soa_no').like('soa_no', `${prefix}%`).order('soa_no', { ascending: false }).limit(1);
   const seq = last?.[0]?.soa_no ? Number(last[0].soa_no.slice(prefix.length)) : 0;
