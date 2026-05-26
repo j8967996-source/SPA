@@ -59,7 +59,7 @@ export default async function DashboardPage() {
   ];
 
   const finance = [
-    { label: 'AR Outstanding', value: peso(recon.arOutstandingCents), href: '/reconciliation/ar-balance' },
+    { label: 'AR Outstanding', value: peso(recon.arOutstandingCents), href: '/reconciliation/soa?view=ar' },
     { label: 'Tips Unsettled', value: peso(d.tipsOpen), href: '/reconciliation/tips' },
     { label: 'Stored-Value Liability', value: peso(d.svcLiability), href: '/stored-value-cards' },
   ];

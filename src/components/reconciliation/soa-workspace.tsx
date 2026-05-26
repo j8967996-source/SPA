@@ -21,9 +21,10 @@ import {
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 import { SoaActions } from '@/components/reconciliation/soa-actions';
-import { loadSoaWorkspace, generateSOAGroups, settleSOABatch, type SoaGroup, type SoaHistoryRow } from '@/app/(dashboard)/reconciliation/soa/actions';
+import { ArBalanceExplorer } from '@/components/reconciliation/ar-balance-explorer';
+import { loadSoaWorkspace, generateSOAGroups, type SoaGroup, type SoaHistoryRow, type ArBalance } from '@/app/(dashboard)/reconciliation/soa/actions';
 
-export type { SoaHistoryRow };
+export type { SoaHistoryRow, ArBalance };
 
 function peso(cents: number): string {
   return `₱${(cents / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
@@ -39,15 +40,19 @@ export function SoaWorkspace({
   today,
   initialGroups,
   history,
+  arBalance,
+  initialView = 'generate',
 }: {
   initialFrom: string;
   initialTo: string;
   today: string; // PHT yyyy-mm-dd — for the semi-monthly settlement reminder
   initialGroups: SoaGroup[];
   history: SoaHistoryRow[];
+  arBalance: ArBalance;
+  initialView?: 'generate' | 'history' | 'ar';
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<'generate' | 'history'>('generate');
+  const [tab, setTab] = useState<'generate' | 'history' | 'ar'>(initialView);
   const [from, setFrom] = useState(initialFrom);
   const [to, setTo] = useState(initialTo);
   const [groups, setGroups] = useState<SoaGroup[]>(initialGroups);
@@ -55,10 +60,10 @@ export function SoaWorkspace({
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [loading, startLoad] = useTransition();
   const [pending, startGen] = useTransition();
-  // History tab: separate select (settleable rows) + expand state.
+  // History tab: select (for PDF) + expand state. Collection (settle / record
+  // payment) lives in the AR Balance view, so History no longer settles.
   const [histSel, setHistSel] = useState<Set<string>>(new Set());
   const [histExp, setHistExp] = useState<Set<string>>(new Set());
-  const [settling, startSettle] = useTransition();
 
   // Reload the unsettled list when the date range changes (debounced).
   const [firstRun, setFirstRun] = useState(true);
@@ -122,25 +127,10 @@ export function SoaWorkspace({
   function toggleAllHist() {
     setHistSel(allHistSelected ? new Set() : new Set(history.map((s) => s.id)));
   }
-  // Batch settle only applies to intercompany statements (cost transfer);
-  // third-party is collected per-payment via Record Payment.
-  const selectedSettleable = history.filter((s) => histSel.has(s.id) && s.settlement_type === 'intercompany' && s.status === 'issued');
   // 1 selected → that statement's PDF; many → a ZIP of separate PDFs.
   const pdfHref = histSel.size === 1
     ? `/reconciliation/soa/${[...histSel][0]}/pdf`
     : `/reconciliation/soa/pdf-zip?ids=${[...histSel].join(',')}`;
-  function doSettle() {
-    const ids = selectedSettleable.map((s) => s.id);
-    if (ids.length === 0) return;
-    startSettle(async () => {
-      const r = await settleSOABatch(ids);
-      if (r.ok) {
-        toast.success(`Settled ${r.data?.settled} SOA${(r.data?.settled ?? 0) > 1 ? 's' : ''}`);
-        setHistSel(new Set());
-        router.refresh();
-      } else toast.error(r.error);
-    });
-  }
 
   return (
     <div className="flex flex-col gap-6">
@@ -170,10 +160,17 @@ export function SoaWorkspace({
           >
             SOA History
           </button>
+          <button
+            type="button"
+            onClick={() => setTab('ar')}
+            className={cn('rounded-md px-4 py-1.5 text-sm font-bold transition-colors', tab === 'ar' ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-accent')}
+          >
+            AR Balance
+          </button>
         </div>
       </div>
 
-      {tab === 'generate' ? (
+      {tab === 'generate' && (
         <>
           <div className={cn(
             'flex items-center gap-2 rounded-lg border px-4 py-2.5 text-sm font-semibold',
@@ -284,7 +281,9 @@ export function SoaWorkspace({
             </div>
           )}
         </>
-      ) : history.length === 0 ? (
+      )}
+
+      {tab === 'history' && (history.length === 0 ? (
         <Card className="border-dashed bg-muted/30">
           <CardContent className="py-10 text-center">
             <FileText className="size-8 mx-auto text-muted-foreground/50" />
@@ -293,8 +292,8 @@ export function SoaWorkspace({
         </Card>
       ) : (
         <div className="flex flex-col gap-3">
-          {/* Selection bar — pick statements to download as PDF; settling acts
-              only on the settleable (issued / partial-paid) ones selected. */}
+          {/* Selection bar — pick statements to download as PDF. Collection
+              (settle / record payment) is done in the AR Balance view. */}
           <div className="sticky top-2 z-20 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-card px-4 py-2.5 shadow-sm">
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" className="size-4 cursor-pointer accent-primary" checked={allHistSelected} onChange={toggleAllHist} />
@@ -309,11 +308,6 @@ export function SoaWorkspace({
                 >
                   <Download className="size-4" /> Download PDF ({histSel.size})
                 </a>
-                {selectedSettleable.length > 0 && (
-                  <Button size="sm" variant="secondary" onClick={doSettle} disabled={settling}>
-                    {settling ? 'Settling…' : `Settle & post (${selectedSettleable.length})`}
-                  </Button>
-                )}
               </div>
             )}
           </div>
@@ -329,10 +323,10 @@ export function SoaWorkspace({
                   <TableHead className="font-bold">SOA No</TableHead>
                   <TableHead className="font-bold">Billing</TableHead>
                   <TableHead className="w-28 font-bold text-center">Type</TableHead>
-                  <TableHead className="font-bold">Period</TableHead>
-                  <TableHead className="w-32 font-bold text-right">Total</TableHead>
+                  <TableHead className="font-bold text-right">Period</TableHead>
+                  <TableHead className="w-32 font-bold text-right pr-2">Total</TableHead>
                   <TableHead className="w-28 font-bold text-center">Status</TableHead>
-                  <TableHead className="w-44" />
+                  <TableHead className="w-32" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -352,15 +346,15 @@ export function SoaWorkspace({
                         <TableCell className="font-mono font-bold">{s.soa_no}</TableCell>
                         <TableCell className="font-medium">{s.billing_code ? `${s.billing_code} — ${s.billing_name}` : '—'}</TableCell>
                         <TableCell className="text-center"><Badge variant="secondary" className="font-bold capitalize">{(s.settlement_type ?? '').replace('_', '-')}</Badge></TableCell>
-                        <TableCell className="font-medium tabular text-muted-foreground">{s.period_from} → {s.period_to}</TableCell>
-                        <TableCell className="font-bold tabular text-right">{peso(s.total_cents)}</TableCell>
+                        <TableCell className="font-medium tabular text-muted-foreground text-right">{s.period_from} → {s.period_to}</TableCell>
+                        <TableCell className="font-bold tabular text-right pr-2">{peso(s.total_cents)}</TableCell>
                         <TableCell className="text-center"><Badge variant={STATUS_VARIANT[s.status] ?? 'secondary'} className="font-bold capitalize">{s.status.replace('_', ' ')}</Badge></TableCell>
                         <TableCell>
                           <div className="flex items-center justify-end gap-1">
                             <a href={`/reconciliation/soa/${s.id}/pdf`} title="Download PDF" className="rounded p-1 text-muted-foreground hover:text-primary hover:bg-accent">
                               <Download className="size-4" />
                             </a>
-                            <SoaActions id={s.id} status={s.status} settlementType={s.settlement_type} outstandingCents={s.outstanding_cents} />
+                            <SoaActions id={s.id} status={s.status} settlementType={s.settlement_type} outstandingCents={s.outstanding_cents} collect={false} />
                           </div>
                         </TableCell>
                       </TableRow>
@@ -374,7 +368,7 @@ export function SoaWorkspace({
                             ) : (
                               <Table className="table-fixed">
                                 {/* Net column + trailing spacers mirror the parent's
-                                    Total (w-32) + Status (w-28) + Actions (w-44). */}
+                                    Total (w-32) + Status (w-28) + Actions (w-32). */}
                                 <colgroup>
                                   <col className="w-32" />
                                   <col className="w-48" />
@@ -383,7 +377,7 @@ export function SoaWorkspace({
                                   <col className="w-20" />
                                   <col className="w-32" />
                                   <col className="w-28" />
-                                  <col className="w-44" />
+                                  <col className="w-32" />
                                 </colgroup>
                                 <TableHeader>
                                   <TableRow>
@@ -408,9 +402,9 @@ export function SoaWorkspace({
                                         <TableCell className="font-medium pl-4">{ln.guest}</TableCell>
                                         <TableCell className="font-medium">{ln.service}</TableCell>
                                         <TableCell className="tabular text-center text-muted-foreground">{ln.duration_minutes ?? '—'}</TableCell>
-                                        <TableCell className="font-bold tabular text-right">{peso(ln.net_cents)}</TableCell>
+                                        <TableCell className="font-bold tabular text-right pr-2">{peso(ln.net_cents)}</TableCell>
                                         <TableCell className="w-28" />
-                                        <TableCell className="w-44" />
+                                        <TableCell className="w-32" />
                                       </TableRow>
                                     )),
                                   )}
@@ -427,7 +421,9 @@ export function SoaWorkspace({
             </Table>
           </Card>
         </div>
-      )}
+      ))}
+
+      {tab === 'ar' && <ArBalanceExplorer ar={arBalance} />}
     </div>
   );
 }

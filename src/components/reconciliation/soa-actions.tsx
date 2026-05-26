@@ -80,11 +80,15 @@ export function SoaActions({
   status,
   settlementType,
   outstandingCents,
+  collect = true,
+  allowVoid = true,
 }: {
   id: string;
   status: string;
   settlementType: string | null;
   outstandingCents: number;
+  collect?: boolean; // show Settle / Record Payment (collection lives in AR Balance)
+  allowVoid?: boolean; // show Void (statement management lives in SOA History)
 }) {
   const [pending, startTransition] = useTransition();
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>, ok: string) =>
@@ -95,17 +99,20 @@ export function SoaActions({
 
   // settled / void are terminal — no actions.
   if (status === 'settled' || status === 'void') return null;
+  if (!collect && !allowVoid) return null;
 
   return (
     <div className="flex items-center gap-2">
-      {settlementType === 'intercompany' ? (
+      {collect && (settlementType === 'intercompany' ? (
         // Intercompany: one-click settle = transfer to cost (no cash).
         <Button size="sm" onClick={() => run(() => settleSOA(id), 'SOA settled')} disabled={pending}>Settle</Button>
       ) : (
         // Third-party: collect money via recorded payments.
         <RecordPaymentDialog id={id} outstandingCents={outstandingCents} />
+      ))}
+      {allowVoid && (
+        <Button size="sm" variant="ghost" className="text-destructive" onClick={() => run(() => voidSOA(id), 'SOA voided')} disabled={pending}>Void</Button>
       )}
-      <Button size="sm" variant="ghost" className="text-destructive" onClick={() => run(() => voidSOA(id), 'SOA voided')} disabled={pending}>Void</Button>
     </div>
   );
 }

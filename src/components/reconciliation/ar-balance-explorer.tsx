@@ -1,7 +1,7 @@
 'use client';
 
 import { Fragment, useState } from 'react';
-import { ChevronRight, ChevronDown, Download, FilePlus2, Wallet, AlertTriangle } from 'lucide-react';
+import { ChevronRight, ChevronDown, FilePlus2, Wallet, AlertTriangle } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -148,10 +148,7 @@ export function ArBalanceExplorer({ ar }: { ar: ArBalance }) {
                                       <TableCell className="text-center"><Badge variant={STATUS_VARIANT[s.status] ?? 'secondary'} className="font-bold capitalize">{s.status.replace('_', ' ')}</Badge></TableCell>
                                       <TableCell>
                                         <div className="flex items-center justify-end gap-1">
-                                          <a href={`/reconciliation/soa/${s.id}/pdf`} title="Download PDF" className="rounded p-1 text-muted-foreground hover:text-primary hover:bg-accent">
-                                            <Download className="size-4" />
-                                          </a>
-                                          <SoaActions id={s.id} status={s.status} settlementType={s.settlement_type} outstandingCents={s.outstanding_cents} />
+                                          <SoaActions id={s.id} status={s.status} settlementType={s.settlement_type} outstandingCents={s.outstanding_cents} allowVoid={false} />
                                         </div>
                                       </TableCell>
                                     </TableRow>

@@ -41,7 +41,7 @@ export default async function ReconciliationHubPage() {
       attention: s.unsettledCommissionLines > 0,
     },
     {
-      href: '/reconciliation/ar-balance', label: 'AR Balance', icon: Wallet,
+      href: '/reconciliation/soa?view=ar', label: 'AR Balance', icon: Wallet,
       desc: 'Outstanding receivables — open statements + un-stated closed AR, by billing destination.',
       metric: s.arOutstandingCents > 0 ? `${peso(s.arOutstandingCents)} outstanding` : 'Nothing outstanding',
       attention: s.arOutstandingCents > 0,
