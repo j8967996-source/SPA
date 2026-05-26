@@ -159,7 +159,18 @@ export function ArBalanceExplorer({ ar }: { ar: ArBalance }) {
                             {d.soas.length === 0 ? (
                               <p className="text-xs font-semibold text-muted-foreground">No open statements.</p>
                             ) : (
-                              <Table>
+                              <Table className="table-fixed">
+                                {/* All columns fixed so table-fixed spreads the slack
+                                    proportionally — the right side (amounts / status /
+                                    actions) gets roomy, even space instead of bunching. */}
+                                <colgroup>
+                                  <col className="w-64" />
+                                  <col className="w-44" />
+                                  <col className="w-24" />
+                                  <col className="w-32" />
+                                  <col className="w-28" />
+                                  <col className="w-40" />
+                                </colgroup>
                                 <TableHeader>
                                   <TableRow>
                                     <TableHead className="font-bold">SOA No</TableHead>
@@ -167,7 +178,7 @@ export function ArBalanceExplorer({ ar }: { ar: ArBalance }) {
                                     <TableHead className="font-bold">Due</TableHead>
                                     <TableHead className="font-bold text-right">Outstanding</TableHead>
                                     <TableHead className="font-bold text-center">Status</TableHead>
-                                    <TableHead className="w-44" />
+                                    <TableHead className="pr-4" />
                                   </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -185,7 +196,7 @@ export function ArBalanceExplorer({ ar }: { ar: ArBalance }) {
                                       </TableCell>
                                       <TableCell className="tabular text-right font-bold">{peso(s.outstanding_cents)}</TableCell>
                                       <TableCell className="text-center"><Badge variant={STATUS_VARIANT[s.status] ?? 'secondary'} className="font-bold capitalize">{s.status.replace('_', ' ')}</Badge></TableCell>
-                                      <TableCell>
+                                      <TableCell className="pr-4">
                                         <div className="flex items-center justify-end gap-2">
                                           {settleable && (
                                             <input
