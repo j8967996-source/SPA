@@ -33,9 +33,6 @@ const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive'> = 
   draft: 'secondary', issued: 'default', partial_paid: 'secondary', settled: 'default', void: 'destructive',
 };
 
-// Statuses that can be batch-settled from History.
-const SETTLEABLE = new Set(['issued', 'partial_paid']);
-
 export function SoaWorkspace({
   initialFrom,
   initialTo,
@@ -124,7 +121,9 @@ export function SoaWorkspace({
   function toggleAllHist() {
     setHistSel(allHistSelected ? new Set() : new Set(history.map((s) => s.id)));
   }
-  const selectedSettleable = history.filter((s) => histSel.has(s.id) && SETTLEABLE.has(s.status));
+  // Batch settle only applies to intercompany statements (cost transfer);
+  // third-party is collected per-payment via Record Payment.
+  const selectedSettleable = history.filter((s) => histSel.has(s.id) && s.settlement_type === 'intercompany' && s.status === 'issued');
   // 1 selected → that statement's PDF; many → a ZIP of separate PDFs.
   const pdfHref = histSel.size === 1
     ? `/reconciliation/soa/${[...histSel][0]}/pdf`
@@ -359,7 +358,7 @@ export function SoaWorkspace({
                             <a href={`/reconciliation/soa/${s.id}/pdf`} title="Download PDF" className="rounded p-1 text-muted-foreground hover:text-primary hover:bg-accent">
                               <Download className="size-4" />
                             </a>
-                            <SoaActions id={s.id} status={s.status} />
+                            <SoaActions id={s.id} status={s.status} settlementType={s.settlement_type} outstandingCents={s.outstanding_cents} />
                           </div>
                         </TableCell>
                       </TableRow>

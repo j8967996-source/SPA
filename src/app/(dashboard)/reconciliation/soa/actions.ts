@@ -103,6 +103,7 @@ export interface SoaHistoryRow {
   period_from: string;
   period_to: string;
   total_cents: number;
+  outstanding_cents: number;
   billing_code: string | null;
   billing_name: string | null;
   // The orders stated on this SOA (for the expandable History detail). Empty for
@@ -116,7 +117,7 @@ export async function loadSoaHistory(): Promise<SoaHistoryRow[]> {
   const { data } = await supabase
     .from('revenue_soa')
     .select(`
-      id, soa_no, status, settlement_type, period_from, period_to, total_cents,
+      id, soa_no, status, settlement_type, period_from, period_to, total_cents, outstanding_cents,
       billing:billing_destinations!revenue_soa_billing_to_id_fkey ( code, name ),
       revenue_soa_orders (
         order:orders (
@@ -137,6 +138,7 @@ export async function loadSoaHistory(): Promise<SoaHistoryRow[]> {
     return {
       id: s.id, soa_no: s.soa_no, status: s.status, settlement_type: s.settlement_type,
       period_from: s.period_from, period_to: s.period_to, total_cents: s.total_cents,
+      outstanding_cents: s.outstanding_cents ?? s.total_cents,
       billing_code: b?.code ?? null, billing_name: b?.name ?? null, detail,
     };
   });
@@ -236,13 +238,20 @@ export async function generateSOA(input: unknown): Promise<ActionResult<{ id: st
   const seq = last?.[0]?.soa_no ? Number(last[0].soa_no.slice(prefix.length)) : 0;
   const soa_no = `${prefix}${String(seq + 1).padStart(3, '0')}`;
 
+  // Generated statements are issued immediately (no separate Issue step). Stamp
+  // the statement date now; third-party gets a due date from its credit terms.
+  const today = new Date().toISOString().slice(0, 10);
+  const dueDate = billing.settlement_type === 'third_party' && (billing.credit_terms_days ?? 0) > 0
+    ? new Date(Date.now() + (billing.credit_terms_days ?? 0) * 86400000).toISOString().slice(0, 10)
+    : null;
+
   const { data: soa, error } = await supabase
     .from('revenue_soa')
     .insert({
       soa_no, billing_to_id, period_from, period_to,
       settlement_type: billing.settlement_type,
       subtotal_cents: subtotal, total_cents: subtotal, paid_cents: 0, outstanding_cents: subtotal,
-      status: 'draft',
+      status: 'issued', issued_date: today, due_date: dueDate,
     })
     .select('id')
     .single();
@@ -257,36 +266,19 @@ export async function generateSOA(input: unknown): Promise<ActionResult<{ id: st
   return { ok: true, data: { id: soa.id } };
 }
 
-export async function issueSOA(id: string): Promise<ActionResult> {
-  const session = await currentSession();
-  if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
-  const supabase = await createAuditedClient();
-  const { data: soa } = await supabase
-    .from('revenue_soa')
-    .select('status, period_to, settlement_type, billing:billing_destinations!revenue_soa_billing_to_id_fkey ( credit_terms_days )')
-    .eq('id', id)
-    .single();
-  if (!soa) return { ok: false, error: 'SOA not found' };
-  if (soa.status !== 'draft') return { ok: false, error: 'Only a draft SOA can be issued' };
-  const today = new Date().toISOString().slice(0, 10);
-  const creditDays = one(soa.billing)?.credit_terms_days ?? 0;
-  const due = soa.settlement_type === 'third_party' && creditDays > 0
-    ? new Date(Date.now() + creditDays * 86400000).toISOString().slice(0, 10)
-    : null;
-  const { error } = await supabase.from('revenue_soa').update({ status: 'issued', issued_date: today, due_date: due }).eq('id', id);
-  if (error) return { ok: false, error: error.message };
-  revalidatePath('/reconciliation/soa');
-  return { ok: true };
-}
-
+/**
+ * Settle an INTERCOMPANY statement = transfer to cost (no cash). Third-party
+ * statements are settled by recording payments instead.
+ * NOTE: ERP cost-transfer posting (DR 50170 / Sub 000000T03 → CR 10200) deferred.
+ */
 export async function settleSOA(id: string): Promise<ActionResult> {
   const session = await currentSession();
   if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
   const supabase = await createAuditedClient();
-  const { data: soa } = await supabase.from('revenue_soa').select('status, total_cents').eq('id', id).single();
+  const { data: soa } = await supabase.from('revenue_soa').select('status, total_cents, settlement_type').eq('id', id).single();
   if (!soa) return { ok: false, error: 'SOA not found' };
-  if (!['issued', 'partial_paid'].includes(soa.status)) return { ok: false, error: 'Only an issued SOA can be settled' };
-  // NOTE: ERP settle posting deferred. Marks the statement fully settled.
+  if (soa.settlement_type !== 'intercompany') return { ok: false, error: 'Third-party statements are settled via Record Payment' };
+  if (soa.status !== 'issued') return { ok: false, error: 'Only an issued statement can be settled' };
   const { error } = await supabase
     .from('revenue_soa')
     .update({ status: 'settled', paid_cents: soa.total_cents, outstanding_cents: 0 })
@@ -296,11 +288,11 @@ export async function settleSOA(id: string): Promise<ActionResult> {
   return { ok: true };
 }
 
-/** Settle several issued/partial_paid SOAs in one pass (batch from History). */
+/** Batch-settle selected INTERCOMPANY statements (cost transfer) in one pass. */
 export async function settleSOABatch(ids: string[]): Promise<ActionResult<{ settled: number }>> {
   const session = await currentSession();
   if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
-  if (!ids.length) return { ok: false, error: 'Select at least one issued SOA' };
+  if (!ids.length) return { ok: false, error: 'Select at least one intercompany statement' };
   let settled = 0;
   const errors: string[] = [];
   for (const id of ids) {
@@ -311,6 +303,59 @@ export async function settleSOABatch(ids: string[]): Promise<ActionResult<{ sett
   if (settled === 0) return { ok: false, error: errors[0] ?? 'Nothing to settle' };
   revalidatePath('/reconciliation/soa');
   return { ok: true, data: { settled } };
+}
+
+const paymentSchema = z.object({
+  soa_id: z.string().uuid(),
+  amount: z.coerce.number().positive(),
+  payment_method: z.string().max(60).optional().nullable(),
+  reference_no: z.string().max(120).optional().nullable(),
+  paid_at: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Pick a date').optional(),
+  note: z.string().max(300).optional().nullable(),
+});
+
+/**
+ * Record a (possibly partial) payment against a THIRD-PARTY statement. Updates
+ * paid / outstanding and flips to partial_paid or settled.
+ * NOTE: ERP cash-receipt posting (DR 10111 → CR 10200) deferred.
+ */
+export async function recordSoaPayment(input: unknown): Promise<ActionResult> {
+  const session = await currentSession();
+  if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
+  const parsed = paymentSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
+  const { soa_id, amount, payment_method, reference_no, paid_at, note } = parsed.data;
+  const supabase = await createAuditedClient();
+  const { data: soa } = await supabase
+    .from('revenue_soa')
+    .select('status, total_cents, paid_cents, settlement_type')
+    .eq('id', soa_id)
+    .single();
+  if (!soa) return { ok: false, error: 'SOA not found' };
+  if (soa.settlement_type !== 'third_party') return { ok: false, error: 'Record Payment is for third-party statements; intercompany uses Settle' };
+  if (!['issued', 'partial_paid'].includes(soa.status)) return { ok: false, error: 'This statement is not open for payment' };
+
+  const amountCents = Math.round(amount * 100);
+  const outstanding = soa.total_cents - soa.paid_cents;
+  if (amountCents > outstanding) return { ok: false, error: `Amount exceeds the outstanding balance (₱${(outstanding / 100).toLocaleString('en-PH')})` };
+
+  const paidAtIso = paid_at ? `${paid_at}T00:00:00+08:00` : new Date().toISOString();
+  const ins = await supabase.from('revenue_soa_payments').insert({
+    soa_id, amount_cents: amountCents, paid_at: paidAtIso,
+    payment_method: payment_method || null, reference_no: reference_no || null, note: note || null,
+    recorded_by: session!.staffUserId,
+  });
+  if (ins.error) return { ok: false, error: ins.error.message };
+
+  const newPaid = soa.paid_cents + amountCents;
+  const newOutstanding = soa.total_cents - newPaid;
+  const upd = await supabase
+    .from('revenue_soa')
+    .update({ paid_cents: newPaid, outstanding_cents: newOutstanding, status: newOutstanding <= 0 ? 'settled' : 'partial_paid' })
+    .eq('id', soa_id);
+  if (upd.error) return { ok: false, error: upd.error.message };
+  revalidatePath('/reconciliation/soa');
+  return { ok: true };
 }
 
 export async function voidSOA(id: string): Promise<ActionResult> {
