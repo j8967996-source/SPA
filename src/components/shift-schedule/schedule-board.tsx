@@ -243,23 +243,21 @@ export function ScheduleBoard({
           {/* hour + 15-min ruler */}
           <div className="flex border-b border-border sticky top-0 z-30 bg-muted">
             <div className="w-40 shrink-0 p-2 flex items-center justify-center text-center text-xs font-bold text-muted-foreground sticky left-0 z-40 bg-muted">Station</div>
-            <div className="relative h-9" style={{ minWidth: trackWidth }}>
+            <div className="relative h-12" style={{ minWidth: trackWidth }}>
+              {/* top tier: the hour, sitting on its gridline */}
               {hours.slice(0, -1).map((h) => (
-                <div
-                  key={h}
-                  className="absolute top-0 bottom-0 flex items-center justify-center text-xs font-bold tabular-nums border-l border-border/50"
-                  style={{ left: (h * 60 - windowStartMin) * PX_PER_MIN, width: PX_PER_HOUR }}
-                >
-                  {String(h).padStart(2, '0')}:00
+                <div key={h} className="absolute top-0 bottom-0 border-l border-border" style={{ left: (h * 60 - windowStartMin) * PX_PER_MIN, width: PX_PER_HOUR }}>
+                  <span className="absolute top-1.5 left-1.5 text-sm font-bold tabular-nums">{String(h).padStart(2, '0')}:00</span>
                 </div>
               ))}
+              {/* bottom tier: the 15-minute marks under each hour */}
               {hours.slice(0, -1).flatMap((h) => [15, 30, 45].map((q) => (
                 <div
                   key={`${h}-${q}`}
-                  className={`absolute bottom-0 border-l ${q === 30 ? 'h-4 border-border/60' : 'h-2 border-border/35'}`}
+                  className={`absolute bottom-0 h-4 border-l ${q === 30 ? 'border-border/70' : 'border-border/40'}`}
                   style={{ left: (h * 60 + q - windowStartMin) * PX_PER_MIN }}
                 >
-                  {q === 30 && <span className="absolute -top-3.5 left-0.5 text-[8px] font-semibold text-muted-foreground/70 tabular-nums">30</span>}
+                  <span className="absolute -top-3 left-0.5 text-[9px] font-semibold text-muted-foreground/70 tabular-nums">{q}</span>
                 </div>
               )))}
               {nowMin != null && nowMin >= windowStartMin && (
