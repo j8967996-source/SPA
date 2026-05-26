@@ -1,6 +1,7 @@
 import { createServiceClient } from '@/lib/supabase/server';
 import { getAllowedBranches } from '@/lib/branch-access';
 import { isDayCashClosed } from '@/app/(dashboard)/reconciliation/cash/actions';
+import { loadArBalance } from '@/app/(dashboard)/reconciliation/soa/actions';
 
 const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
 
@@ -80,21 +81,10 @@ export async function loadReconStatus(): Promise<ReconStatus> {
     (it) => it.status !== 'cancelled' && one(it.service)?.commission_applicable && ['paid', 'closed'].includes(one(it.order)?.status ?? ''),
   ).length;
 
-  // --- AR outstanding (AR-billed completed/closed orders, total − payments) ---
-  let arOutstandingCents = 0;
-  if (arId) {
-    const { data: arOrders } = await supabase
-      .from('orders')
-      .select('id, total_cents, billing:billing_destinations!orders_billing_to_id_fkey ( default_payment_method_id ), payments ( amount_cents )')
-      .is('deleted_at', null)
-      .in('status', ['completed', 'closed']);
-    for (const o of arOrders ?? []) {
-      if (one(o.billing)?.default_payment_method_id !== arId) continue;
-      const paid = (o.payments ?? []).reduce((s, p) => s + p.amount_cents, 0);
-      const out = o.total_cents - paid;
-      if (out > 0) arOutstandingCents += out;
-    }
-  }
+  // --- AR outstanding: same SOA-model as the AR Balance page (open-SOA
+  // outstanding + un-stated closed AR, branch-scoped), so the dashboard card
+  // and the page always show the same number. ---
+  const arOutstandingCents = (await loadArBalance()).total_cents;
 
   // --- SOA: closed AR orders not yet on a statement ---
   let soaUnstated = 0;

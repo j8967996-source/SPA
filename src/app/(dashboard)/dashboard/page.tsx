@@ -17,9 +17,6 @@ async function fetchData() {
   const supabase = createServiceClient();
   const today = todayPHT();
 
-  const arMethod = await supabase.from('payment_methods').select('id').eq('code', 'ar').maybeSingle();
-  const arId = arMethod.data?.id ?? null;
-
   const [todayOrders, inService, openTips, svc, arOrders] = await Promise.all([
     supabase
       .from('orders')
@@ -41,24 +38,10 @@ async function fetchData() {
   const tipsOpen = (openTips.data ?? []).reduce((s, t) => s + t.amount_cents, 0);
   const svcLiability = (svc.data ?? []).reduce((s, c) => s + c.current_balance_cents, 0);
 
-  // Outstanding AR = closed AR orders' totals (settled SOA reduction is a later refinement).
-  const arOutstanding = arId
-    ? (await supabase
-        .from('orders')
-        .select('total_cents, billing:billing_destinations!orders_billing_to_id_fkey ( default_payment_method_id )')
-        .eq('status', 'closed')
-        .is('deleted_at', null)).data
-        ?.filter((o) => {
-          const b = Array.isArray(o.billing) ? o.billing[0] : o.billing;
-          return b?.default_payment_method_id === arId;
-        })
-        .reduce((s, o) => s + o.total_cents, 0) ?? 0
-    : 0;
-
   return {
     today, bookings, pax, revenue, discount,
     inService: inService.count ?? 0,
-    tipsOpen, svcLiability, arOutstanding,
+    tipsOpen, svcLiability,
     closedCount: (arOrders.data ?? []).length,
   };
 }
@@ -76,7 +59,7 @@ export default async function DashboardPage() {
   ];
 
   const finance = [
-    { label: 'AR Outstanding', value: peso(d.arOutstanding), href: '/reconciliation/ar-balance' },
+    { label: 'AR Outstanding', value: peso(recon.arOutstandingCents), href: '/reconciliation/ar-balance' },
     { label: 'Tips Unsettled', value: peso(d.tipsOpen), href: '/reconciliation/tips' },
     { label: 'Stored-Value Liability', value: peso(d.svcLiability), href: '/stored-value-cards' },
   ];

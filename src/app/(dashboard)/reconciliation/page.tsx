@@ -42,7 +42,7 @@ export default async function ReconciliationHubPage() {
     },
     {
       href: '/reconciliation/ar-balance', label: 'AR Balance', icon: Wallet,
-      desc: 'Outstanding AR by billing destination, reconciled against payments.',
+      desc: 'Outstanding receivables — open statements + un-stated closed AR, by billing destination.',
       metric: s.arOutstandingCents > 0 ? `${peso(s.arOutstandingCents)} outstanding` : 'Nothing outstanding',
       attention: s.arOutstandingCents > 0,
     },
