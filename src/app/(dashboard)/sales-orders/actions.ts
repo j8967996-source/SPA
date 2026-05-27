@@ -7,6 +7,7 @@ import { createServiceClient, createAuditedClient } from '@/lib/supabase/server'
 import { currentSession, isManager } from '@/lib/auth';
 import { isBusinessDayClosed } from '@/app/(dashboard)/reconciliation/end-of-day/actions';
 import { canAccessBranch } from '@/lib/branch-access';
+import { canPerformGroup, matchesGender } from '@/lib/therapist-availability';
 
 // Append a row to the generic status-change audit log.
 async function logStatus(
@@ -642,7 +643,7 @@ export async function startOrderItem(itemId: string, orderId: string): Promise<A
   // on another line.
   const { data: item } = await supabase
     .from('order_items')
-    .select('therapist_id, resource_id, order_customer_id, service:service_items ( commission_applicable, required_resource_type )')
+    .select('therapist_id, resource_id, order_customer_id, service:service_items ( commission_applicable, required_resource_type, service_group )')
     .eq('id', itemId)
     .single();
 
@@ -654,6 +655,25 @@ export async function startOrderItem(itemId: string, orderId: string): Promise<A
   }
   if (svc?.required_resource_type && !item?.resource_id) {
     return { ok: false, error: 'Assign a station/bed before starting this service' };
+  }
+
+  // Hard-stop at the binding moment: the assigned therapist must be trained for
+  // the service's group and match the guest's gender preference. The picker
+  // already filters these, but a stale/bypassed assignment can't be started.
+  if (item?.therapist_id) {
+    const group = svc?.service_group ?? null;
+    const [{ data: emp }, { data: caps }, { data: ord0 }] = await Promise.all([
+      supabase.from('employees').select('gender').eq('id', item.therapist_id).single(),
+      supabase.from('employee_service_groups').select('service_group').eq('employee_id', item.therapist_id),
+      supabase.from('orders').select('reservation:reservations ( gender_preference )').eq('id', orderId).single(),
+    ]);
+    if (!canPerformGroup((caps ?? []).map((c) => c.service_group), group)) {
+      return { ok: false, error: 'This therapist is not trained for this service' };
+    }
+    const resv = Array.isArray(ord0?.reservation) ? ord0?.reservation[0] : ord0?.reservation;
+    if (!matchesGender(emp?.gender, resv?.gender_preference ?? null)) {
+      return { ok: false, error: 'This therapist does not match the guest’s gender preference' };
+    }
   }
 
   // One guest does one service at a time — finish the current one before starting
