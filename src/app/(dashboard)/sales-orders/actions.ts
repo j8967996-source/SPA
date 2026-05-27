@@ -889,6 +889,29 @@ export async function setOrderStatus(orderId: string, next: string): Promise<Act
   if (!allowed.includes(next)) {
     return { ok: false, error: `Cannot move from ${order.status} to ${next}` };
   }
+
+  // Opening means the order is ready to run: it must have services, every guest
+  // must have one, and each service needs its therapist (hands-on) + bed.
+  if (next === 'open') {
+    const [{ data: customers }, { data: items }] = await Promise.all([
+      supabase.from('order_customers').select('id, customer_name').eq('order_id', orderId),
+      supabase
+        .from('order_items')
+        .select('therapist_id, resource_id, order_customer_id, service:service_items ( name, commission_applicable, required_resource_type )')
+        .eq('order_id', orderId)
+        .neq('status', 'cancelled'),
+    ]);
+    if (!items || items.length === 0) return { ok: false, error: 'Add at least one service before opening the order' };
+    const withService = new Set((items ?? []).map((i) => i.order_customer_id));
+    const emptyGuest = (customers ?? []).find((c) => !withService.has(c.id));
+    if (emptyGuest) return { ok: false, error: `${emptyGuest.customer_name || 'A guest'} has no service — add one or remove the guest` };
+    for (const it of items) {
+      const svc = Array.isArray(it.service) ? it.service[0] : it.service;
+      if (svc?.commission_applicable && !it.therapist_id) return { ok: false, error: `Assign a therapist to "${svc?.name ?? 'every service'}" before opening` };
+      if (svc?.required_resource_type && !it.resource_id) return { ok: false, error: `Assign a station/bed to "${svc?.name ?? 'every service'}" before opening` };
+    }
+  }
+
   const { error } = await supabase.from('orders').update({ status: next }).eq('id', orderId);
   if (error) return { ok: false, error: error.message };
   await logStatus(orderId, order.status, next, null, session?.staffUserId ?? null);
