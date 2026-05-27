@@ -48,7 +48,6 @@ import {
   voidPayment,
 } from '@/app/(dashboard)/sales-orders/actions';
 import { CustomerPaymentCard, type TipTarget } from '@/components/sales-orders/customer-payment-card';
-import { PaymentAdjust } from '@/components/sales-orders/payment-adjust';
 import { FeedbackDialog } from '@/components/sales-orders/feedback-dialog';
 import { InterruptDialog } from '@/components/sales-orders/interrupt-dialog';
 import { ANY_GENDER, canPerformGroup, matchesGender } from '@/lib/therapist-availability';
@@ -1069,15 +1068,6 @@ export function OrderWorkspace({
                   </div>
                 ))}
               </div>
-            )}
-            {canManage && (
-              <PaymentAdjust
-                orderId={order.id}
-                methods={allowedPaymentMethods}
-                storedValueCards={storedValueCards}
-                dueCents={due}
-                paidCents={order.paid_cents}
-              />
             )}
           </CardContent>
         </Card>

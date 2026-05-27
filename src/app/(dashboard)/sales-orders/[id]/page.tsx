@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { OrderWorkspace } from '@/components/sales-orders/order-workspace';
 import { OrderNoteEditor } from '@/components/sales-orders/order-note-editor';
+import { PaymentAdjust } from '@/components/sales-orders/payment-adjust';
 import { OrderStatusActions } from '@/components/sales-orders/order-status-actions';
 import { ReportIncidentDialog } from '@/components/incidents/report-incident-dialog';
 
@@ -315,7 +316,16 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
             {order.status.replace('_', ' ')}
           </Badge>
           <OrderStatusActions orderId={order.id} status={order.status} canManage={canManage} itemCount={items.length} hasPayments={payments.length > 0} />
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-3">
+            {canManage && !arBilled && ['completed', 'paid'].includes(order.status) && (
+              <PaymentAdjust
+                orderId={order.id}
+                methods={paymentMethods.filter((m) => m.code !== 'ar')}
+                storedValueCards={storedValueCards}
+                dueCents={Math.max(0, order.total_cents - order.paid_cents)}
+                paidCents={order.paid_cents}
+              />
+            )}
             <ReportIncidentDialog orderId={order.id} defaultCustomerName={customers[0]?.customer_name ?? ''} />
           </div>
         </div>

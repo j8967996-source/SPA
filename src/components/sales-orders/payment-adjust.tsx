@@ -86,9 +86,7 @@ export function PaymentAdjust({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
-      <span className="mr-auto text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Manager adjustments</span>
-
+    <div className="flex flex-wrap items-center gap-2">
       <Dialog open={collectOpen} onOpenChange={(o) => { setCollectOpen(o); if (o) { setCAmount(String(dueCents / 100)); setCMethod(defaultMethod); setCRef(''); } }}>
         <DialogTrigger
           render={
