@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, TriangleAlert } from 'lucide-react';
 
 import { createServiceClient } from '@/lib/supabase/server';
 import { currentSession, isManager } from '@/lib/auth';
@@ -330,6 +330,19 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           </div>
         </div>
       </div>
+
+      {/* Loud, unmissable flag: service is done but money hasn't been fully
+          collected. Only for counter-paid orders (AR is billed monthly, not at
+          the counter) and only while a balance remains. */}
+      {!arBilled && order.status === 'completed' && order.total_cents - order.paid_cents > 0 && (
+        <div className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3">
+          <TriangleAlert className="size-5 shrink-0 text-destructive mt-0.5" />
+          <div className="text-sm">
+            <p className="font-bold text-destructive">Not fully paid — {peso(order.total_cents - order.paid_cents)} still due</p>
+            <p className="font-medium text-destructive/80">Collect the balance from the guest before they leave.</p>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card className="md:col-span-2">
