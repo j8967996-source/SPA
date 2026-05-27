@@ -634,11 +634,7 @@ export async function removeOrderItem(itemId: string, orderId: string): Promise<
 }
 
 // Per-item service timing — drives real-time therapist availability.
-export async function startOrderItem(
-  itemId: string,
-  orderId: string,
-  allowConcurrent = false,
-): Promise<ActionResult> {
+export async function startOrderItem(itemId: string, orderId: string): Promise<ActionResult> {
   const supabase = await createAuditedClient();
   const now = new Date().toISOString();
 
@@ -660,9 +656,9 @@ export async function startOrderItem(
     return { ok: false, error: 'Assign a station/bed before starting this service' };
   }
 
-  // One guest does one service at a time unless the operator confirms a parallel
-  // service (e.g. foot massage + scalp care together).
-  if (!allowConcurrent && item?.order_customer_id) {
+  // One guest does one service at a time — finish the current one before starting
+  // the next (no parallel services for the same guest).
+  if (item?.order_customer_id) {
     const { data: sameGuest } = await supabase
       .from('order_items')
       .select('id')
@@ -671,7 +667,7 @@ export async function startOrderItem(
       .neq('id', itemId)
       .limit(1);
     if (sameGuest && sameGuest.length > 0) {
-      return { ok: false, error: 'This guest already has a service in progress' };
+      return { ok: false, error: 'Finish this guest’s current service before starting the next' };
     }
   }
   if (item?.therapist_id) {
@@ -738,7 +734,7 @@ export async function startAllServices(orderId: string): Promise<ActionResult<{ 
 
   let started = 0;
   for (const id of picked) {
-    const r = await startOrderItem(id, orderId, false);
+    const r = await startOrderItem(id, orderId);
     if (r.ok) started += 1;
   }
   revalidatePath(`/sales-orders/${orderId}`);

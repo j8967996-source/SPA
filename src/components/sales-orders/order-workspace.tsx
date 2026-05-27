@@ -244,7 +244,6 @@ export function OrderWorkspace({
   const [payMode, setPayMode] = useState<'split' | 'together'>('split');
   const [feedbackItem, setFeedbackItem] = useState<OrderItem | null>(null);
   const [interruptItem, setInterruptItem] = useState<OrderItem | null>(null);
-  const [concurrentItem, setConcurrentItem] = useState<OrderItem | null>(null);
   const [confirmFinish, setConfirmFinish] = useState<OrderItem | null>(null);
   const [cancelItem, setCancelItem] = useState<OrderItem | null>(null);
 
@@ -393,9 +392,9 @@ export function OrderWorkspace({
     });
   }
 
-  function startItemNow(id: string, allowConcurrent: boolean) {
+  function startItemNow(id: string) {
     startTransition(async () => {
-      const r = await startOrderItem(id, order.id, allowConcurrent);
+      const r = await startOrderItem(id, order.id);
       if (r.ok) toast.success('Service started'); else toast.error(r.error);
     });
   }
@@ -410,13 +409,10 @@ export function OrderWorkspace({
     });
   }
 
+  // One service per guest at a time — the Start button is disabled while this
+  // guest has a live service, so just start it.
   function doStartItem(it: OrderItem) {
-    // Same guest already mid-service → confirm before running them in parallel.
-    const concurrent = items.some(
-      (x) => x.id !== it.id && x.order_customer_id === it.order_customer_id && x.status === 'in_service',
-    );
-    if (concurrent) { setConcurrentItem(it); return; }
-    startItemNow(it.id, false);
+    startItemNow(it.id);
   }
 
   function finishItemNow(id: string) {
@@ -676,6 +672,8 @@ export function OrderWorkspace({
                       ? new Date(new Date(it.actual_end).getTime() + it.cleanup_minutes * 60000)
                       : null;
                   const isCleaning = cleaningUntil != null && cleaningUntil.getTime() > Date.now();
+                  // This guest already has a live service → can't start another yet.
+                  const guestHasLiveService = items.some((x) => x.id !== it.id && x.order_customer_id === it.order_customer_id && x.status === 'in_service');
                   const detailParts = [
                     it.duration_minutes ? `${it.duration_minutes} min` : null,
                     it.station_name,
@@ -719,10 +717,10 @@ export function OrderWorkspace({
                       {canRunService && it.status === 'scheduled' && (
                         <>
                           <ActionBtn
-                            tip="Begin this service now — stamps the start time."
-                            className="bg-green-600 text-white hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700"
+                            tip={guestHasLiveService ? 'Finish this guest’s current service before starting the next.' : 'Begin this service now — stamps the start time.'}
+                            className="bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 dark:bg-green-600 dark:hover:bg-green-700"
                             onClick={() => doStartItem(it)}
-                            disabled={pending}
+                            disabled={pending || guestHasLiveService}
                           >
                             Start
                           </ActionBtn>
@@ -1143,25 +1141,6 @@ export function OrderWorkspace({
           onOpenChange={(o) => { if (!o) setInterruptItem(null); }}
         />
       )}
-
-      <AlertDialog open={!!concurrentItem} onOpenChange={(o) => { if (!o) setConcurrentItem(null); }}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Start at the same time?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This guest already has a service in progress. Start <strong>{concurrentItem?.service_name}</strong> in parallel?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => { if (concurrentItem) startItemNow(concurrentItem.id, true); setConcurrentItem(null); }}
-            >
-              Start in parallel
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       <AlertDialog open={!!confirmFinish} onOpenChange={(o) => { if (!o) setConfirmFinish(null); }}>
         <AlertDialogContent>
