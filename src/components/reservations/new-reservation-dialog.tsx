@@ -318,6 +318,16 @@ export function NewReservationDialog({
   // Clear a stale specific-service when the category set changes.
   useEffect(() => { setSpecificItemId(''); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [catKey]);
 
+  // Picking a specific service sets the booked window to its duration (a 90-min
+  // service → a 90-min window), so the schedule block matches the service.
+  useEffect(() => {
+    if (walkIn || !specificItemId || !start) return;
+    const dur = serviceItems.find((s) => s.id === specificItemId)?.durationMinutes;
+    if (!dur) return;
+    setEnd(toLocalInput(new Date(Date.parse(start) + dur * 60000).toISOString()));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [specificItemId, start]);
+
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!sourceId) return toast.error('Pick a customer source');
