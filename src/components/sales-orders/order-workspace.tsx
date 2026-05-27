@@ -47,6 +47,7 @@ import {
   voidPayment,
 } from '@/app/(dashboard)/sales-orders/actions';
 import { CustomerPaymentCard, type TipTarget } from '@/components/sales-orders/customer-payment-card';
+import { PaymentAdjust } from '@/components/sales-orders/payment-adjust';
 import { FeedbackDialog } from '@/components/sales-orders/feedback-dialog';
 import { InterruptDialog } from '@/components/sales-orders/interrupt-dialog';
 import { ANY_GENDER, canPerformGroup, matchesGender } from '@/lib/therapist-availability';
@@ -986,6 +987,7 @@ export function OrderWorkspace({
                       {p.tip_cents > 0 && <span className="ml-2 text-xs font-semibold text-primary">+ tip {peso(p.tip_cents)}</span>}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                      {p.amount_cents < 0 && <span className="rounded bg-destructive/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-destructive">Refund</span>}
                       <span className="font-bold tabular">{peso(p.amount_cents)}</span>
                       {(order.status !== 'paid' || canManage) && (
                         <Button size="icon-sm" variant="ghost" onClick={() => doVoidPayment(p.id)} disabled={pending} title="Remove payment">
@@ -996,6 +998,15 @@ export function OrderWorkspace({
                   </div>
                 ))}
               </div>
+            )}
+            {canManage && (
+              <PaymentAdjust
+                orderId={order.id}
+                methods={allowedPaymentMethods}
+                storedValueCards={storedValueCards}
+                dueCents={due}
+                paidCents={order.paid_cents}
+              />
             )}
           </CardContent>
         </Card>

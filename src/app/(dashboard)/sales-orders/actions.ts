@@ -1078,6 +1078,11 @@ export async function takePayment(input: unknown): Promise<ActionResult> {
   if (await isBusinessDayClosed(order.branch_id, order.service_date)) {
     return { ok: false, error: 'The business day is closed — payments can no longer post to this date.' };
   }
+  // No overpayment: a collection can't push the paid total past the order total.
+  if (order.paid_cents + amountCents > order.total_cents) {
+    const due = Math.max(0, order.total_cents - order.paid_cents);
+    return { ok: false, error: `Amount exceeds the balance due (₱${(due / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })})` };
+  }
 
   const { data: method } = await supabase
     .from('payment_methods')
@@ -1230,5 +1235,104 @@ export async function voidPayment(paymentId: string, orderId: string): Promise<A
 
   revalidatePath('/sales-orders');
   revalidatePath(`/sales-orders/${orderId}`);
+  return { ok: true };
+}
+
+const refundSchema = z.object({
+  order_id: z.string().uuid(),
+  payment_method_id: z.string().uuid(),
+  amount: z.coerce.number().positive(),
+  payment_ref: z.string().max(80).optional().nullable(),
+  order_customer_id: z.string().uuid().optional().nullable(),
+  stored_value_card_id: z.string().uuid().optional().nullable(),
+});
+
+// Record a refund against a completed/paid order — money going back out. Stored
+// as a negative payment so it flows through paid_cents AND the shift cash count
+// (a cash refund correctly reduces the drawer's expected cash). Manager-gated;
+// can't exceed what was collected; a stored-value refund loads back onto the
+// card. Closed orders are corrected via an OrderAdjustment instead.
+export async function recordRefund(input: unknown): Promise<ActionResult> {
+  const session = await currentSession();
+  if (!isManager(session)) return { ok: false, error: 'Manager permission required to refund' };
+  const parsed = refundSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
+  const d = parsed.data;
+  const supabase = await createAuditedClient();
+  const amountCents = Math.round(d.amount * 100);
+
+  const { data: order, error: oe } = await supabase
+    .from('orders')
+    .select('total_cents, paid_cents, status, branch_id, service_date')
+    .eq('id', d.order_id)
+    .single();
+  if (oe || !order) return { ok: false, error: 'Order not found' };
+  if (['closed', 'void'].includes(order.status)) {
+    return { ok: false, error: 'A closed or void order is corrected via an adjustment, not a refund' };
+  }
+  if (await isBusinessDayClosed(order.branch_id, order.service_date)) {
+    return { ok: false, error: 'The business day is closed — refunds can no longer post to this date.' };
+  }
+  if (amountCents > order.paid_cents) {
+    return { ok: false, error: `Refund exceeds the amount collected (₱${(order.paid_cents / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })})` };
+  }
+
+  const { data: method } = await supabase.from('payment_methods').select('code').eq('id', d.payment_method_id).single();
+
+  // Stored-value refund → load the amount back onto the card.
+  let card: { current_balance_cents: number; branch_id: string } | null = null;
+  if (method?.code === 'stored_value_card') {
+    if (!d.stored_value_card_id) return { ok: false, error: 'Select a stored value card to refund onto' };
+    const { data: c } = await supabase
+      .from('stored_value_cards')
+      .select('current_balance_cents, branch_id')
+      .eq('id', d.stored_value_card_id)
+      .single();
+    if (!c) return { ok: false, error: 'Card not found' };
+    card = c;
+  }
+
+  const { data: payment, error: pe } = await supabase
+    .from('payments')
+    .insert({
+      order_id: d.order_id,
+      order_customer_id: d.order_customer_id || null,
+      payment_method_id: d.payment_method_id,
+      amount_cents: -amountCents,
+      payment_ref: d.payment_ref || null,
+      stored_value_card_id: d.stored_value_card_id || null,
+      paid_at: new Date().toISOString(),
+    })
+    .select('id')
+    .single();
+  if (pe || !payment) return { ok: false, error: pe?.message ?? 'Refund insert failed' };
+
+  if (card && d.stored_value_card_id) {
+    const balanceAfter = card.current_balance_cents + amountCents;
+    await supabase.from('stored_value_cards')
+      .update({ current_balance_cents: balanceAfter, status: 'active' })
+      .eq('id', d.stored_value_card_id);
+    await supabase.from('stored_value_transactions').insert({
+      card_id: d.stored_value_card_id,
+      branch_id: card.branch_id,
+      type: 'refund',
+      amount_cents: amountCents,
+      balance_after_cents: balanceAfter,
+      related_order_id: d.order_id,
+      related_payment_id: payment.id,
+      approved_by_user_id: session!.staffUserId,
+      note: 'Order refund',
+    });
+  }
+
+  const newPaid = order.paid_cents - amountCents;
+  const patch: { paid_cents: number; status?: string } = { paid_cents: newPaid };
+  if (order.status === 'paid' && newPaid < order.total_cents) patch.status = 'completed';
+  const { error: ue } = await supabase.from('orders').update(patch).eq('id', d.order_id);
+  if (ue) return { ok: false, error: ue.message };
+
+  revalidatePath('/sales-orders');
+  revalidatePath(`/sales-orders/${d.order_id}`);
+  revalidatePath('/reconciliation/cash');
   return { ok: true };
 }
