@@ -267,7 +267,7 @@ export function ScheduleBoard({
     if (bedId === block.bedId && newStart === block.startMin) return; // no-op
     startTransition(async () => {
       const r = block.kind === 'reservation'
-        ? await placeReservationOnBed({ reservation_id: block.refId, bed_id: bedId, start_min: newStart, day })
+        ? await placeReservationOnBed({ reservation_id: block.refId, bed_id: bedId, start_min: newStart, day, from_bed: block.bedId })
         : await moveScheduledOrderItem({ item_id: block.refId, bed_id: bedId, start_min: newStart, day });
       if (r.ok) { toast.success('Schedule updated'); router.refresh(); }
       else toast.error(r.error);

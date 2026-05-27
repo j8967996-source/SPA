@@ -115,6 +115,9 @@ const placeSchema = z.object({
   bed_id: z.string().uuid(),
   start_min: z.number().int().min(0).max(1439),
   day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  // The bed the dragged block currently sits on (a group's bed). When set and the
+  // booking has several beds, only this one moves; the rest stay put.
+  from_bed: z.string().uuid().nullable().optional(),
 });
 
 /**
@@ -125,12 +128,12 @@ const placeSchema = z.object({
 export async function placeReservationOnBed(input: unknown): Promise<ActionResult> {
   const parsed = placeSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
-  const { reservation_id, bed_id, start_min, day } = parsed.data;
+  const { reservation_id, bed_id, start_min, day, from_bed } = parsed.data;
   const supabase = await createAuditedClient();
 
   const { data: r } = await supabase
     .from('reservations')
-    .select('branch_id, status, desired_service_start, desired_service_end, pax, reservation_service_categories ( service_category_id )')
+    .select('branch_id, status, desired_service_start, desired_service_end, pax, reservation_service_categories ( service_category_id ), reservation_resources ( resource_id )')
     .eq('id', reservation_id)
     .single();
   if (!r) return { ok: false, error: 'Reservation not found' };
@@ -145,13 +148,42 @@ export async function placeReservationOnBed(input: unknown): Promise<ActionResul
 
   const startIso = makeIso(day, start_min);
   const endIso = new Date(Date.parse(startIso) + durationMin * 60000).toISOString();
+  const currentPins = (r.reservation_resources ?? []).map((x) => x.resource_id);
+
+  // Single-bed move: dragging ONE bed of a group onto a free bed swaps just that
+  // bed (the rest stay); the booking's time still follows the drop (one shared
+  // window). Lets you peel one guest off to a freed bed, e.g. E → C.
+  if (currentPins.length > 1 && from_bed && currentPins.includes(from_bed)) {
+    if (bed_id !== from_bed && currentPins.includes(bed_id)) {
+      return { ok: false, error: 'That bed is already used by this booking' };
+    }
+    const newPins = currentPins.map((b) => (b === from_bed ? bed_id : b));
+    for (const b of newPins) {
+      if (b === bed_id) continue; // the dropped bed was already conflict-checked
+      if (await bedHasConflict(supabase, b, day, start_min, endMin, { reservationId: reservation_id })) {
+        return { ok: false, error: 'Another of the group’s beds clashes at this time' };
+      }
+    }
+    const upd = await supabase
+      .from('reservations')
+      .update({ desired_service_start: startIso, desired_service_end: endIso, status: 'confirmed', service_location_type: 'on_site' })
+      .eq('id', reservation_id);
+    if (upd.error) return { ok: false, error: upd.error.message };
+    await supabase.from('reservation_resources').delete().eq('reservation_id', reservation_id);
+    const ins = await supabase.from('reservation_resources').insert(newPins.map((resource_id) => ({ reservation_id, resource_id })));
+    if (ins.error) return { ok: false, error: ins.error.message };
+    revalidatePath('/shift-schedule');
+    return { ok: true };
+  }
+
+  // Otherwise (first placement / single guest / whole-group move): anchor on the
+  // dropped bed and (re)assign one bed per guest.
   const upd = await supabase
     .from('reservations')
     .update({ desired_service_start: startIso, desired_service_end: endIso, status: 'confirmed', service_location_type: 'on_site' })
     .eq('id', reservation_id);
   if (upd.error) return { ok: false, error: upd.error.message };
 
-  // A group keeps one bed per guest: anchor on the dropped bed, top up to pax.
   const categoryIds = (r.reservation_service_categories ?? []).map((x) => x.service_category_id);
   const beds = await pickGroupBeds(supabase, r.branch_id, categoryIds, bed_id, r.pax ?? 1, day, start_min, endMin, reservation_id);
   await supabase.from('reservation_resources').delete().eq('reservation_id', reservation_id);
