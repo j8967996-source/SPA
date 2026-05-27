@@ -211,7 +211,7 @@ async function fetchStationBoard(branchId: string, day: string): Promise<{ beds:
     supabase.from('resources').select('id, resource_name').eq('branch_id', branchId).eq('status', 'active').order('resource_name'),
     supabase
       .from('order_items')
-      .select('id, status, resource_id, actual_start, actual_end, scheduled_start, service_start, slot_start, duration_minutes, service:service_items ( name, prep_before_minutes, cleanup_after_minutes ), therapist:employees!order_items_therapist_id_fkey ( name ), order:orders!order_items_order_id_fkey ( id, branch_id, service_date )')
+      .select('id, status, resource_id, actual_start, actual_end, scheduled_start, service_start, slot_start, duration_minutes, service:service_items ( name, prep_before_minutes, cleanup_after_minutes ), therapist:employees!order_items_therapist_id_fkey ( name ), guest:order_customers ( customer_name ), order:orders!order_items_order_id_fkey ( id, branch_id, service_date, order_customers ( id ) )')
       .in('status', ['scheduled', 'in_service', 'completed'])
       .not('resource_id', 'is', null),
     supabase
@@ -245,8 +245,10 @@ async function fetchStationBoard(branchId: string, day: string): Promise<{ beds:
       endMin = it.actual_end ? tsToMin(it.actual_end) : startMin + dur;
       variant = it.status === 'completed' ? 'completed' : 'in_service';
     }
+    const pax = (ord as unknown as { order_customers?: { id: string }[] }).order_customers?.length ?? 1;
     blocks.push({
       key: `oi:${it.id}`, kind: 'order', refId: it.id, bedId: it.resource_id,
+      guest: one(it.guest)?.customer_name ?? undefined, pax,
       line1: one(it.service)?.name ?? 'Service', line2: one(it.therapist)?.name ?? undefined,
       startMin, endMin, durationMin: dur,
       prepMin: one(it.service)?.prep_before_minutes ?? 0,
@@ -265,7 +267,6 @@ async function fetchStationBoard(branchId: string, day: string): Promise<{ beds:
     const pinnedIds = (r.reservation_resources ?? []).map((x) => x.resource_id);
     const pending = r.status === 'reserved';
     const overdue = isReservationOverdue({ desiredStartIso: r.desired_service_start, graceMin });
-    const line2 = [cats || 'Service', src, r.pax > 1 ? `${r.pax}p` : null].filter(Boolean).join(' · ');
     const prepMin = one(r.service)?.prep_before_minutes ?? 0;
     const cleanupMin = one(r.service)?.cleanup_after_minutes ?? 0;
     // Full record so the board can open this reservation in the edit dialog.
@@ -293,10 +294,10 @@ async function fetchStationBoard(branchId: string, day: string): Promise<{ beds:
     const guest = `${overdue ? '⚠ ' : ''}${r.guest_name ?? 'Guest'}`;
     const floating = pending || pinnedIds.length === 0;
     if (floating) {
-      blocks.push({ key: `res:${r.id}`, kind: 'reservation', refId: r.id, bedId: null, line1: guest, line2, startMin, endMin, durationMin: dur, prepMin, cleanupMin, variant: pending ? 'pending' : 'confirmed', draggable: true, editData });
+      blocks.push({ key: `res:${r.id}`, kind: 'reservation', refId: r.id, bedId: null, guest, pax: r.pax, line1: cats || 'Service', line2: src ?? undefined, startMin, endMin, durationMin: dur, prepMin, cleanupMin, variant: pending ? 'pending' : 'confirmed', draggable: true, editData });
     } else {
       for (const rid of pinnedIds) {
-        blocks.push({ key: `res:${r.id}:${rid}`, kind: 'reservation', refId: r.id, bedId: rid, line1: guest, line2, startMin, endMin, durationMin: dur, prepMin, cleanupMin, variant: 'confirmed', draggable: true, editData });
+        blocks.push({ key: `res:${r.id}:${rid}`, kind: 'reservation', refId: r.id, bedId: rid, guest, pax: r.pax, line1: cats || 'Service', line2: src ?? undefined, startMin, endMin, durationMin: dur, prepMin, cleanupMin, variant: 'confirmed', draggable: true, editData });
       }
     }
     mins.push(startMin, endMin);

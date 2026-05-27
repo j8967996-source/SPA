@@ -25,6 +25,8 @@ export interface BoardBlock {
   kind: 'reservation' | 'order';
   refId: string;
   bedId: string | null; // null = floating (top lane), not yet on a bed
+  guest?: string; // booking guest name — shown at the top of the block
+  pax?: number;   // group size, shown next to the guest
   line1: string;
   line2?: string;
   startMin: number;
@@ -109,11 +111,17 @@ function BlockView({ block, windowStartMin, onOpen }: { block: BoardBlock; windo
       onClick={(e) => { e.stopPropagation(); onOpen(block); }}
       style={style}
       className={`absolute rounded px-1.5 flex flex-col justify-center overflow-hidden text-[10px] leading-tight ${block.draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-default'} ${VARIANT_CLASS[block.variant]}`}
-      title={`${block.line1}${block.line2 ? ` · ${block.line2}` : ''} · ${hhmm(block.startMin)}–${hhmm(block.endMin)}`}
+      title={`${block.guest ? `${block.guest}${block.pax && block.pax > 1 ? ` · ${block.pax} pax` : ''} · ` : ''}${block.line1}${block.line2 ? ` · ${block.line2}` : ''} · ${hhmm(block.startMin)}–${hhmm(block.endMin)}`}
     >
-      <span className="truncate font-bold">{block.line1}</span>
-      {block.line2 && <span className="truncate font-semibold opacity-90">{block.line2}</span>}
-      <span className="truncate font-semibold tabular-nums opacity-80">{hhmm(block.startMin)}–{hhmm(block.endMin)}</span>
+      {block.guest && (
+        <span className="truncate font-bold">
+          {block.guest}
+          {block.pax && block.pax > 1 ? <span className="ml-1 font-extrabold">· {block.pax}p</span> : null}
+        </span>
+      )}
+      <span className={`truncate ${block.guest ? 'font-semibold opacity-90' : 'font-bold'}`}>{block.line1}</span>
+      {block.line2 && <span className="truncate font-medium opacity-80">{block.line2}</span>}
+      <span className="truncate font-semibold tabular-nums opacity-70">{hhmm(block.startMin)}–{hhmm(block.endMin)}</span>
     </div>
   );
 }
@@ -237,7 +245,7 @@ export function ScheduleBoard({
 
   function openBlock(b: BoardBlock) {
     if (b.kind === 'order' && b.orderId) router.push(`/sales-orders/${b.orderId}`);
-    else if (b.kind === 'reservation') setConvert({ reservationId: b.refId, guest: b.line1, pending: b.variant === 'pending', editData: b.editData });
+    else if (b.kind === 'reservation') setConvert({ reservationId: b.refId, guest: b.guest ?? b.line1, pending: b.variant === 'pending', editData: b.editData });
   }
 
   function onEmptyClick(bedId: string, min: number) {
