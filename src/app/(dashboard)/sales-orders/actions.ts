@@ -718,6 +718,53 @@ export async function interruptOrderItem(input: unknown): Promise<ActionResult> 
   return { ok: true };
 }
 
+// Front-desk "redo": re-add a fresh scheduled line for an interrupted/skipped
+// service (same guest + bed; therapist re-assigned at start). If the interrupt
+// auto-completed the order, quietly reopen it — this is a normal counter
+// correction, so (unlike the manager-only Reopen) it needs no manager. Blocked
+// once money is settled (paid/closed/void → manager reversal).
+export async function redoOrderItem(itemId: string, orderId: string): Promise<ActionResult> {
+  const supabase = await createAuditedClient();
+  const { data: item } = await supabase
+    .from('order_items')
+    .select('status, service_item_id, order_customer_id, resource_id, discount_class_id, order:orders!order_items_order_id_fkey ( branch_id, status )')
+    .eq('id', itemId)
+    .single();
+  if (!item) return { ok: false, error: 'Service line not found' };
+  if (!['interrupted', 'cancelled'].includes(item.status)) {
+    return { ok: false, error: 'Only an interrupted or skipped service can be redone' };
+  }
+  const order = Array.isArray(item.order) ? item.order[0] : item.order;
+  if (!order) return { ok: false, error: 'Order not found' };
+  if (!(await canAccessBranch(order.branch_id))) return { ok: false, error: 'No access to this branch' };
+  if (['paid', 'closed', 'void'].includes(order.status)) {
+    return { ok: false, error: 'Order is already paid/closed — a manager must reopen it first' };
+  }
+  if (!item.service_item_id || !item.order_customer_id) {
+    return { ok: false, error: 'This line has no service/guest to redo' };
+  }
+
+  if (order.status === 'completed') {
+    const re = await supabase.from('orders').update({ status: 'open' }).eq('id', orderId);
+    if (re.error) return { ok: false, error: re.error.message };
+  }
+
+  let discountClassId: string | null = item.discount_class_id ?? null;
+  if (!discountClassId) {
+    const { data: dis0 } = await supabase.from('discount_classes').select('id').eq('code', 'DIS-00').maybeSingle();
+    discountClassId = dis0?.id ?? null;
+  }
+  if (!discountClassId) return { ok: false, error: 'No default discount class found' };
+
+  return addOrderItem({
+    order_id: orderId,
+    order_customer_id: item.order_customer_id,
+    service_item_id: item.service_item_id,
+    resource_id: item.resource_id,
+    discount_class_id: discountClassId,
+  });
+}
+
 const feedbackSchema = z.object({
   order_id: z.string().uuid(),
   order_item_id: z.string().uuid(),

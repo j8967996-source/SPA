@@ -41,6 +41,7 @@ import {
   startAllServices,
   finishOrderItem,
   skipOrderItem,
+  redoOrderItem,
   releaseBed,
   voidPayment,
 } from '@/app/(dashboard)/sales-orders/actions';
@@ -423,6 +424,15 @@ export function OrderWorkspace({
     });
   }
 
+  // Re-add an interrupted/skipped service as a fresh scheduled line (front desk;
+  // auto-reopens the order if the interrupt had completed it).
+  function doRedoItem(id: string) {
+    startTransition(async () => {
+      const r = await redoOrderItem(id, order.id);
+      if (r.ok) toast.success('Service re-added — assign a therapist and start'); else toast.error(r.error);
+    });
+  }
+
   function doReleaseBed(id: string) {
     startTransition(async () => {
       const r = await releaseBed(id);
@@ -687,6 +697,9 @@ export function OrderWorkspace({
                         >
                           <Star className="size-3.5" /> Feedback
                         </Button>
+                      )}
+                      {['interrupted', 'cancelled'].includes(it.status) && !['paid', 'closed', 'void'].includes(order.status) && (
+                        <Button size="sm" variant="outline" onClick={() => doRedoItem(it.id)} disabled={pending}>Redo</Button>
                       )}
                     </div>
                     <div className="flex items-center gap-2 justify-self-end">
