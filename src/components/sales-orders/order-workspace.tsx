@@ -78,6 +78,7 @@ interface OrderItem {
   discount_amount_cents: number;
   final_amount_cents: number;
   status: string;
+  switched: boolean;
   feedback_score: number | null;
 }
 interface OrderCustomer {
@@ -680,7 +681,7 @@ export function OrderWorkspace({
                     it.status === 'in_service' ? { t: 'In service', c: 'text-blue-600 dark:text-blue-400' }
                     : isCleaning ? { t: 'Cleaning', c: 'text-amber-600 dark:text-amber-400' }
                     : (it.status === 'service_completed' || it.status === 'feedback_done') ? { t: 'Done', c: 'text-primary' }
-                    : it.status === 'interrupted' ? { t: 'Interrupted', c: 'text-destructive' }
+                    : it.status === 'interrupted' ? (it.switched ? { t: 'Switched', c: 'text-amber-600 dark:text-amber-400' } : { t: 'Interrupted', c: 'text-destructive' })
                     : it.status === 'cancelled' ? { t: 'Skipped', c: 'text-muted-foreground' }
                     : null;
                   return (
@@ -770,7 +771,7 @@ export function OrderWorkspace({
                           <Star className="size-3.5" /> Feedback
                         </ActionBtn>
                       )}
-                      {['interrupted', 'cancelled'].includes(it.status) && !['paid', 'closed', 'void'].includes(order.status) && (
+                      {['interrupted', 'cancelled'].includes(it.status) && !it.switched && !['paid', 'closed', 'void'].includes(order.status) && (
                         <ActionBtn
                           tip="Re-add this service as a fresh line to do again."
                           variant="outline"

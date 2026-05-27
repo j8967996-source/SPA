@@ -47,7 +47,7 @@ async function fetchData(id: string) {
       order_items (
         id, order_customer_id, list_price_cents, discount_amount_cents, final_amount_cents, status,
         service_item_id, discount_class_id,
-        therapist_id, resource_id, duration_minutes, actual_start, actual_end, bed_released_at,
+        therapist_id, resource_id, duration_minutes, actual_start, actual_end, bed_released_at, interruption_reason,
         service:service_items ( name, prep_before_minutes, cleanup_after_minutes ),
         therapist:employees ( name, home_branch:branches!employees_home_branch_id_fkey ( code ) ),
         resource:resources ( resource_name )
@@ -263,6 +263,9 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       discount_amount_cents: it.discount_amount_cents,
       final_amount_cents: it.final_amount_cents,
       status: it.status,
+      // A line stopped via "Switch" is interrupted with this reason — shown as
+      // "Switched" (not Interrupted) and offered no Redo (the replacement is added).
+      switched: it.interruption_reason === 'Switched to another service',
       feedback_score: feedbackByItem.get(it.id) ?? null,
     };
   });
