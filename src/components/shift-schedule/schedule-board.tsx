@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
+import { Users } from 'lucide-react';
 import {
   DndContext,
   type DragEndEvent,
@@ -115,6 +116,7 @@ function BlockView({ block, windowStartMin, onOpen }: { block: BoardBlock; windo
     >
       {block.guest && (
         <span className="truncate font-bold">
+          {block.pax && block.pax > 1 ? <Users className="mr-0.5 -mt-0.5 inline size-3" /> : null}
           {block.guest}
           {block.pax && block.pax > 1 ? <span className="ml-1 font-extrabold">· {block.pax}p</span> : null}
         </span>

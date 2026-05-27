@@ -591,7 +591,12 @@ async function resolveEffectiveBeds(args: {
   if (args.resourceIds.length > 0) {
     return resolvePinnedBeds(args.branchId, args.resourceIds, args.pax, args.start, args.end, args.locationType, args.excludeReservationId);
   }
-  if (args.seatTogether && args.pax > 1) {
+  // One bed per guest: any multi-pax booking auto-reserves `pax` beds (consecutive
+  // preferred — see autoAssignAdjacentBeds; seat_together just makes adjacency a
+  // firmer intent, which the helper already tries first). A single guest stays
+  // unassigned (placed/picked later). Degrades to [] if `pax` beds can't be found,
+  // so the booking simply floats in the To-place lane for manual placement.
+  if (args.pax > 1) {
     const ids = await autoAssignAdjacentBeds(args.branchId, args.categoryIds, args.pax, args.start, args.end, args.excludeReservationId);
     return { ok: true, ids };
   }
