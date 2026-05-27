@@ -574,8 +574,45 @@ async function autoAssignAdjacentBeds(
   return [];
 }
 
-// Decide the beds to pin: an explicit staff override wins; otherwise a "seat
-// together" group is auto-assigned adjacent beds; otherwise none (unassigned).
+// Top up an explicit set of pinned beds to `pax` total — add free beds nearest
+// (by bed number, same zone preferred) to the pinned ones. So clicking one bed
+// for a group reserves a consecutive-ish run that includes it.
+async function topUpBeds(
+  branchId: string,
+  categoryIds: string[],
+  seedIds: string[],
+  need: number,
+  start: string,
+  end: string,
+  excludeReservationId?: string | null,
+): Promise<string[]> {
+  if (need <= 0) return [];
+  const supabase = await createAuditedClient();
+  const { data: cats } = await supabase.from('service_categories').select('required_resource_type').in('id', categoryIds);
+  const types = [...new Set((cats ?? []).map((c) => c.required_resource_type).filter(Boolean) as string[])];
+  if (types.length === 0) return [];
+  const { data: resources } = await supabase
+    .from('resources').select('id, resource_name, resource_type, location_zone')
+    .eq('branch_id', branchId).eq('status', 'active').in('resource_type', types);
+  const busy = await computeBusyResourceIds(branchId, start, end, excludeReservationId);
+  const seed = new Set(seedIds);
+  const all = (resources ?? []).map((r) => ({ id: r.id, zone: r.location_zone ?? '', num: bedNum(r.resource_name) }));
+  const seedBeds = all.filter((b) => seed.has(b.id));
+  const seedZone = seedBeds[0]?.zone;
+  const nums = seedBeds.map((b) => b.num);
+  const lo = nums.length ? Math.min(...nums) : 0;
+  const hi = nums.length ? Math.max(...nums) : 0;
+  const free = all.filter((b) => !busy.has(b.id) && !seed.has(b.id));
+  const score = (b: { zone: string; num: number }) => {
+    const dist = b.num > hi ? b.num - hi : b.num < lo ? lo - b.num : 0;
+    return (seedZone != null && b.zone !== seedZone ? 1000 : 0) + dist;
+  };
+  return [...free].sort((a, b) => score(a) - score(b) || a.num - b.num).slice(0, need).map((b) => b.id);
+}
+
+// Decide the beds to pin: an explicit staff override wins (topped up to pax for a
+// group); otherwise a multi-pax booking is auto-assigned adjacent beds; otherwise
+// none (unassigned).
 async function resolveEffectiveBeds(args: {
   branchId: string;
   resourceIds: string[];
@@ -589,7 +626,15 @@ async function resolveEffectiveBeds(args: {
 }): Promise<{ ok: true; ids: string[] } | { ok: false; error: string }> {
   if (args.locationType === 'external_hotel') return { ok: true, ids: [] };
   if (args.resourceIds.length > 0) {
-    return resolvePinnedBeds(args.branchId, args.resourceIds, args.pax, args.start, args.end, args.locationType, args.excludeReservationId);
+    const pinned = await resolvePinnedBeds(args.branchId, args.resourceIds, args.pax, args.start, args.end, args.locationType, args.excludeReservationId);
+    if (!pinned.ok) return pinned;
+    // One bed per guest: if fewer beds were pinned than pax (e.g. clicked a single
+    // slot on the board for a group), top up to pax with nearby free beds.
+    if (args.pax > pinned.ids.length) {
+      const extra = await topUpBeds(args.branchId, args.categoryIds, pinned.ids, args.pax - pinned.ids.length, args.start, args.end, args.excludeReservationId);
+      return { ok: true, ids: [...pinned.ids, ...extra] };
+    }
+    return pinned;
   }
   // One bed per guest: any multi-pax booking auto-reserves `pax` beds (consecutive
   // preferred — see autoAssignAdjacentBeds; seat_together just makes adjacency a
