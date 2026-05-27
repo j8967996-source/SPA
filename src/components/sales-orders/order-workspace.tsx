@@ -535,10 +535,15 @@ export function OrderWorkspace({
     !items.some((i) => i.order_customer_id === c.id && !['scheduled', 'cancelled'].includes(i.status))
     && c.paid_cents === 0;
   const multiCustomer = customers.length > 1;
-  // Therapists to tip for a customer (null = whole order): their items that have one.
+  // Therapists to tip for a customer (null = whole order): only services that were
+  // actually completed (done) — switched / cancelled / interrupted / not-yet-done
+  // lines aren't tippable.
   const tipTargetsFor = (customerId: string | null): TipTarget[] =>
     items
-      .filter((it) => (customerId == null || it.order_customer_id === customerId) && it.therapist_id)
+      .filter((it) =>
+        (customerId == null || it.order_customer_id === customerId)
+        && it.therapist_id
+        && ['service_completed', 'feedback_done'].includes(it.status))
       .map((it) => ({
         orderItemId: it.id,
         therapistId: it.therapist_id as string,
