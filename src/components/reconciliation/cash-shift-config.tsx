@@ -67,10 +67,18 @@ export function CashShiftConfig({ branchId, config }: { branchId: string; config
 
   // Validate: names present + unique; boundaries strictly increasing open→…→24:00.
   const names = rows.map((r) => r.name.trim());
-  const namesOk = names.every((n) => n.length > 0) && new Set(names.map((n) => n.toLowerCase())).size === names.length;
+  const emptyName = names.some((n) => n.length === 0);
+  const dupName = new Set(names.map((n) => n.toLowerCase())).size !== names.length;
   const bounds: (number | null)[] = [hhmmToMin(dayOpen), ...rows.slice(0, -1).map((r) => hhmmToMin(r.end)), DAY_END];
   const boundsOk = bounds.every((b, i) => b != null && (i === 0 || ((bounds[i - 1] as number) < (b as number))));
-  const valid = rows.length >= 1 && namesOk && boundsOk;
+  const valid = rows.length >= 1 && !emptyName && !dupName && boundsOk;
+  const errorMsg = emptyName
+    ? 'Every shift needs a name.'
+    : dupName
+      ? 'Shift names must be unique.'
+      : !boundsOk
+        ? 'Times must run in order: open is before each shift end, ending at midnight.'
+        : null;
 
   function save() {
     if (!valid) return;
@@ -152,10 +160,8 @@ export function CashShiftConfig({ branchId, config }: { branchId: string; config
               <Plus className="size-4" /> Add shift
             </Button>
 
-            {!valid && (
-              <p className="text-[11px] font-bold text-destructive">
-                Each shift needs a unique name, and times must run in order from open to midnight.
-              </p>
+            {errorMsg && (
+              <p className="text-[11px] font-bold text-destructive">{errorMsg}</p>
             )}
             <p className="text-[11px] font-medium text-muted-foreground">
               Shifts are continuous — each begins where the previous ends. The last runs to midnight (24:00), so the whole day is covered.
