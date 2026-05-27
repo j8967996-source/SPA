@@ -69,24 +69,44 @@ export async function setCashShifts(input: { shifts: string[]; branchId: string 
   return { ok: true };
 }
 
-/** Cash received during a shift window on a date (by payment time, PHT). */
+/** Cash received during a shift window on a date (by payment time, PHT). Counts
+ * both counter payments (orders) and third-party AR collections taken in cash —
+ * both physically land in the till. */
 async function cashReceivedCents(branchId: string, date: string, label: ShiftLabel): Promise<number> {
   const supabase = await createAuditedClient();
-  const { data } = await supabase
-    .from('payments')
-    .select('amount_cents, paid_at, method:payment_methods!payments_payment_method_id_fkey ( code ), order:orders!payments_order_id_fkey ( branch_id, status )')
-    .gte('paid_at', `${date}T00:00:00+08:00`)
-    .lt('paid_at', `${nextDate(date)}T00:00:00+08:00`);
   const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
   const [ws, we] = WINDOW[label];
-  return (data ?? [])
+  const from = `${date}T00:00:00+08:00`;
+  const to = `${nextDate(date)}T00:00:00+08:00`;
+  const inWindow = (iso: string) => { const mod = minuteOfDayPHT(iso); return mod >= ws && mod < we; };
+
+  // Counter cash on orders for this branch.
+  const { data: counter } = await supabase
+    .from('payments')
+    .select('amount_cents, paid_at, method:payment_methods!payments_payment_method_id_fkey ( code ), order:orders!payments_order_id_fkey ( branch_id, status )')
+    .gte('paid_at', from)
+    .lt('paid_at', to);
+  const counterCash = (counter ?? [])
     .filter((p) => {
       const ord = one(p.order); const m = one(p.method);
-      if (!ord || ord.branch_id !== branchId || ord.status === 'void' || m?.code !== 'cash') return false;
-      const mod = minuteOfDayPHT(p.paid_at);
-      return mod >= ws && mod < we;
+      return !!ord && ord.branch_id === branchId && ord.status !== 'void' && m?.code === 'cash' && inWindow(p.paid_at);
     })
     .reduce((s, p) => s + p.amount_cents, 0);
+
+  // AR (third-party) cash collected against this branch's statements.
+  const { data: arPays } = await supabase
+    .from('revenue_soa_payments')
+    .select('amount_cents, paid_at, payment_method, soa:revenue_soa ( branch_id )')
+    .gte('paid_at', from)
+    .lt('paid_at', to);
+  const arCash = (arPays ?? [])
+    .filter((p) => {
+      const soa = one(p.soa);
+      return !!soa && soa.branch_id === branchId && (p.payment_method ?? '').toLowerCase() === 'cash' && inWindow(p.paid_at);
+    })
+    .reduce((s, p) => s + p.amount_cents, 0);
+
+  return counterCash + arCash;
 }
 
 /** Per-shift status for a branch/day, with opening float inherited from the

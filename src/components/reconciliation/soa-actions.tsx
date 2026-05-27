@@ -15,24 +15,44 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { settleSOA, voidSOA, recordSoaPayment } from '@/app/(dashboard)/reconciliation/soa/actions';
 
 function todayISO(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 }
 
+// Settled methods. 'cash' is special — cash physically enters the front-desk
+// till, so a cash collection is counted into today's shift cash count (and is
+// therefore always dated today); the others are back-office (no till impact).
+const METHOD_OPTIONS = [
+  { value: 'cash', label: 'Cash' },
+  { value: 'bank_transfer', label: 'Bank transfer' },
+  { value: 'cheque', label: 'Cheque' },
+  { value: 'other', label: 'Other' },
+];
+
 // Third-party: record a (possibly partial) payment against the statement.
 function RecordPaymentDialog({ id, outstandingCents }: { id: string; outstandingCents: number }) {
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState(String(outstandingCents / 100));
-  const [method, setMethod] = useState('');
+  const [method, setMethod] = useState('bank_transfer');
   const [reference, setReference] = useState('');
   const [date, setDate] = useState(todayISO());
   const [pending, start] = useTransition();
+  // Cash drops into today's till → its date is fixed to today and it feeds the
+  // shift cash count. The server stamps the real time of entry.
+  const isCash = method === 'cash';
 
   function submit() {
     start(async () => {
-      const r = await recordSoaPayment({ soa_id: id, amount: Number(amount), payment_method: method || null, reference_no: reference || null, paid_at: date });
+      const r = await recordSoaPayment({
+        soa_id: id,
+        amount: Number(amount),
+        payment_method: method || null,
+        reference_no: reference || null,
+        paid_at: isCash ? todayISO() : date,
+      });
       if (r.ok) { toast.success('Payment recorded'); setOpen(false); }
       else toast.error(r.error);
     });
@@ -54,17 +74,27 @@ function RecordPaymentDialog({ id, outstandingCents }: { id: string; outstanding
             <Input type="number" min="0" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
           </div>
           <div className="flex flex-col gap-1">
-            <Label className="text-xs font-semibold">Date received</Label>
-            <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-          </div>
-          <div className="flex flex-col gap-1">
             <Label className="text-xs font-semibold">Method</Label>
-            <Input value={method} onChange={(e) => setMethod(e.target.value)} placeholder="Bank transfer / Cheque" />
+            <Select items={METHOD_OPTIONS} value={method} onValueChange={(v) => v && setMethod(v)}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {METHOD_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex flex-col gap-1">
+            <Label className="text-xs font-semibold">Date received</Label>
+            <Input type="date" value={isCash ? todayISO() : date} onChange={(e) => setDate(e.target.value)} disabled={isCash} />
+          </div>
+          <div className="flex flex-col gap-1 col-span-2">
             <Label className="text-xs font-semibold">Reference</Label>
             <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Txn / cheque no." />
           </div>
+          {isCash && (
+            <p className="col-span-2 text-[11px] font-medium text-amber-700 dark:text-amber-400">
+              Cash is counted into today&apos;s shift cash count.
+            </p>
+          )}
         </div>
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => setOpen(false)} disabled={pending}>Cancel</Button>

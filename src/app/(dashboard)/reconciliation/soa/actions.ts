@@ -495,7 +495,13 @@ export async function recordSoaPayment(input: unknown): Promise<ActionResult> {
   const outstanding = soa.total_cents - soa.paid_cents;
   if (amountCents > outstanding) return { ok: false, error: `Amount exceeds the outstanding balance (₱${(outstanding / 100).toLocaleString('en-PH')})` };
 
-  const paidAtIso = paid_at ? `${paid_at}T00:00:00+08:00` : new Date().toISOString();
+  // Cash physically lands in today's till, so it's stamped with the real time of
+  // entry and feeds the shift cash count via cashReceivedCents. Non-cash methods
+  // are back-office (no till impact) and keep the recorded date.
+  const isCash = (payment_method ?? '').toLowerCase() === 'cash';
+  const paidAtIso = isCash
+    ? new Date().toISOString()
+    : (paid_at ? `${paid_at}T00:00:00+08:00` : new Date().toISOString());
   const ins = await supabase.from('revenue_soa_payments').insert({
     soa_id, amount_cents: amountCents, paid_at: paidAtIso,
     payment_method: payment_method || null, reference_no: reference_no || null, note: note || null,
@@ -511,6 +517,8 @@ export async function recordSoaPayment(input: unknown): Promise<ActionResult> {
     .eq('id', soa_id);
   if (upd.error) return { ok: false, error: upd.error.message };
   revalidatePath('/reconciliation/soa');
+  // A cash collection feeds the shift cash count — refresh that page too.
+  if (isCash) revalidatePath('/reconciliation/cash');
   return { ok: true };
 }
 
