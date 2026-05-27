@@ -31,6 +31,8 @@ export function CashShiftConfig({ branchId, current, currentCuts }: { branchId: 
 
   // Window cut points only matter for the AM/PM/Night split, not a single FullDay.
   const splitShifts = !sel.includes('FullDay');
+  // HH:MM is zero-padded 24h, so a string compare orders the boundaries.
+  const validTimes = !splitShifts || (!!amPm && !!pmNight && amPm < pmNight);
 
   function toggle(s: string) {
     setSel((prev) => {
@@ -95,23 +97,41 @@ export function CashShiftConfig({ branchId, current, currentCuts }: { branchId: 
             {splitShifts && (
               <div className="flex flex-col gap-2 border-t border-border pt-3">
                 <Label className="text-xs font-semibold">Shift times</Label>
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="w-20 font-medium text-muted-foreground">AM → PM</span>
-                  <Input type="time" value={amPm} onChange={(e) => setAmPm(e.target.value)} className="w-32" />
+                <div className="flex flex-col gap-1.5">
+                  {/* Each shift's start is the previous shift's end (continuous, no
+                      gaps). AM opens the day at 00:00; Night runs to 24:00. So only
+                      the two middle boundaries are editable. */}
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="w-12 font-bold">AM</span>
+                    <Input type="time" value="00:00" disabled className="w-28 opacity-60" />
+                    <span className="text-muted-foreground">→</span>
+                    <Input type="time" value={amPm} onChange={(e) => setAmPm(e.target.value)} className="w-28" />
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="w-12 font-bold">PM</span>
+                    <Input type="time" value={amPm} disabled className="w-28 opacity-60" />
+                    <span className="text-muted-foreground">→</span>
+                    <Input type="time" value={pmNight} onChange={(e) => setPmNight(e.target.value)} className="w-28" />
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
+                    <span className="w-12 font-bold">Night</span>
+                    <Input type="time" value={pmNight} disabled className="w-28 opacity-60" />
+                    <span className="text-muted-foreground">→</span>
+                    <span className="w-28 text-center font-semibold text-muted-foreground tabular">24:00</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 text-sm">
-                  <span className="w-20 font-medium text-muted-foreground">PM → Night</span>
-                  <Input type="time" value={pmNight} onChange={(e) => setPmNight(e.target.value)} className="w-32" />
-                </div>
+                {!validTimes && (
+                  <p className="text-[11px] font-bold text-destructive">AM→PM must be earlier than PM→Night.</p>
+                )}
                 <p className="text-[11px] font-medium text-muted-foreground">
-                  AM starts 00:00, Night ends 24:00. The cut points decide which shift a payment falls into.
+                  Shifts are continuous — each one ends where the next begins, covering the whole day.
                 </p>
               </div>
             )}
           </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => setOpen(false)} disabled={pending}>Cancel</Button>
-            <Button type="button" onClick={save} disabled={pending || sel.length === 0}>{pending ? 'Saving…' : 'Save'}</Button>
+            <Button type="button" onClick={save} disabled={pending || sel.length === 0 || !validTimes}>{pending ? 'Saving…' : 'Save'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
