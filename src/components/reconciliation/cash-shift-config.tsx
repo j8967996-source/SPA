@@ -67,7 +67,7 @@ export function CashShiftConfig({ branchId, current, currentTimes }: { branchId:
         <Settings2 className="size-4" /> Shifts
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="font-bold">Cash shifts</DialogTitle>
             <DialogDescription className="font-medium">Pick which shifts get counted each day.</DialogDescription>
@@ -103,21 +103,21 @@ export function CashShiftConfig({ branchId, current, currentTimes }: { branchId:
                       no gaps). AM opens the day (editable); Night runs to midnight. */}
                   <div className="flex items-center gap-2 text-sm">
                     <span className="w-12 font-bold">AM</span>
-                    <Input type="time" value={dayStart} onChange={(e) => setDayStart(e.target.value)} className="w-28" />
+                    <Input type="time" value={dayStart} onChange={(e) => setDayStart(e.target.value)} className="w-36" />
                     <span className="text-muted-foreground">→</span>
-                    <Input type="time" value={amPm} onChange={(e) => setAmPm(e.target.value)} className="w-28" />
+                    <Input type="time" value={amPm} onChange={(e) => setAmPm(e.target.value)} className="w-36" />
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <span className="w-12 font-bold">PM</span>
-                    <Input type="time" value={amPm} disabled className="w-28 opacity-60" />
+                    <Input type="time" value={amPm} disabled className="w-36 opacity-60" />
                     <span className="text-muted-foreground">→</span>
-                    <Input type="time" value={pmNight} onChange={(e) => setPmNight(e.target.value)} className="w-28" />
+                    <Input type="time" value={pmNight} onChange={(e) => setPmNight(e.target.value)} className="w-36" />
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <span className="w-12 font-bold">Night</span>
-                    <Input type="time" value={pmNight} disabled className="w-28 opacity-60" />
+                    <Input type="time" value={pmNight} disabled className="w-36 opacity-60" />
                     <span className="text-muted-foreground">→</span>
-                    <span className="w-28 text-center font-semibold text-muted-foreground tabular">24:00</span>
+                    <span className="w-36 text-center font-semibold text-muted-foreground tabular">24:00</span>
                   </div>
                 </div>
                 {!validTimes && (
