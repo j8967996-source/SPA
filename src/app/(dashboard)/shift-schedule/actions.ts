@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { createAuditedClient } from '@/lib/supabase/server';
 import { canAccessBranch } from '@/lib/branch-access';
+import { currentSession, isManager } from '@/lib/auth';
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -179,6 +180,10 @@ export async function setShift(input: unknown): Promise<ActionResult> {
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
 
+  // Roster edits are a manager task, and only for branches the user can access.
+  if (!isManager(await currentSession())) return { ok: false, error: 'Manager permission required to edit the roster' };
+  if (!(await canAccessBranch(d.branch_id))) return { ok: false, error: 'No access to this branch' };
+
   const timed = TIMED.includes(d.shift_type);
   if (timed && (!d.shift_start || !d.shift_end)) {
     return { ok: false, error: 'Start and end time are required for this shift type' };
@@ -233,6 +238,7 @@ export async function bulkSetShifts(input: unknown): Promise<{ ok: true; count: 
   const parsed = bulkSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
+  if (!isManager(await currentSession())) return { ok: false, error: 'Manager permission required to edit the roster' };
   if (!(await canAccessBranch(d.branch_id))) return { ok: false, error: 'No access to this branch' };
 
   const timed = TIMED.includes(d.shift_type);
@@ -273,6 +279,8 @@ export async function clearShift(
   branchId: string,
   shiftDate: string,
 ): Promise<ActionResult> {
+  if (!isManager(await currentSession())) return { ok: false, error: 'Manager permission required to edit the roster' };
+  if (!(await canAccessBranch(branchId))) return { ok: false, error: 'No access to this branch' };
   const supabase = await createAuditedClient();
   const { error } = await supabase
     .from('employee_shifts')

@@ -10,6 +10,7 @@ import { BulkShiftDialog } from '@/components/shift-schedule/bulk-shift-dialog';
 import type { ReservationItem } from '@/components/reservations/new-reservation-dialog';
 import { getReservationGraceMinutes, isReservationOverdue } from '@/lib/reservations';
 import { getAllowedBranchIds } from '@/lib/branch-access';
+import { currentSession, isManager } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -524,6 +525,9 @@ export default async function ShiftSchedulePage({
   const scale: ShiftScale = view === 'station' ? 'day' : sp.scale === 'day' ? 'day' : 'week';
   const day = sp.day || todayISO();
   const { branches, branchId, monday, days, employees, shifts } = await fetchData(sp.branch, sp.week);
+  // Editing the roster (set/clear/bulk shifts) is a manager task; everyone else
+  // sees it read-only. Server actions enforce this too — this just hides the UI.
+  const canManageRoster = isManager(await currentSession());
   // Station+day → the interactive 15-min board; Therapist+day → the read-only timeline.
   const stationBoard = view === 'station' && scale === 'day' && branchId ? await fetchStationBoard(branchId, day) : null;
   const boardDialog = stationBoard ? await fetchBoardDialogData() : null;
@@ -546,7 +550,7 @@ export default async function ShiftSchedulePage({
           <p className="text-sm font-semibold text-muted-foreground mt-1">
             {scale === 'day'
               ? `${day} · ${view === 'station' ? '15-min board · click a slot to add · drag a booking onto a bed' : 'hourly · therapist hours & services'}`
-              : `Week of ${monday} · home-branch therapists · click a cell to set a shift`}
+              : `Week of ${monday} · home-branch therapists${canManageRoster ? ' · click a cell to set a shift' : ' · view only'}`}
           </p>
         </div>
         {branchId && <ShiftControls branches={branches} branchId={branchId} weekStart={monday} day={day} view={view} scale={scale} />}
@@ -587,13 +591,15 @@ export default async function ShiftSchedulePage({
         </Card>
       ) : (
         <div className="flex flex-col gap-3">
-          <div className="flex justify-end">
-            <BulkShiftDialog
-              branchId={branchId}
-              employees={employees.map((e) => ({ id: e.id, name: e.name, code: e.employee_code, visiting: e.home_branch_id !== branchId }))}
-              days={days}
-            />
-          </div>
+          {canManageRoster && (
+            <div className="flex justify-end">
+              <BulkShiftDialog
+                branchId={branchId}
+                employees={employees.map((e) => ({ id: e.id, name: e.name, code: e.employee_code, visiting: e.home_branch_id !== branchId }))}
+                days={days}
+              />
+            </div>
+          )}
         <Card className="p-0 overflow-auto max-h-[calc(100vh-16rem)]">
           <table className="w-full border-collapse">
             <thead>
@@ -631,6 +637,7 @@ export default async function ShiftSchedulePage({
                         date={d.date}
                         shift={shiftAt(e.id, d.date)}
                         visiting={e.home_branch_id !== branchId}
+                        readOnly={!canManageRoster}
                       />
                     </td>
                   ))}

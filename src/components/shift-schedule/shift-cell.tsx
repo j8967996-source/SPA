@@ -40,6 +40,8 @@ interface Props {
   // Borrowed from another branch (home ≠ this branch) → default new shifts to
   // Cross-branch so staff don't have to remember.
   visiting?: boolean;
+  // Non-managers see the roster but can't edit it — the cell is static.
+  readOnly?: boolean;
 }
 
 const TYPES = [
@@ -69,7 +71,7 @@ const TYPE_STYLE: Record<string, string> = {
   leave: 'bg-destructive/15 text-destructive',
 };
 
-export function ShiftCell({ employeeId, employeeName, branchId, date, shift, visiting = false }: Props) {
+export function ShiftCell({ employeeId, employeeName, branchId, date, shift, visiting = false, readOnly = false }: Props) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -111,6 +113,20 @@ export function ShiftCell({ employeeId, employeeName, branchId, date, shift, vis
           ? (shift.leave_type ?? 'leave')
           : shift.shift_type === 'off' ? 'Off' : shift.shift_type)
     : null;
+
+  // Read-only (non-manager): show the shift, no editor.
+  if (readOnly) {
+    return (
+      <div
+        className={`w-full rounded-md px-2 py-1.5 text-center text-xs font-bold ${
+          shift ? TYPE_STYLE[shift.shift_type] ?? 'bg-muted' : 'text-muted-foreground/30'
+        }`}
+      >
+        {label ?? '·'}
+        {shift?.shift_type === 'cross_branch' && <span className="block text-[10px] font-semibold opacity-80">cross</span>}
+      </div>
+    );
+  }
 
   return (
     <>
