@@ -67,6 +67,49 @@ async function bedHasConflict(
   return false;
 }
 
+const bedNum = (name: string): number => { const m = name.match(/(\d+)/); return m ? Number(m[1]) : 9999; };
+
+// For a group (pax>1) dragged onto a bed: keep that bed as the anchor and add the
+// nearest free beds (same type, same zone + consecutive numbers preferred) so the
+// whole group stays on `pax` beds. Returns [anchor, ...others] — anchor always
+// included; fewer than pax if not enough are free.
+async function pickGroupBeds(
+  supabase: Awaited<ReturnType<typeof createAuditedClient>>,
+  branchId: string,
+  categoryIds: string[],
+  anchorBedId: string,
+  pax: number,
+  day: string,
+  startMin: number,
+  endMin: number,
+  reservationId: string,
+): Promise<string[]> {
+  if (pax <= 1) return [anchorBedId];
+  const { data: cats } = await supabase.from('service_categories').select('required_resource_type').in('id', categoryIds);
+  const types = [...new Set((cats ?? []).map((c) => c.required_resource_type).filter(Boolean) as string[])];
+  const { data: resources } = await supabase
+    .from('resources').select('id, resource_name, resource_type, location_zone')
+    .eq('branch_id', branchId).eq('status', 'active');
+  const all = (resources ?? []).map((r) => ({ id: r.id, num: bedNum(r.resource_name), type: r.resource_type, zone: r.location_zone ?? '' }));
+  const anchor = all.find((b) => b.id === anchorBedId);
+  const sameType = (b: { type: string | null }) => (types.length ? !!b.type && types.includes(b.type) : anchor ? b.type === anchor.type : true);
+  const candidates: { id: string; num: number; zone: string }[] = [];
+  for (const b of all) {
+    if (b.id === anchorBedId || !sameType(b)) continue;
+    if (await bedHasConflict(supabase, b.id, day, startMin, endMin, { reservationId })) continue;
+    candidates.push({ id: b.id, num: b.num, zone: b.zone });
+  }
+  candidates.sort((a, b) => {
+    const za = anchor && a.zone === anchor.zone ? 0 : 1;
+    const zb = anchor && b.zone === anchor.zone ? 0 : 1;
+    if (za !== zb) return za - zb;
+    const da = anchor ? Math.abs(a.num - anchor.num) : a.num;
+    const db = anchor ? Math.abs(b.num - anchor.num) : b.num;
+    return da - db;
+  });
+  return [anchorBedId, ...candidates.slice(0, pax - 1).map((c) => c.id)];
+}
+
 const placeSchema = z.object({
   reservation_id: z.string().uuid(),
   bed_id: z.string().uuid(),
@@ -87,7 +130,7 @@ export async function placeReservationOnBed(input: unknown): Promise<ActionResul
 
   const { data: r } = await supabase
     .from('reservations')
-    .select('branch_id, status, desired_service_start, desired_service_end')
+    .select('branch_id, status, desired_service_start, desired_service_end, pax, reservation_service_categories ( service_category_id )')
     .eq('id', reservation_id)
     .single();
   if (!r) return { ok: false, error: 'Reservation not found' };
@@ -108,8 +151,11 @@ export async function placeReservationOnBed(input: unknown): Promise<ActionResul
     .eq('id', reservation_id);
   if (upd.error) return { ok: false, error: upd.error.message };
 
+  // A group keeps one bed per guest: anchor on the dropped bed, top up to pax.
+  const categoryIds = (r.reservation_service_categories ?? []).map((x) => x.service_category_id);
+  const beds = await pickGroupBeds(supabase, r.branch_id, categoryIds, bed_id, r.pax ?? 1, day, start_min, endMin, reservation_id);
   await supabase.from('reservation_resources').delete().eq('reservation_id', reservation_id);
-  const ins = await supabase.from('reservation_resources').insert({ reservation_id, resource_id: bed_id });
+  const ins = await supabase.from('reservation_resources').insert(beds.map((resource_id) => ({ reservation_id, resource_id })));
   if (ins.error) return { ok: false, error: ins.error.message };
 
   revalidatePath('/shift-schedule');
