@@ -441,7 +441,7 @@ export function OrderWorkspace({
   function doSkipItem(id: string) {
     startTransition(async () => {
       const r = await skipOrderItem(id, order.id);
-      if (r.ok) toast.success('Service skipped'); else toast.error(r.error);
+      if (r.ok) toast.success('Service cancelled'); else toast.error(r.error);
     });
   }
 
@@ -689,7 +689,7 @@ export function OrderWorkspace({
                     : isCleaning ? { t: 'Cleaning', c: 'text-amber-600 dark:text-amber-400' }
                     : (it.status === 'service_completed' || it.status === 'feedback_done') ? { t: 'Done', c: 'text-primary' }
                     : it.status === 'interrupted' ? (it.switched ? { t: 'Switched', c: 'text-amber-600 dark:text-amber-400' } : { t: 'Interrupted', c: 'text-destructive' })
-                    : it.status === 'cancelled' ? { t: 'Skipped', c: 'text-muted-foreground' }
+                    : it.status === 'cancelled' ? { t: 'Cancelled', c: 'text-muted-foreground' }
                     : null;
                   return (
                   <li key={it.id} className={`grid grid-cols-[11rem_10rem_6rem_15rem_10rem_1fr] items-center gap-x-3 py-2 text-sm ${it.status === 'cancelled' ? 'opacity-60' : ''}`}>
@@ -716,13 +716,13 @@ export function OrderWorkspace({
                             Start
                           </ActionBtn>
                           <ActionBtn
-                            tip="Skip this service — drops it from the bill but keeps it in the record."
+                            tip="Cancel this service — drops it from the bill but keeps it in the record."
                             variant="ghost"
                             className="text-muted-foreground hover:text-foreground"
                             onClick={() => doSkipItem(it.id)}
                             disabled={pending}
                           >
-                            Skip
+                            Cancel
                           </ActionBtn>
                         </>
                       )}
@@ -1090,7 +1090,7 @@ export function OrderWorkspace({
                   <div key={it.id} className={`flex items-center justify-between py-2 text-sm ${it.status === 'cancelled' ? 'opacity-60' : ''}`}>
                     <span className="font-semibold">{it.service_name}<span className="ml-2 font-medium text-muted-foreground">{it.therapist_name ?? 'Unassigned'}</span></span>
                     {it.status === 'cancelled'
-                      ? <span className="text-xs font-medium text-muted-foreground">Skipped</span>
+                      ? <span className="text-xs font-medium text-muted-foreground">Cancelled</span>
                       : it.feedback_score != null
                         ? <span className="font-bold text-amber-600 dark:text-amber-400">★ {it.feedback_score}/10</span>
                         : <span className="text-xs font-medium text-muted-foreground">Not submitted</span>}

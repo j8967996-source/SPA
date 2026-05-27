@@ -621,10 +621,10 @@ export async function removeOrderItem(itemId: string, orderId: string): Promise<
   if (!ord) return { ok: false, error: 'Order not found' };
   if (!(await canAccessBranch(ord.branch_id))) return { ok: false, error: 'No access to this branch' };
   if (item.status !== 'scheduled') {
-    return { ok: false, error: 'Only a not-yet-started service can be removed. Use Skip or Interrupt for one that has started.' };
+    return { ok: false, error: 'Only a not-yet-started service can be removed. Use Cancel or Interrupt for one that has started.' };
   }
   if (ord.status !== 'draft') {
-    return { ok: false, error: 'The order is open — use Skip to remove this service (it stays in the record).' };
+    return { ok: false, error: 'The order is open — use Cancel to remove this service (it stays in the record).' };
   }
   const { error } = await supabase.from('order_items').delete().eq('id', itemId);
   if (error) return { ok: false, error: error.message };
@@ -804,7 +804,7 @@ export async function skipOrderItem(itemId: string, orderId: string): Promise<Ac
   const { data: item } = await supabase.from('order_items').select('status').eq('id', itemId).single();
   if (!item) return { ok: false, error: 'Service line not found' };
   if (item.status !== 'scheduled') {
-    return { ok: false, error: 'Only a not-yet-started service can be skipped (use Interrupt once it has started)' };
+    return { ok: false, error: 'Only a not-yet-started service can be cancelled (use Interrupt once it has started)' };
   }
   const { error } = await supabase.from('order_items').update({ status: 'cancelled' }).eq('id', itemId);
   if (error) return { ok: false, error: error.message };
