@@ -875,7 +875,8 @@ export async function interruptOrderItem(input: unknown): Promise<ActionResult> 
 }
 
 // Front-desk "redo": re-add a fresh scheduled line for an interrupted/skipped
-// service (same guest + bed; therapist re-assigned at start). If the interrupt
+// service. It copies the same guest, therapist and bed so the line is ready to
+// start again as it was (change either if needed). If the interrupt
 // auto-completed the order, quietly reopen it — this is a normal counter
 // correction, so (unlike the manager-only Reopen) it needs no manager. Blocked
 // once money is settled (paid/closed/void → manager reversal).
@@ -883,7 +884,7 @@ export async function redoOrderItem(itemId: string, orderId: string): Promise<Ac
   const supabase = await createAuditedClient();
   const { data: item } = await supabase
     .from('order_items')
-    .select('status, service_item_id, order_customer_id, resource_id, discount_class_id, order:orders!order_items_order_id_fkey ( branch_id, status )')
+    .select('status, service_item_id, order_customer_id, therapist_id, resource_id, discount_class_id, order:orders!order_items_order_id_fkey ( branch_id, status )')
     .eq('id', itemId)
     .single();
   if (!item) return { ok: false, error: 'Service line not found' };
@@ -916,6 +917,7 @@ export async function redoOrderItem(itemId: string, orderId: string): Promise<Ac
     order_id: orderId,
     order_customer_id: item.order_customer_id,
     service_item_id: item.service_item_id,
+    therapist_id: item.therapist_id,
     resource_id: item.resource_id,
     discount_class_id: discountClassId,
   });

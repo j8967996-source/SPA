@@ -442,7 +442,7 @@ export function OrderWorkspace({
   function doRedoItem(id: string) {
     startTransition(async () => {
       const r = await redoOrderItem(id, order.id);
-      if (r.ok) toast.success('Service re-added — assign a therapist and start'); else toast.error(r.error);
+      if (r.ok) toast.success('Service re-added with the same therapist & bed — review and Start'); else toast.error(r.error);
     });
   }
 
