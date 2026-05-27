@@ -243,6 +243,38 @@ export async function reopenOrder(id: string, reason: string): Promise<ActionRes
   return { ok: true };
 }
 
+const noteSchema = z.object({
+  order_id: z.string().uuid(),
+  note: z.string().max(2000).optional().nullable(),
+});
+
+// The order note is operational metadata, not financial — so it stays editable
+// in ANY status (including closed/void). Branch-access gated; each change is
+// written to the edit history.
+export async function updateOrderNote(input: unknown): Promise<ActionResult> {
+  const parsed = noteSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
+  const d = parsed.data;
+  const session = await currentSession();
+  const supabase = await createAuditedClient();
+  const { data: order } = await supabase.from('orders').select('note, branch_id').eq('id', d.order_id).single();
+  if (!order) return { ok: false, error: 'Order not found' };
+  if (!(await canAccessBranch(order.branch_id))) return { ok: false, error: 'No access to this branch' };
+  const next = d.note?.trim() ? d.note.trim() : null;
+  if ((order.note ?? null) === next) return { ok: true }; // unchanged — no-op
+  const { error } = await supabase.from('orders').update({ note: next }).eq('id', d.order_id);
+  if (error) return { ok: false, error: error.message };
+  await supabase.from('order_edit_log').insert({
+    order_id: d.order_id,
+    before_snapshot: { note: order.note ?? null },
+    after_snapshot: { note: next },
+    edit_reason: 'Note updated',
+    edited_by_staff_id: session?.staffUserId ?? null,
+  });
+  revalidatePath(`/sales-orders/${d.order_id}`);
+  return { ok: true };
+}
+
 // ---------------------------------------------------------------------------
 // Line-item editor
 // ---------------------------------------------------------------------------

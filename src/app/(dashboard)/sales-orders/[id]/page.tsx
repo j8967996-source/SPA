@@ -7,6 +7,7 @@ import { currentSession, isManager } from '@/lib/auth';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { OrderWorkspace } from '@/components/sales-orders/order-workspace';
+import { OrderNoteEditor } from '@/components/sales-orders/order-note-editor';
 import { OrderStatusActions } from '@/components/sales-orders/order-status-actions';
 import { ReportIncidentDialog } from '@/components/incidents/report-incident-dialog';
 
@@ -290,7 +291,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
     })),
     ...(editLog.data ?? []).map((l) => ({
       at: l.edited_at,
-      label: `Reopen ${l.from_status ?? ''} → ${l.to_status ?? ''}`,
+      // Reopens carry a status change; other edits (e.g. note updates) don't.
+      label: l.from_status && l.to_status ? `Reopen ${l.from_status} → ${l.to_status}` : 'Edit',
       reason: l.edit_reason,
       who: one(l.staff)?.display_name ?? null,
     })),
@@ -329,9 +331,8 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
                 <dd className="font-semibold mt-0.5">{source ? `${source.code} — ${source.name}` : '—'}</dd></div>
               <div><dt className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Billing To</dt>
                 <dd className="font-semibold mt-0.5">{billing ? `${billing.code} — ${billing.name}` : 'Self-pay'}</dd></div>
-              <div><dt className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Note</dt>
-                <dd className="font-medium mt-0.5 text-muted-foreground">{order.note ?? '—'}</dd></div>
             </dl>
+            <OrderNoteEditor orderId={order.id} initialNote={order.note} />
           </CardContent>
         </Card>
 
