@@ -272,25 +272,35 @@ export function ScheduleBoard({
           <div className="flex border-b border-border sticky top-0 z-30 bg-muted">
             <div className="w-40 shrink-0 p-2 flex items-center justify-center text-center text-xs font-bold text-muted-foreground sticky left-0 z-40 bg-muted">Station</div>
             <div className="relative h-12" style={{ minWidth: trackWidth }}>
-              {/* top tier: the hour, sitting on its gridline */}
+              {/* top tier: the hour, centered over its band */}
               {hours.slice(0, -1).map((h) => (
                 <div key={h} className="absolute top-0 bottom-0 border-l border-border" style={{ left: (h * 60 - windowStartMin) * PX_PER_MIN, width: PX_PER_HOUR }}>
-                  <span className="absolute top-1.5 inset-x-0 text-center text-sm font-bold tabular-nums">{String(h).padStart(2, '0')}:00</span>
+                  <span className="absolute top-1 inset-x-0 text-center text-sm font-bold tabular-nums">{String(h).padStart(2, '0')}:00</span>
                 </div>
               ))}
-              {/* bottom tier: readable 15-min labels + faint 5-min ticks to aim at */}
+              {/* dashed divider between the hour tier and the minute tier */}
+              <div className="absolute left-0 right-0 border-t border-dashed border-border/50" style={{ top: 23 }} />
+              {/* minute ticks: 15-min stronger, 5-min faint */}
               {hours.slice(0, -1).flatMap((h) => [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55].map((q) => {
                 const quarter = q % 15 === 0;
                 return (
                   <div
-                    key={`${h}-${q}`}
-                    className={`absolute bottom-0 border-l ${quarter ? (q === 30 ? 'h-5 border-border/70' : 'h-4 border-border/45') : 'h-1.5 border-border/25'}`}
+                    key={`t${h}-${q}`}
+                    className={`absolute bottom-0 border-l ${quarter ? 'h-3 border-border/45' : 'h-1.5 border-border/25'}`}
                     style={{ left: (h * 60 + q - windowStartMin) * PX_PER_MIN }}
-                  >
-                    {quarter && <span className="absolute bottom-4 left-0.5 text-[10px] font-bold text-muted-foreground tabular-nums">{q}</span>}
-                  </div>
+                  />
                 );
               }))}
+              {/* minute labels, centered on their mark, in the lower tier */}
+              {hours.slice(0, -1).flatMap((h) => [15, 30, 45].map((q) => (
+                <span
+                  key={`l${h}-${q}`}
+                  className="absolute -translate-x-1/2 text-[10px] font-bold text-muted-foreground tabular-nums"
+                  style={{ left: (h * 60 + q - windowStartMin) * PX_PER_MIN, top: 27 }}
+                >
+                  {q}
+                </span>
+              )))}
               {nowMin != null && nowMin >= windowStartMin && (
                 <div className="absolute top-0 bottom-0 z-10 -translate-x-1/2 flex flex-col items-center" style={{ left: (nowMin - windowStartMin) * PX_PER_MIN }}>
                   <span className="rounded bg-red-500 px-1 text-[9px] font-bold leading-tight text-white">{hhmm(nowMin)}</span>
