@@ -535,6 +535,11 @@ export function OrderWorkspace({
     !items.some((i) => i.order_customer_id === c.id && !['scheduled', 'cancelled'].includes(i.status))
     && c.paid_cents === 0;
   const multiCustomer = customers.length > 1;
+  // Guests who still owe on their own line (Pay separately shows one card each).
+  const splitCustomers = customers
+    .slice()
+    .sort((a, b) => a.seq_no - b.seq_no)
+    .filter((c) => c.subtotal_cents - c.paid_cents > 0);
   // Therapists to tip for a customer (null = whole order): only services that were
   // actually completed (done) — switched / cancelled / interrupted / not-yet-done
   // lines aren't tippable.
@@ -1012,12 +1017,8 @@ export function OrderWorkspace({
           </CardHeader>
           <CardContent className="flex flex-col gap-3">
             {due > 0 &&
-              (multiCustomer && payMode === 'split' ? (
-                customers
-                  .slice()
-                  .sort((a, b) => a.seq_no - b.seq_no)
-                  .filter((c) => c.subtotal_cents - c.paid_cents > 0)
-                  .map((c) => (
+              (multiCustomer && payMode === 'split' && splitCustomers.length > 0 ? (
+                splitCustomers.map((c) => (
                     <CustomerPaymentCard
                       key={`${c.id}-${c.subtotal_cents - c.paid_cents}`}
                       orderId={order.id}
