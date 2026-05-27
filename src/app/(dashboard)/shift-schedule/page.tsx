@@ -1,5 +1,3 @@
-import { BedDouble } from 'lucide-react';
-
 import { createServiceClient } from '@/lib/supabase/server';
 import { Card } from '@/components/ui/card';
 import { ShiftControls } from '@/components/shift-schedule/shift-controls';
@@ -7,6 +5,7 @@ import { ShiftCell, type ShiftData } from '@/components/shift-schedule/shift-cel
 import { DayTimeline, type DayRow, type ReservationBlock } from '@/components/shift-schedule/day-timeline';
 import { ScheduleBoard, type BoardBed, type BoardBlock, type BlockVariant, type BoardDialogData } from '@/components/shift-schedule/schedule-board';
 import { TherapistsNowCard } from '@/components/shift-schedule/therapists-now-card';
+import { BedsNowCard } from '@/components/shift-schedule/beds-now-card';
 import { BulkShiftDialog } from '@/components/shift-schedule/bulk-shift-dialog';
 import { getReservationGraceMinutes, isReservationOverdue } from '@/lib/reservations';
 import { getAllowedBranchIds } from '@/lib/branch-access';
@@ -357,9 +356,16 @@ interface TherapistNow {
   serviceName: string | null;
   since: string | null;
 }
+interface BedNow {
+  id: string;
+  name: string;
+  free: boolean;
+  occupant: string | null;
+}
 interface NowAvailability {
   bedsFree: number;
   bedsTotal: number;
+  beds: BedNow[];
   therapistsFree: number;
   therapistsOnShift: number;
   therapists: TherapistNow[];
@@ -376,7 +382,7 @@ async function computeNowAvailability(branchId: string): Promise<NowAvailability
   const nowMin = tsToMin(new Date().toISOString());
 
   const [bedsRes, shiftRes, itemsRes, resvRes, graceMin] = await Promise.all([
-    supabase.from('resources').select('id').eq('branch_id', branchId).eq('resource_type', 'massage_bed').eq('status', 'active'),
+    supabase.from('resources').select('id, resource_name').eq('branch_id', branchId).eq('resource_type', 'massage_bed').eq('status', 'active').order('resource_name'),
     supabase.from('employee_shifts').select('employee_id, shift_type, shift_start, shift_end, employees:employee_id ( name, employee_code )').eq('branch_id', branchId).eq('shift_date', day).in('shift_type', TIMED),
     supabase
       .from('order_items')
@@ -384,7 +390,7 @@ async function computeNowAvailability(branchId: string): Promise<NowAvailability
       .not('actual_start', 'is', null),
     supabase
       .from('reservations')
-      .select('status, desired_service_start, desired_service_end, service:service_items ( cleanup_after_minutes ), reservation_resources ( resource_id )')
+      .select('status, guest_name, desired_service_start, desired_service_end, service:service_items ( cleanup_after_minutes ), reservation_resources ( resource_id )')
       .eq('branch_id', branchId).eq('status', 'confirmed').is('deleted_at', null)
       .gte('desired_service_start', `${day}T00:00:00+08:00`).lte('desired_service_start', `${day}T23:59:59+08:00`),
     getReservationGraceMinutes(),
@@ -396,27 +402,33 @@ async function computeNowAvailability(branchId: string): Promise<NowAvailability
   // Beds busy this minute: an active service ([prep .. end (+cleanup)]) or a
   // confirmed, non-overdue pinned reservation whose window covers now.
   const busyBeds = new Set<string>();
+  const busyBedInfo = new Map<string, string>(); // bed → what's on it (for the expandable list)
   for (const it of items) {
     if (!it.resource_id || !bedIds.has(it.resource_id)) continue;
     const prep = one(it.service)?.prep_before_minutes ?? 0;
     const cleanup = one(it.service)?.cleanup_after_minutes ?? 0;
     const s0 = tsToMin(it.actual_start!);
     const start = s0 - prep;
+    let busy = false;
     if (it.actual_end) {
       const end = tsToMin(it.actual_end);
       const occEnd = it.bed_released_at ? end : end + cleanup; // released early frees the bed
-      if (nowMin >= start && nowMin < occEnd) busyBeds.add(it.resource_id);
-    } else if (nowMin >= start) {
-      busyBeds.add(it.resource_id); // ongoing
+      busy = nowMin >= start && nowMin < occEnd;
+    } else {
+      busy = nowMin >= start; // ongoing
     }
+    if (busy) { busyBeds.add(it.resource_id); busyBedInfo.set(it.resource_id, one(it.service)?.name ?? 'In service'); }
   }
   for (const r of resvRes.data ?? []) {
     if (isReservationOverdue({ desiredStartIso: r.desired_service_start, graceMin })) continue;
     const cleanup = one(r.service)?.cleanup_after_minutes ?? 0;
     const start = tsToMin(r.desired_service_start);
     const occEnd = tsToMin(r.desired_service_end) + cleanup;
-    if (nowMin >= start && nowMin < occEnd) for (const x of r.reservation_resources ?? []) if (bedIds.has(x.resource_id)) busyBeds.add(x.resource_id);
+    if (nowMin >= start && nowMin < occEnd) for (const x of r.reservation_resources ?? []) if (bedIds.has(x.resource_id)) { busyBeds.add(x.resource_id); if (!busyBedInfo.has(x.resource_id)) busyBedInfo.set(x.resource_id, r.guest_name ?? 'Reserved'); }
   }
+  const beds: BedNow[] = (bedsRes.data ?? [])
+    .map((b) => ({ id: b.id, name: b.resource_name, free: !busyBeds.has(b.id), occupant: busyBedInfo.get(b.id) ?? null }))
+    .sort((a, b) => Number(a.free) - Number(b.free) || a.name.localeCompare(b.name, undefined, { numeric: true }));
 
   // Therapists rostered (timed shift covering now). On-duty = rostered (the
   // roster is the source of truth — no punch-clock); free = not mid-service.
@@ -444,7 +456,7 @@ async function computeNowAvailability(branchId: string): Promise<NowAvailability
     })
     .sort((a, b) => Number(a.free) - Number(b.free) || a.code.localeCompare(b.code));
 
-  return { bedsFree: Math.max(0, bedIds.size - busyBeds.size), bedsTotal: bedIds.size, therapistsFree: therapists.filter((t) => t.free).length, therapistsOnShift: onShift.size, therapists, nowMin };
+  return { bedsFree: Math.max(0, bedIds.size - busyBeds.size), bedsTotal: bedIds.size, beds, therapistsFree: therapists.filter((t) => t.free).length, therapistsOnShift: onShift.size, therapists, nowMin };
 }
 
 async function fetchData(branchParam?: string, weekParam?: string) {
@@ -525,15 +537,7 @@ export default async function ShiftSchedulePage({
           above both views, always reflecting "now" regardless of the day shown. */}
       {availability && (
         <div className="flex flex-wrap items-start gap-3">
-          <Card className="flex min-w-[180px] flex-1 items-center justify-between gap-3 p-3 sm:max-w-[220px]">
-            <div>
-              <div className="text-[11px] font-bold uppercase tracking-[0.1em] text-muted-foreground leading-tight">Beds open now</div>
-              <div className={`mt-0.5 text-2xl font-extrabold tabular ${availability.bedsFree === 0 ? 'text-amber-600 dark:text-amber-400' : 'text-primary'}`}>
-                {availability.bedsFree}<span className="text-base font-semibold text-muted-foreground"> / {availability.bedsTotal}</span>
-              </div>
-            </div>
-            <BedDouble className="size-6 shrink-0 text-muted-foreground/50" />
-          </Card>
+          <BedsNowCard free={availability.bedsFree} total={availability.bedsTotal} beds={availability.beds} />
           <TherapistsNowCard free={availability.therapistsFree} onShift={availability.therapistsOnShift} therapists={availability.therapists} />
           <span className="self-center text-xs font-semibold text-muted-foreground">Live · as of {hm(availability.nowMin)} PHT</span>
         </div>
