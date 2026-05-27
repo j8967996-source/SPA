@@ -139,7 +139,7 @@ export function CustomerPaymentCard({
             </SelectContent>
           </Select>
         </div>
-        <div className="flex flex-col gap-1">
+        <div className="relative flex flex-col gap-1">
           <Label className="text-xs font-semibold">Amount (₱)</Label>
           {/* Editable so a bill can be split across methods (e.g. cash part +
               PAYMAYA part). Defaults to the full due; tips stay separate.
@@ -152,9 +152,10 @@ export function CustomerPaymentCard({
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             aria-invalid={overDue}
-            className={cn('w-28 text-right', overDue && 'border-destructive ring-1 ring-destructive')}
+            className={cn('w-28 text-right', overDue && 'border-destructive')}
           />
-          {overDue && <span className="text-[11px] font-medium text-destructive">Max {peso(dueCents)}</span>}
+          {/* Floats below the field so the warning never reflows the row. */}
+          {overDue && <span className="absolute top-full left-0 mt-0.5 whitespace-nowrap text-[11px] font-medium text-destructive">Max {peso(dueCents)}</span>}
         </div>
         <div className="flex flex-col gap-1">
           <Label className="text-xs font-semibold">Reference {refRequired && <span className="text-destructive">*</span>}</Label>

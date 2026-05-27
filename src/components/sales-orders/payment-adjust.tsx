@@ -108,10 +108,10 @@ export function PaymentAdjust({
           </DialogHeader>
           <div className="flex flex-col gap-3 py-2">
             <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1">
+              <div className="relative flex flex-col gap-1">
                 <Label className="text-xs font-semibold">Amount (₱)</Label>
-                <Input type="number" min="0" max={(dueCents / 100).toFixed(2)} step="0.01" value={cAmount} onChange={(e) => setCAmount(e.target.value)} aria-invalid={cOver} className={cOver ? 'border-destructive ring-1 ring-destructive' : undefined} />
-                {cOver && <span className="text-[11px] font-medium text-destructive">Max {peso(dueCents)}</span>}
+                <Input type="number" min="0" max={(dueCents / 100).toFixed(2)} step="0.01" value={cAmount} onChange={(e) => setCAmount(e.target.value)} aria-invalid={cOver} className={cOver ? 'border-destructive' : undefined} />
+                {cOver && <span className="absolute top-full left-0 mt-0.5 whitespace-nowrap text-[11px] font-medium text-destructive">Max {peso(dueCents)}</span>}
               </div>
               <div className="flex flex-col gap-1">
                 <Label className="text-xs font-semibold">Method</Label>
@@ -157,10 +157,10 @@ export function PaymentAdjust({
           </DialogHeader>
           <div className="flex flex-col gap-3 py-2">
             <div className="grid grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1">
+              <div className="relative flex flex-col gap-1">
                 <Label className="text-xs font-semibold">Amount (₱)</Label>
-                <Input type="number" min="0" max={(paidCents / 100).toFixed(2)} step="0.01" value={rAmount} onChange={(e) => setRAmount(e.target.value)} aria-invalid={rOver} className={rOver ? 'border-destructive ring-1 ring-destructive' : undefined} />
-                {rOver && <span className="text-[11px] font-medium text-destructive">Max {peso(paidCents)}</span>}
+                <Input type="number" min="0" max={(paidCents / 100).toFixed(2)} step="0.01" value={rAmount} onChange={(e) => setRAmount(e.target.value)} aria-invalid={rOver} className={rOver ? 'border-destructive' : undefined} />
+                {rOver && <span className="absolute top-full left-0 mt-0.5 whitespace-nowrap text-[11px] font-medium text-destructive">Max {peso(paidCents)}</span>}
               </div>
               <div className="flex flex-col gap-1">
                 <Label className="text-xs font-semibold">Method</Label>
