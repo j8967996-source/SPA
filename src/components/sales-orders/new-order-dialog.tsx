@@ -54,6 +54,8 @@ interface Props {
   branches: BranchOption[];
   sources: SourceOption[];
   billingDestinations: BillingOption[];
+  /** Non-admins are locked to their home branch — the picker becomes read-only. */
+  lockBranchId?: string;
   trigger: React.ReactNode;
 }
 
@@ -77,12 +79,12 @@ function todayPHT(): string {
   }).format(new Date());
 }
 
-export function NewOrderDialog({ branches, sources, billingDestinations, trigger }: Props) {
+export function NewOrderDialog({ branches, sources, billingDestinations, lockBranchId, trigger }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  const initialBranchId = branches[0]?.id ?? '';
+  const initialBranchId = lockBranchId ?? branches[0]?.id ?? '';
   const initialUnits = branches.find((b) => b.id === initialBranchId)?.businessUnits ?? [];
   // Walk-in is the default order type → default the source to WALK-IN and let its
   // billing (SELF) flow through. Self-pay is the SELF destination, not null.
@@ -170,15 +172,22 @@ export function NewOrderDialog({ branches, sources, billingDestinations, trigger
 
           <div className="grid grid-cols-2 gap-4 py-4">
             <div className="flex flex-col gap-2">
-              <Label className="font-semibold">Branch *</Label>
-              <Select items={branchOptions} value={branchId} onValueChange={(v) => v && pickBranch(v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {branchOptions.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="font-semibold">Branch{lockBranchId ? '' : ' *'}</Label>
+              {lockBranchId ? (
+                <div className="flex items-center justify-between rounded-lg border border-input bg-muted/40 px-3 py-2 text-sm font-semibold">
+                  <span>{branchOptions.find((o) => o.value === branchId)?.label ?? '—'}</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Your branch</span>
+                </div>
+              ) : (
+                <Select items={branchOptions} value={branchId} onValueChange={(v) => v && pickBranch(v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {branchOptions.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             <div className="flex flex-col gap-2">

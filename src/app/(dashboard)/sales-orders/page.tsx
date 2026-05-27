@@ -2,6 +2,7 @@ import { Plus } from 'lucide-react';
 
 import { createServiceClient } from '@/lib/supabase/server';
 import { getAllowedBranchIds } from '@/lib/branch-access';
+import { currentSession, isAdmin } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { NewOrderDialog } from '@/components/sales-orders/new-order-dialog';
 import { OrdersExplorer, type OrderRow } from '@/components/sales-orders/orders-explorer';
@@ -90,6 +91,11 @@ async function fetchData() {
 
 export default async function SalesOrdersPage() {
   const { rows, branches, sources, billingDestinations } = await fetchData();
+  // Non-admins open orders only for their home branch; admins keep the branch picker.
+  const session = await currentSession();
+  const lockBranchId = !isAdmin(session) && session?.homeBranchId && branches.some((b) => b.id === session.homeBranchId)
+    ? session.homeBranchId
+    : undefined;
 
   return (
     <div className="flex flex-col gap-6">
@@ -104,6 +110,7 @@ export default async function SalesOrdersPage() {
           branches={branches}
           sources={sources}
           billingDestinations={billingDestinations}
+          lockBranchId={lockBranchId}
           trigger={
             <Button disabled={branches.length === 0}>
               <Plus className="size-4" />
