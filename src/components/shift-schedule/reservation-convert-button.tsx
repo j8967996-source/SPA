@@ -13,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { confirmReservation, convertReservationToOrder } from '@/app/(dashboard)/reservations/actions';
+import { confirmReservation, convertReservationToOrder, setReservationStatus } from '@/app/(dashboard)/reservations/actions';
 
 // A reservation block on the Shift Schedule. Clicking opens a dialog: a pending
 // reservation can be Confirmed (establishes it; an on-site one then holds its
@@ -65,6 +65,14 @@ export function ReservationConvertButton({
     });
   }
 
+  function doCancel() {
+    start(async () => {
+      const r = await setReservationStatus(reservationId, 'cancelled');
+      if (r.ok) { toast.success('Reservation cancelled'); setOpen(false); router.refresh(); }
+      else toast.error(r.error);
+    });
+  }
+
   function doConvert() {
     start(async () => {
       const r = await convertReservationToOrder(reservationId);
@@ -96,7 +104,10 @@ export function ReservationConvertButton({
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" disabled={busy} onClick={() => setOpen(false)}>Cancel</Button>
+            <Button variant="ghost" className="mr-auto text-destructive" disabled={busy} onClick={doCancel}>
+              Cancel booking
+            </Button>
+            <Button variant="outline" disabled={busy} onClick={() => setOpen(false)}>Close</Button>
             {onEdit && (
               <Button variant="outline" disabled={busy} onClick={onEdit}>
                 Edit
