@@ -604,15 +604,15 @@ export async function updateOrderItem(input: unknown): Promise<ActionResult> {
   return { ok: true };
 }
 
-// Hard-remove a service line — only a not-yet-started (scheduled) one. Once a
-// service starts or finishes it carries real history (timing, tips, feedback,
-// commission) that a delete would cascade away, so a started line is ended with
-// Interrupt and a not-wanted-anymore one with Skip; neither is deleted.
+// Hard-remove a service line — only on a DRAFT order, and only a not-yet-started
+// (scheduled) line. Once the order is open it is "live", so removing a service
+// goes through Skip (soft, audit-kept); a started line is ended with Interrupt.
+// Hard delete is the draft-only "this was a mistake, erase it" path.
 export async function removeOrderItem(itemId: string, orderId: string): Promise<ActionResult> {
   const supabase = await createAuditedClient();
   const { data: item } = await supabase
     .from('order_items')
-    .select('status, order:orders!order_items_order_id_fkey ( branch_id )')
+    .select('status, order:orders!order_items_order_id_fkey ( branch_id, status )')
     .eq('id', itemId)
     .single();
   if (!item) return { ok: false, error: 'Service line not found' };
@@ -621,6 +621,9 @@ export async function removeOrderItem(itemId: string, orderId: string): Promise<
   if (!(await canAccessBranch(ord.branch_id))) return { ok: false, error: 'No access to this branch' };
   if (item.status !== 'scheduled') {
     return { ok: false, error: 'Only a not-yet-started service can be removed. Use Skip or Interrupt for one that has started.' };
+  }
+  if (ord.status !== 'draft') {
+    return { ok: false, error: 'The order is open — use Skip to remove this service (it stays in the record).' };
   }
   const { error } = await supabase.from('order_items').delete().eq('id', itemId);
   if (error) return { ok: false, error: error.message };

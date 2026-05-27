@@ -736,14 +736,15 @@ export function OrderWorkspace({
                         </span>
                       )}
                       {order.editable && it.status === 'scheduled' && (
-                        <>
-                          <Button size="icon-sm" variant="ghost" onClick={() => startEditItem(it)} disabled={pending} title="Edit service">
-                            <Pencil className="size-3.5 text-muted-foreground" />
-                          </Button>
-                          <Button size="icon-sm" variant="ghost" onClick={() => doRemoveItem(it.id)} disabled={pending} title="Remove service">
-                            <Trash2 className="size-3.5 text-destructive" />
-                          </Button>
-                        </>
+                        <Button size="icon-sm" variant="ghost" onClick={() => startEditItem(it)} disabled={pending} title="Edit service">
+                          <Pencil className="size-3.5 text-muted-foreground" />
+                        </Button>
+                      )}
+                      {/* Hard delete only on a draft order; once open, Skip is the remove path. */}
+                      {order.status === 'draft' && it.status === 'scheduled' && (
+                        <Button size="icon-sm" variant="ghost" onClick={() => doRemoveItem(it.id)} disabled={pending} title="Remove service">
+                          <Trash2 className="size-3.5 text-destructive" />
+                        </Button>
                       )}
                     </div>
                   </li>
