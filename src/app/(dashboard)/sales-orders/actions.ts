@@ -128,7 +128,57 @@ export async function voidOrder(id: string, reason: string): Promise<ActionResul
   if (['closed', 'void'].includes(order.status)) {
     return { ok: false, error: 'A closed or already-void order cannot be voided' };
   }
-  const { error } = await supabase.from('orders').update({ status: 'void' }).eq('id', id);
+
+  // Voiding cancels the order's payments + tips. A tip already on a settlement
+  // payout can't be unwound here — reverse that settlement first.
+  const { data: settledTips } = await supabase
+    .from('tips')
+    .select('id')
+    .eq('order_id', id)
+    .not('settlement_id', 'is', null)
+    .limit(1);
+  if (settledTips && settledTips.length > 0) {
+    return { ok: false, error: 'A tip on this order is already settled — reverse the settlement before voiding.' };
+  }
+
+  // Stored-value redemptions are refunded back onto their cards (with a reversal
+  // ledger row), and the consume row's link to the payment is cleared so the
+  // payment can be deleted without tripping its foreign key.
+  const { data: pays } = await supabase
+    .from('payments')
+    .select('id, amount_cents, stored_value_card_id, method:payment_methods ( code )')
+    .eq('order_id', id);
+  for (const p of pays ?? []) {
+    const code = Array.isArray(p.method) ? p.method[0]?.code : (p.method as { code?: string } | null)?.code;
+    if (code !== 'stored_value_card' || !p.stored_value_card_id) continue;
+    await supabase.from('stored_value_transactions').update({ related_payment_id: null }).eq('related_payment_id', p.id);
+    const { data: card } = await supabase
+      .from('stored_value_cards')
+      .select('current_balance_cents, branch_id')
+      .eq('id', p.stored_value_card_id)
+      .single();
+    if (!card) continue;
+    const balanceAfter = card.current_balance_cents + p.amount_cents;
+    await supabase.from('stored_value_cards')
+      .update({ current_balance_cents: balanceAfter, status: 'active' })
+      .eq('id', p.stored_value_card_id);
+    await supabase.from('stored_value_transactions').insert({
+      card_id: p.stored_value_card_id,
+      branch_id: card.branch_id,
+      type: 'refund',
+      amount_cents: p.amount_cents,
+      balance_after_cents: balanceAfter,
+      related_order_id: id,
+      approved_by_user_id: session!.staffUserId,
+      note: 'Order voided',
+    });
+  }
+
+  await supabase.from('tips').delete().eq('order_id', id);
+  const { error: pe } = await supabase.from('payments').delete().eq('order_id', id);
+  if (pe) return { ok: false, error: pe.message };
+
+  const { error } = await supabase.from('orders').update({ status: 'void', paid_cents: 0 }).eq('id', id);
   if (error) return { ok: false, error: error.message };
   await logStatus(id, order.status, 'void', reason.trim(), session!.staffUserId);
   revalidatePath('/sales-orders');
@@ -218,6 +268,10 @@ export async function addOrderCustomer(input: unknown): Promise<ActionResult> {
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
   const supabase = await createAuditedClient();
+  const { data: ord } = await supabase.from('orders').select('status, branch_id').eq('id', d.order_id).single();
+  if (!ord) return { ok: false, error: 'Order not found' };
+  if (!(await canAccessBranch(ord.branch_id))) return { ok: false, error: 'No access to this branch' };
+  if (!['draft', 'open', 'in_service'].includes(ord.status)) return { ok: false, error: 'This order can no longer be edited' };
   const { data: existing } = await supabase
     .from('order_customers')
     .select('seq_no')
@@ -237,8 +291,28 @@ export async function addOrderCustomer(input: unknown): Promise<ActionResult> {
   return { ok: true };
 }
 
+// Remove a guest from the order. Blocked once they have a started/finished
+// service or a recorded payment — removing them would cascade away that history
+// (their order_items, and those items' tips/feedback). A guest with only
+// not-yet-started lines is fine; those unstarted lines go with them.
 export async function removeOrderCustomer(customerId: string, orderId: string): Promise<ActionResult> {
   const supabase = await createAuditedClient();
+  const { data: ord } = await supabase.from('orders').select('branch_id').eq('id', orderId).single();
+  if (!ord) return { ok: false, error: 'Order not found' };
+  if (!(await canAccessBranch(ord.branch_id))) return { ok: false, error: 'No access to this branch' };
+
+  const { data: custItems } = await supabase
+    .from('order_items')
+    .select('status')
+    .eq('order_customer_id', customerId);
+  if ((custItems ?? []).some((i) => !['scheduled', 'cancelled'].includes(i.status))) {
+    return { ok: false, error: 'This guest has a started or finished service and can\'t be removed.' };
+  }
+  const { data: custPays } = await supabase.from('payments').select('id').eq('order_customer_id', customerId).limit(1);
+  if (custPays && custPays.length > 0) {
+    return { ok: false, error: 'This guest has a recorded payment — remove the payment first.' };
+  }
+
   const { error } = await supabase.from('order_customers').delete().eq('id', customerId);
   if (error) return { ok: false, error: error.message };
   await recomputeTotals(orderId);
@@ -421,6 +495,11 @@ export async function addOrderItem(input: unknown): Promise<ActionResult> {
   const d = parsed.data;
   const supabase = await createAuditedClient();
 
+  const { data: ord } = await supabase.from('orders').select('status, branch_id').eq('id', d.order_id).single();
+  if (!ord) return { ok: false, error: 'Order not found' };
+  if (!(await canAccessBranch(ord.branch_id))) return { ok: false, error: 'No access to this branch' };
+  if (!['draft', 'open', 'in_service'].includes(ord.status)) return { ok: false, error: 'This order can no longer be edited' };
+
   const res = await resolveLinePricing(supabase, d);
   if ('error' in res) return { ok: false, error: res.error };
 
@@ -469,8 +548,24 @@ export async function updateOrderItem(input: unknown): Promise<ActionResult> {
   return { ok: true };
 }
 
+// Hard-remove a service line — only a not-yet-started (scheduled) one. Once a
+// service starts or finishes it carries real history (timing, tips, feedback,
+// commission) that a delete would cascade away, so a started line is ended with
+// Interrupt and a not-wanted-anymore one with Skip; neither is deleted.
 export async function removeOrderItem(itemId: string, orderId: string): Promise<ActionResult> {
   const supabase = await createAuditedClient();
+  const { data: item } = await supabase
+    .from('order_items')
+    .select('status, order:orders!order_items_order_id_fkey ( branch_id )')
+    .eq('id', itemId)
+    .single();
+  if (!item) return { ok: false, error: 'Service line not found' };
+  const ord = Array.isArray(item.order) ? item.order[0] : item.order;
+  if (!ord) return { ok: false, error: 'Order not found' };
+  if (!(await canAccessBranch(ord.branch_id))) return { ok: false, error: 'No access to this branch' };
+  if (item.status !== 'scheduled') {
+    return { ok: false, error: 'Only a not-yet-started service can be removed. Use Skip or Interrupt for one that has started.' };
+  }
   const { error } = await supabase.from('order_items').delete().eq('id', itemId);
   if (error) return { ok: false, error: error.message };
   await recomputeTotals(orderId);
@@ -595,9 +690,11 @@ export async function finishOrderItem(itemId: string, orderId: string): Promise<
   const now = new Date().toISOString();
   const { data: item } = await supabase
     .from('order_items')
-    .select('actual_start')
+    .select('actual_start, status')
     .eq('id', itemId)
     .single();
+  if (!item) return { ok: false, error: 'Service line not found' };
+  if (item.status !== 'in_service') return { ok: false, error: 'Only an in-service line can be finished' };
   const patch: { status: string; actual_end: string; service_end: string; actual_duration_minutes?: number } = {
     status: 'service_completed',
     actual_end: now,

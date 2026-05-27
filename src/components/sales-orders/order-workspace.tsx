@@ -515,6 +515,11 @@ export function OrderWorkspace({
   });
 
   const itemsByCustomer = (cid: string) => items.filter((i) => i.order_customer_id === cid);
+  // A guest can be removed only while none of their services have started and no
+  // payment is attributed to them — mirrors the server guard.
+  const customerRemovable = (c: OrderCustomer) =>
+    !items.some((i) => i.order_customer_id === c.id && !['scheduled', 'cancelled'].includes(i.status))
+    && c.paid_cents === 0;
   const multiCustomer = customers.length > 1;
   // Therapists to tip for a customer (null = whole order): their items that have one.
   const tipTargetsFor = (customerId: string | null): TipTarget[] =>
@@ -624,8 +629,8 @@ export function OrderWorkspace({
               )}
               <div className="flex items-center gap-2 shrink-0">
                 <span className="text-sm font-bold tabular">{peso(c.subtotal_cents)}</span>
-                {order.editable && (
-                  <Button size="icon-sm" variant="ghost" onClick={() => doRemoveCustomer(c.id)} disabled={pending}>
+                {order.editable && customerRemovable(c) && (
+                  <Button size="icon-sm" variant="ghost" onClick={() => doRemoveCustomer(c.id)} disabled={pending} title="Remove guest">
                     <Trash2 className="size-4 text-destructive" />
                   </Button>
                 )}
@@ -730,14 +735,14 @@ export function OrderWorkspace({
                         </span>
                       )}
                       {order.editable && it.status === 'scheduled' && (
-                        <Button size="icon-sm" variant="ghost" onClick={() => startEditItem(it)} disabled={pending}>
-                          <Pencil className="size-3.5 text-muted-foreground" />
-                        </Button>
-                      )}
-                      {order.editable && (
-                        <Button size="icon-sm" variant="ghost" onClick={() => doRemoveItem(it.id)} disabled={pending}>
-                          <Trash2 className="size-3.5 text-destructive" />
-                        </Button>
+                        <>
+                          <Button size="icon-sm" variant="ghost" onClick={() => startEditItem(it)} disabled={pending} title="Edit service">
+                            <Pencil className="size-3.5 text-muted-foreground" />
+                          </Button>
+                          <Button size="icon-sm" variant="ghost" onClick={() => doRemoveItem(it.id)} disabled={pending} title="Remove service">
+                            <Trash2 className="size-3.5 text-destructive" />
+                          </Button>
+                        </>
                       )}
                     </div>
                   </li>

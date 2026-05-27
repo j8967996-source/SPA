@@ -87,7 +87,7 @@ export function OrderStatusActions({ orderId, status, canManage, itemCount, hasP
         title="Void this order?"
         description={
           hasPayments
-            ? 'This order already has recorded payment(s) — voiding cancels them too. The order is then locked; past activity is kept.'
+            ? 'This order has recorded payment(s) — voiding reverses them and any tips (stored-value redemptions are refunded to the card). A tip that is already settled will block the void. The order is then locked.'
             : 'The order is cancelled and locked. Past activity is kept.'
         }
         confirmLabel="Void order"
