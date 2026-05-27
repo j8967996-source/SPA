@@ -21,18 +21,19 @@ import { setCashShifts, setCashShiftWindows } from '@/app/(dashboard)/reconcilia
 const OPTIONS = ['AM', 'PM', 'Night', 'FullDay'];
 type Scope = 'all' | 'branch';
 
-export function CashShiftConfig({ branchId, current, currentCuts }: { branchId: string; current: string[]; currentCuts: [string, string] }) {
+export function CashShiftConfig({ branchId, current, currentTimes }: { branchId: string; current: string[]; currentTimes: [string, string, string] }) {
   const [open, setOpen] = useState(false);
   const [sel, setSel] = useState<string[]>(current);
   const [scope, setScope] = useState<Scope>('all');
-  const [amPm, setAmPm] = useState(currentCuts[0]);
-  const [pmNight, setPmNight] = useState(currentCuts[1]);
+  const [dayStart, setDayStart] = useState(currentTimes[0]);
+  const [amPm, setAmPm] = useState(currentTimes[1]);
+  const [pmNight, setPmNight] = useState(currentTimes[2]);
   const [pending, startTransition] = useTransition();
 
   // Window cut points only matter for the AM/PM/Night split, not a single FullDay.
   const splitShifts = !sel.includes('FullDay');
   // HH:MM is zero-padded 24h, so a string compare orders the boundaries.
-  const validTimes = !splitShifts || (!!amPm && !!pmNight && amPm < pmNight);
+  const validTimes = !splitShifts || (!!dayStart && !!amPm && !!pmNight && dayStart < amPm && amPm < pmNight);
 
   function toggle(s: string) {
     setSel((prev) => {
@@ -49,7 +50,7 @@ export function CashShiftConfig({ branchId, current, currentCuts }: { branchId: 
       const r = await setCashShifts({ shifts: sel, branchId: target });
       if (!r.ok) { toast.error(r.error); return; }
       if (splitShifts) {
-        const rw = await setCashShiftWindows({ am_pm_cut: amPm, pm_night_cut: pmNight, branchId: target });
+        const rw = await setCashShiftWindows({ day_start: dayStart, am_pm_cut: amPm, pm_night_cut: pmNight, branchId: target });
         if (!rw.ok) { toast.error(rw.error); return; }
       }
       toast.success(scope === 'all' ? 'Default shifts updated for all branches' : 'Branch override saved');
@@ -62,7 +63,7 @@ export function CashShiftConfig({ branchId, current, currentCuts }: { branchId: 
 
   return (
     <>
-      <Button size="sm" variant="outline" onClick={() => { setSel(current); setScope('all'); setAmPm(currentCuts[0]); setPmNight(currentCuts[1]); setOpen(true); }}>
+      <Button size="sm" variant="outline" onClick={() => { setSel(current); setScope('all'); setDayStart(currentTimes[0]); setAmPm(currentTimes[1]); setPmNight(currentTimes[2]); setOpen(true); }}>
         <Settings2 className="size-4" /> Shifts
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
@@ -98,12 +99,11 @@ export function CashShiftConfig({ branchId, current, currentCuts }: { branchId: 
               <div className="flex flex-col gap-2 border-t border-border pt-3">
                 <Label className="text-xs font-semibold">Shift times</Label>
                 <div className="flex flex-col gap-1.5">
-                  {/* Each shift's start is the previous shift's end (continuous, no
-                      gaps). AM opens the day at 00:00; Night runs to 24:00. So only
-                      the two middle boundaries are editable. */}
+                  {/* Each shift's start mirrors the previous shift's end (continuous,
+                      no gaps). AM opens the day (editable); Night runs to midnight. */}
                   <div className="flex items-center gap-2 text-sm">
                     <span className="w-12 font-bold">AM</span>
-                    <Input type="time" value="00:00" disabled className="w-28 opacity-60" />
+                    <Input type="time" value={dayStart} onChange={(e) => setDayStart(e.target.value)} className="w-28" />
                     <span className="text-muted-foreground">→</span>
                     <Input type="time" value={amPm} onChange={(e) => setAmPm(e.target.value)} className="w-28" />
                   </div>
@@ -121,10 +121,10 @@ export function CashShiftConfig({ branchId, current, currentCuts }: { branchId: 
                   </div>
                 </div>
                 {!validTimes && (
-                  <p className="text-[11px] font-bold text-destructive">AM→PM must be earlier than PM→Night.</p>
+                  <p className="text-[11px] font-bold text-destructive">Times must run in order: open &lt; AM→PM &lt; PM→Night.</p>
                 )}
                 <p className="text-[11px] font-medium text-muted-foreground">
-                  Shifts are continuous — each one ends where the next begins, covering the whole day.
+                  Shifts are continuous — each ends where the next begins. AM opens the day; Night runs to midnight (24:00).
                 </p>
               </div>
             )}

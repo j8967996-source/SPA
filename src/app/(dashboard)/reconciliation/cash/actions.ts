@@ -8,7 +8,7 @@ import { currentSession, isManager, isAdmin } from '@/lib/auth';
 import { canAccessBranch } from '@/lib/branch-access';
 import {
   SHIFT_LABELS, SHIFT_ORDER, CASH_SHIFTS_SETTING_KEY as SETTING_KEY, CASH_WINDOWS_SETTING_KEY,
-  DEFAULT_AM_PM_CUT, DEFAULT_PM_NIGHT_CUT, buildWindows, hhmmToMin, minToHHMM, formatWindow,
+  DEFAULT_DAY_START, DEFAULT_AM_PM_CUT, DEFAULT_PM_NIGHT_CUT, buildWindows, hhmmToMin, minToHHMM, formatWindow,
   type ShiftLabel, type ShiftStatus,
 } from './shifts';
 
@@ -44,8 +44,9 @@ export async function getBranchShifts(branchId: string): Promise<ShiftLabel[]> {
   return shifts.sort((a, b) => SHIFT_ORDER[a] - SHIFT_ORDER[b]);
 }
 
-/** A branch's shift cut points → per-label [start, end) windows.
- *  Resolution: branch override → global default → built-in 14:00 / 18:00. */
+/** A branch's day open + cut points → per-label [start, end) windows.
+ *  Resolution: branch override → global default → built-in 00:00 / 14:00 / 18:00.
+ *  Stored as "open,amPm,pmNight"; a legacy 2-value "amPm,pmNight" opens at 00:00. */
 export async function getBranchShiftWindows(branchId: string): Promise<Record<ShiftLabel, [number, number]>> {
   const supabase = await createAuditedClient();
   const { data: rows } = await supabase
@@ -53,21 +54,25 @@ export async function getBranchShiftWindows(branchId: string): Promise<Record<Sh
     .or(`branch_id.eq.${branchId},branch_id.is.null`);
   const value = (rows ?? []).find((r) => r.branch_id === branchId)?.value
     ?? (rows ?? []).find((r) => r.branch_id === null)?.value;
-  const [c1, c2] = (value ?? '').split(',').map((s) => hhmmToMin(s));
-  if (c1 != null && c2 != null && c1 > 0 && c1 < c2 && c2 < 1440) return buildWindows(c1, c2);
-  return buildWindows(DEFAULT_AM_PM_CUT, DEFAULT_PM_NIGHT_CUT);
+  const parts = (value ?? '').split(',').map((s) => hhmmToMin(s));
+  const [start, c1, c2] = parts.length >= 3 ? parts : [0, parts[0], parts[1]];
+  if (start != null && c1 != null && c2 != null && start >= 0 && start < c1 && c1 < c2 && c2 < 1440) {
+    return buildWindows(start, c1, c2);
+  }
+  return buildWindows(DEFAULT_DAY_START, DEFAULT_AM_PM_CUT, DEFAULT_PM_NIGHT_CUT);
 }
 
-/** Save the AM→PM / PM→Night cut points. branchId=null sets the global default;
- *  a branchId writes an override for just that branch. */
-export async function setCashShiftWindows(input: { am_pm_cut: string; pm_night_cut: string; branchId: string | null }): Promise<ActionResult> {
+/** Save the day open + AM→PM / PM→Night cut points. branchId=null sets the
+ *  global default; a branchId writes an override for just that branch. */
+export async function setCashShiftWindows(input: { day_start: string; am_pm_cut: string; pm_night_cut: string; branchId: string | null }): Promise<ActionResult> {
   if (!isAdmin(await currentSession())) return { ok: false, error: 'Admin permission required' };
+  const start = hhmmToMin(input.day_start);
   const c1 = hhmmToMin(input.am_pm_cut);
   const c2 = hhmmToMin(input.pm_night_cut);
-  if (c1 == null || c2 == null) return { ok: false, error: 'Enter valid times' };
-  if (!(c1 > 0 && c1 < c2 && c2 < 1440)) return { ok: false, error: 'AM→PM must be before PM→Night, both within the day' };
+  if (start == null || c1 == null || c2 == null) return { ok: false, error: 'Enter valid times' };
+  if (!(start >= 0 && start < c1 && c1 < c2 && c2 < 1440)) return { ok: false, error: 'Open < AM→PM < PM→Night, all before midnight' };
   const supabase = await createAuditedClient();
-  const value = `${minToHHMM(c1)},${minToHHMM(c2)}`;
+  const value = `${minToHHMM(start)},${minToHHMM(c1)},${minToHHMM(c2)}`;
 
   if (input.branchId) {
     const { error } = await supabase.from('settings').upsert(

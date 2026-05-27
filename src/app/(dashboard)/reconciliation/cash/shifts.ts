@@ -8,9 +8,12 @@ export const CASH_SHIFTS_SETTING_KEY = 'cash_recon_shifts';
 // AM→PM and PM→Night cut points (configurable in settings; stored "HH:MM,HH:MM").
 export const CASH_WINDOWS_SETTING_KEY = 'cash_shift_windows';
 
-// Default cut points (minutes of day, PHT): AM→PM at 14:00, PM→Night at 18:00.
+// Default day open (AM start) and cut points (minutes of day, PHT): open 00:00,
+// AM→PM at 14:00, PM→Night at 18:00. Night always runs to day end (24:00 = 1440).
+export const DEFAULT_DAY_START = 0;
 export const DEFAULT_AM_PM_CUT = 840;
 export const DEFAULT_PM_NIGHT_CUT = 1080;
+export const DAY_END = 1440;
 
 // Canonical display/sort order, independent of the configurable cut points.
 export const SHIFT_ORDER: Record<ShiftLabel, number> = { AM: 0, PM: 1, Night: 2, FullDay: 0 };
@@ -29,18 +32,19 @@ export function minToHHMM(min: number): string {
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
 
-// Build the per-label [start, end) windows from the two cut points.
-export function buildWindows(amPmCut: number, pmNightCut: number): Record<ShiftLabel, [number, number]> {
+// Build the per-label [start, end) windows from the day open + the two cut
+// points. Night always runs to day end (24:00); FullDay is the whole day.
+export function buildWindows(dayStart: number, amPmCut: number, pmNightCut: number): Record<ShiftLabel, [number, number]> {
   return {
-    AM: [0, amPmCut],
+    AM: [dayStart, amPmCut],
     PM: [amPmCut, pmNightCut],
-    Night: [pmNightCut, 1440],
-    FullDay: [0, 1440],
+    Night: [pmNightCut, DAY_END],
+    FullDay: [0, DAY_END],
   };
 }
 
 // Default windows — fallback when no (valid) setting exists.
-export const WINDOW: Record<ShiftLabel, [number, number]> = buildWindows(DEFAULT_AM_PM_CUT, DEFAULT_PM_NIGHT_CUT);
+export const WINDOW: Record<ShiftLabel, [number, number]> = buildWindows(DEFAULT_DAY_START, DEFAULT_AM_PM_CUT, DEFAULT_PM_NIGHT_CUT);
 
 // "00:00–14:00" style label for a window; FullDay → "All day".
 export function formatWindow(label: ShiftLabel, win: [number, number]): string {
