@@ -131,7 +131,6 @@ interface Props {
   capabilityByEmployee: Record<string, string[]>;
   defaultGenderPref?: string | null; // from the source reservation, if any
   paymentPolicy: { arBilled: boolean; defaultMethodId: string | null; arBillingLabel: string | null };
-  canManage: boolean;
 }
 
 const NONE = '__none__';
@@ -193,7 +192,6 @@ export function OrderWorkspace({
   paymentPolicy,
   capabilityByEmployee,
   defaultGenderPref = null,
-  canManage,
 }: Props) {
   const [pending, startTransition] = useTransition();
 
@@ -1047,7 +1045,12 @@ export function OrderWorkspace({
 
             {payments.length > 0 && (
               <div className="flex flex-col gap-1">
-                <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Recorded payments</p>
+                <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                  Recorded payments
+                  {order.status === 'paid' && (
+                    <span className="ml-2 font-medium normal-case text-muted-foreground/80">— fully paid; use Collect / Refund above to adjust</span>
+                  )}
+                </p>
                 {payments.map((p) => (
                   <div key={p.id} className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-1.5 text-sm">
                     <div className="min-w-0">
@@ -1059,7 +1062,7 @@ export function OrderWorkspace({
                     <div className="flex items-center gap-2 shrink-0">
                       {p.amount_cents < 0 && <span className="rounded bg-destructive/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-destructive">Refund</span>}
                       <span className="font-bold tabular">{peso(p.amount_cents)}</span>
-                      {(order.status !== 'paid' || canManage) && (
+                      {order.status !== 'paid' && (
                         <Button size="icon-sm" variant="ghost" onClick={() => doVoidPayment(p.id)} disabled={pending} title="Remove payment">
                           <Trash2 className="size-3.5 text-destructive" />
                         </Button>

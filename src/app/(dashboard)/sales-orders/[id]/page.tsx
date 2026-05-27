@@ -394,7 +394,6 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         capabilityByEmployee={capabilityByEmployee}
         defaultGenderPref={defaultGenderPref}
         paymentPolicy={paymentPolicy}
-        canManage={canManage}
       />
     </div>
   );
