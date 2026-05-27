@@ -212,7 +212,7 @@ async function fetchStationBoard(branchId: string, day: string): Promise<{ beds:
     supabase
       .from('order_items')
       .select('id, status, resource_id, actual_start, actual_end, scheduled_start, service_start, slot_start, duration_minutes, service:service_items ( name, prep_before_minutes, cleanup_after_minutes ), therapist:employees!order_items_therapist_id_fkey ( name ), guest:order_customers ( customer_name ), order:orders!order_items_order_id_fkey ( id, branch_id, service_date, order_customers ( id ) )')
-      .in('status', ['scheduled', 'in_service', 'completed'])
+      .in('status', ['scheduled', 'in_service', 'service_completed', 'feedback_done', 'interrupted'])
       .not('resource_id', 'is', null),
     supabase
       .from('reservations')
@@ -243,7 +243,9 @@ async function fetchStationBoard(branchId: string, day: string): Promise<{ beds:
       if (!it.actual_start) continue;
       startMin = tsToMin(it.actual_start);
       endMin = it.actual_end ? tsToMin(it.actual_end) : startMin + dur;
-      variant = it.status === 'completed' ? 'completed' : 'in_service';
+      // Finished / interrupted lines render as the greyed "completed" block (they
+      // still hold the bed through the cleanup buffer); only a live one is in_service.
+      variant = it.status === 'in_service' ? 'in_service' : 'completed';
     }
     const pax = (ord as unknown as { order_customers?: { id: string }[] }).order_customers?.length ?? 1;
     blocks.push({
