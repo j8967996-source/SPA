@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { type ComponentProps, useEffect, useRef, useState, useTransition } from 'react';
 import { Plus, Trash2, UserPlus, CreditCard, Wand2, Users, Receipt, Star, History, Play, Pencil, Check, X } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -19,6 +19,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 import {
   Select,
@@ -160,6 +161,16 @@ function timeWindow(actualStart: string | null, actualEnd: string | null, durati
     return `${hm(actualStart)}–~${hm(end)}`;
   }
   return hm(actualStart);
+}
+
+// A service-line action button with a colour + a hover tooltip explaining it.
+function ActionBtn({ tip, children, ...props }: { tip: string } & ComponentProps<typeof Button>) {
+  return (
+    <Tooltip>
+      <TooltipTrigger render={<Button size="sm" {...props}>{children}</Button>} />
+      <TooltipContent>{tip}</TooltipContent>
+    </Tooltip>
+  );
 }
 
 export function OrderWorkspace({
@@ -534,6 +545,7 @@ export function OrderWorkspace({
       }));
 
   return (
+    <TooltipProvider>
     <div className="flex flex-col gap-4">
       <Tabs value={tab} onValueChange={(v) => v && setTab(v)} className="w-full flex-col gap-4">
         <TabsList className="w-fit">
@@ -687,41 +699,87 @@ export function OrderWorkspace({
                     <div className="flex items-center gap-2">
                       {canRunService && it.status === 'scheduled' && (
                         <>
-                          <Button size="sm" variant="outline" onClick={() => doStartItem(it)} disabled={pending}>Start</Button>
-                          <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => doSkipItem(it.id)} disabled={pending}>Skip</Button>
+                          <ActionBtn
+                            tip="Begin this service now — stamps the start time."
+                            className="bg-green-600 text-white hover:bg-green-700 dark:bg-green-600 dark:hover:bg-green-700"
+                            onClick={() => doStartItem(it)}
+                            disabled={pending}
+                          >
+                            Start
+                          </ActionBtn>
+                          <ActionBtn
+                            tip="Skip this service — drops it from the bill but keeps it in the record."
+                            variant="ghost"
+                            className="text-muted-foreground hover:text-foreground"
+                            onClick={() => doSkipItem(it.id)}
+                            disabled={pending}
+                          >
+                            Skip
+                          </ActionBtn>
                         </>
                       )}
                       {canRunService && it.status === 'in_service' && (
                         <>
-                          <Button size="sm" onClick={() => doFinishItem(it)} disabled={pending}>Finish</Button>
-                          <Button size="sm" variant="ghost" onClick={() => doSwitchItem(it)} disabled={pending}>Switch</Button>
-                          <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setInterruptItem(it)} disabled={pending}>Interrupt</Button>
+                          <ActionBtn
+                            tip="Mark this service finished — stamps the end time."
+                            className="bg-blue-600 text-white hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700"
+                            onClick={() => doFinishItem(it)}
+                            disabled={pending}
+                          >
+                            Finish
+                          </ActionBtn>
+                          <ActionBtn
+                            tip="Stop this service with no charge and pick a different one."
+                            variant="outline"
+                            className="border-amber-500/60 text-amber-700 hover:bg-amber-50 hover:text-amber-800 dark:text-amber-400 dark:hover:bg-amber-500/10"
+                            onClick={() => doSwitchItem(it)}
+                            disabled={pending}
+                          >
+                            Switch
+                          </ActionBtn>
+                          <ActionBtn
+                            tip="Stop mid-service and decide the charge (none / partial / full / reschedule)."
+                            variant="outline"
+                            className="border-destructive/50 text-destructive hover:bg-destructive/10"
+                            onClick={() => setInterruptItem(it)}
+                            disabled={pending}
+                          >
+                            Interrupt
+                          </ActionBtn>
                         </>
                       )}
                       {isCleaning && (
-                        <Button
-                          size="sm"
+                        <ActionBtn
+                          tip="Free the bed now, before the cleanup buffer ends."
                           variant="outline"
-                          className="border-amber-500/60 text-amber-700 hover:text-amber-800 dark:text-amber-400"
+                          className="border-teal-500/60 text-teal-700 hover:bg-teal-50 hover:text-teal-800 dark:text-teal-400 dark:hover:bg-teal-500/10"
                           onClick={() => doReleaseBed(it.id)}
                           disabled={pending}
                         >
                           Ready now
-                        </Button>
+                        </ActionBtn>
                       )}
                       {['service_completed', 'feedback_done'].includes(it.status) && it.feedback_score == null && (
-                        <Button
-                          size="sm"
+                        <ActionBtn
+                          tip="Record the guest's feedback — a score is required."
                           variant="outline"
-                          className="border-amber-500/60 text-amber-700 hover:text-amber-800 dark:text-amber-400"
+                          className="border-violet-500/60 text-violet-700 hover:bg-violet-50 hover:text-violet-800 dark:text-violet-400 dark:hover:bg-violet-500/10"
                           onClick={() => setFeedbackItem(it)}
                           disabled={pending}
                         >
                           <Star className="size-3.5" /> Feedback
-                        </Button>
+                        </ActionBtn>
                       )}
                       {['interrupted', 'cancelled'].includes(it.status) && !['paid', 'closed', 'void'].includes(order.status) && (
-                        <Button size="sm" variant="outline" onClick={() => doRedoItem(it.id)} disabled={pending}>Redo</Button>
+                        <ActionBtn
+                          tip="Re-add this service as a fresh line to do again."
+                          variant="outline"
+                          className="border-indigo-500/60 text-indigo-700 hover:bg-indigo-50 hover:text-indigo-800 dark:text-indigo-400 dark:hover:bg-indigo-500/10"
+                          onClick={() => doRedoItem(it.id)}
+                          disabled={pending}
+                        >
+                          Redo
+                        </ActionBtn>
                       )}
                     </div>
                     <div className="flex items-center gap-2 justify-self-end">
@@ -1125,5 +1183,6 @@ export function OrderWorkspace({
         </AlertDialogContent>
       </AlertDialog>
     </div>
+    </TooltipProvider>
   );
 }
