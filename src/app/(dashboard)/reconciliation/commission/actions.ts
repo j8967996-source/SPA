@@ -31,8 +31,10 @@ export interface CommGroup {
   items: CommItemLine[];
 }
 
-// Eligible order_items at a branch: parent order paid/closed, within range, has a
-// therapist, the service is commission-applicable, and not yet settled.
+// Eligible order_items at a branch: parent order paid/closed, within range, the
+// service was actually completed (service_completed / feedback_done — so
+// switched / interrupted / cancelled lines earn nothing, matching tip rules),
+// has a therapist, the service is commission-applicable, and not yet settled.
 async function loadEligible(from: string, to: string, branchId: string) {
   const supabase = await createAuditedClient();
   const { data, error } = await supabase
@@ -51,7 +53,7 @@ async function loadEligible(from: string, to: string, branchId: string) {
     .map((it) => ({ it, ord: one(it.order), svc: one(it.service), th: one(it.therapist) }))
     .filter((r) =>
       r.ord && r.ord.branch_id === branchId && ['paid', 'closed'].includes(r.ord.status) &&
-      r.it.status !== 'cancelled' &&
+      ['service_completed', 'feedback_done'].includes(r.it.status) &&
       r.ord.service_date >= from && r.ord.service_date <= to &&
       r.svc?.commission_applicable && r.it.therapist_id,
     );
