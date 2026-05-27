@@ -78,6 +78,9 @@ interface Props {
   // Opened from the schedule board on a specific bed: lock + show that bed
   // (hide the picker and the Location selector) so the booking is clearly tied.
   lockedBed?: { name: string };
+  // Lock the branch to a fixed one (the desk's home branch) — non-admins can't
+  // book for another branch. Admin omits this to keep the picker.
+  lockBranchId?: string;
 }
 
 const LOCATION_TYPES = [
@@ -106,6 +109,7 @@ export function NewReservationDialog({
   walkIn = false,
   prefillConfirmed = false,
   lockedBed,
+  lockBranchId,
 }: Props) {
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
@@ -115,7 +119,7 @@ export function NewReservationDialog({
 
   const defaultSourceId = sources.find((s) => s.code === 'WALK-IN')?.id ?? sources[0]?.id ?? '';
 
-  const [branchId, setBranchId] = useState(reservation?.branch_id ?? branches[0]?.id ?? '');
+  const [branchId, setBranchId] = useState(reservation?.branch_id ?? lockBranchId ?? branches[0]?.id ?? '');
   const [sourceId, setSourceId] = useState(reservation?.source_id ?? defaultSourceId);
   const [categoryIds, setCategoryIds] = useState<string[]>(reservation?.service_category_ids ?? []);
   const [guestName, setGuestName] = useState(reservation?.guest_name ?? '');
@@ -388,14 +392,22 @@ export function NewReservationDialog({
                 <span className="ml-auto text-[11px] font-bold uppercase tracking-wide text-primary">Bed locked</span>
               </div>
             )}
-            {/* Branch is fixed to the clicked bed's branch when locked from the board. */}
+            {/* Branch is fixed to the clicked bed's branch (board) or the desk's
+                home branch (lockBranchId); only an unlocked picker lets you change it. */}
             {!lockedBed && (
               <div className={`flex flex-col gap-2${walkIn ? ' col-span-2' : ''}`}>
-                <Label className="font-semibold">Branch *</Label>
-                <Select items={branchOptions} value={branchId} onValueChange={(v) => v && pickBranch(v)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{branchOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
-                </Select>
+                <Label className="font-semibold">Branch{lockBranchId ? '' : ' *'}</Label>
+                {lockBranchId ? (
+                  <div className="flex items-center justify-between rounded-lg border border-input bg-muted/40 px-3 py-2 text-sm font-semibold">
+                    <span>{branchOptions.find((o) => o.value === branchId)?.label ?? '—'}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Your branch</span>
+                  </div>
+                ) : (
+                  <Select items={branchOptions} value={branchId} onValueChange={(v) => v && pickBranch(v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{branchOptions.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
+                  </Select>
+                )}
               </div>
             )}
             {!walkIn && (

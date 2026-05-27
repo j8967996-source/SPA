@@ -6,6 +6,7 @@ import { NewReservationDialog } from '@/components/reservations/new-reservation-
 import { ReservationsExplorer, type ReservationRow } from '@/components/reservations/reservations-explorer';
 import { getReservationGraceMinutes, isReservationOverdue } from '@/lib/reservations';
 import { getAllowedBranchIds } from '@/lib/branch-access';
+import { currentSession, isAdmin } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -108,6 +109,11 @@ async function fetchData() {
 export default async function ReservationsPage() {
   const { rows, branches, sources, serviceCategories, serviceItems } = await fetchData();
   const today = phtDate(new Date().toISOString()); // PHT yyyy-mm-dd, for the default "today onward" filter
+  // Non-admins book only for their home branch; admins keep the branch picker.
+  const session = await currentSession();
+  const lockBranchId = !isAdmin(session) && session?.homeBranchId && branches.some((b) => b.id === session.homeBranchId)
+    ? session.homeBranchId
+    : undefined;
 
   return (
     <div className="flex flex-col gap-6">
@@ -124,6 +130,7 @@ export default async function ReservationsPage() {
             sources={sources}
             serviceCategories={serviceCategories}
             serviceItems={serviceItems}
+            lockBranchId={lockBranchId}
             walkIn
             trigger={
               <Button
@@ -140,6 +147,7 @@ export default async function ReservationsPage() {
             sources={sources}
             serviceCategories={serviceCategories}
             serviceItems={serviceItems}
+            lockBranchId={lockBranchId}
             trigger={
               <Button disabled={branches.length === 0}>
                 <Plus className="size-4" />
