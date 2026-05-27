@@ -295,20 +295,21 @@ async function recomputeTotals(orderId: string) {
     .eq('id', orderId);
 }
 
-// Complete an in-service order once no line is still scheduled or running.
+// Wrap up an order once no line is still scheduled or running — works from
+// open (e.g. every service was skipped) as well as in_service (all finished).
+// Needs at least one line, so an empty order being set up isn't auto-completed.
 async function maybeAutoComplete(orderId: string) {
   const supabase = await createAuditedClient();
-  const { data: remaining } = await supabase
+  const { data: items } = await supabase
     .from('order_items')
-    .select('id')
-    .eq('order_id', orderId)
-    .in('status', ['scheduled', 'in_service'])
-    .limit(1);
-  if (remaining && remaining.length > 0) return;
+    .select('status')
+    .eq('order_id', orderId);
+  if (!items || items.length === 0) return; // nothing to complete yet
+  if (items.some((i) => ['scheduled', 'in_service'].includes(i.status))) return; // work still pending
   const { data: ord } = await supabase.from('orders').select('status').eq('id', orderId).single();
-  if (ord?.status === 'in_service') {
+  if (ord && ['open', 'in_service'].includes(ord.status)) {
     await supabase.from('orders').update({ status: 'completed' }).eq('id', orderId);
-    await logStatus(orderId, 'in_service', 'completed', 'All services finished', null);
+    await logStatus(orderId, ord.status, 'completed', 'All services finished or skipped', null);
   }
 }
 
