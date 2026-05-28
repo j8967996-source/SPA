@@ -117,7 +117,6 @@ export function ArBalanceExplorer({ ar }: { ar: ArBalance }) {
               <col />
               <col className="w-32" />
               <col className="w-32" />
-              <col className="w-32" />
               <col className="w-36" />
             </colgroup>
             <TableHeader>
@@ -125,8 +124,7 @@ export function ArBalanceExplorer({ ar }: { ar: ArBalance }) {
                 <TableHead />
                 <TableHead className="font-bold">Billing</TableHead>
                 <TableHead className="font-bold text-right">Unbilled</TableHead>
-                <TableHead className="font-bold text-right">Current</TableHead>
-                <TableHead className="font-bold text-right">Overdue</TableHead>
+                <TableHead className="font-bold text-right">Outstanding</TableHead>
                 <TableHead className="font-bold text-right pr-4">Total Owed</TableHead>
               </TableRow>
             </TableHeader>
@@ -144,15 +142,12 @@ export function ArBalanceExplorer({ ar }: { ar: ArBalance }) {
                         <span className="ml-2 text-sm text-muted-foreground">{d.name}</span>
                       </TableCell>
                       <TableCell className="tabular text-right text-muted-foreground">{d.unbilled_cents > 0 ? peso(d.unbilled_cents) : '—'}</TableCell>
-                      <TableCell className="tabular text-right">{d.current_cents > 0 ? peso(d.current_cents) : '—'}</TableCell>
-                      <TableCell className={cn('tabular text-right font-semibold', d.overdue_cents > 0 ? 'text-destructive' : 'text-muted-foreground')}>
-                        {d.overdue_cents > 0 ? peso(d.overdue_cents) : '—'}
-                      </TableCell>
+                      <TableCell className="tabular text-right">{d.outstanding_cents > 0 ? peso(d.outstanding_cents) : '—'}</TableCell>
                       <TableCell className="tabular text-right font-extrabold pr-4">{peso(d.total_cents)}</TableCell>
                     </TableRow>
                     {isOpen && (
                       <TableRow className="bg-muted/20 hover:bg-muted/20">
-                        <TableCell colSpan={6} className="p-0">
+                        <TableCell colSpan={5} className="p-0">
                           <div className="px-6 py-3 flex flex-col gap-2">
                             {d.unbilled_count > 0 && (
                               <div className="flex items-center gap-2 rounded-md border border-dashed border-amber-500/40 bg-amber-500/5 px-3 py-2 text-xs font-semibold text-amber-800 dark:text-amber-300">
