@@ -76,7 +76,7 @@ export function ServiceBadge({ status }: { status: string }) {
             </Badge>
           }
         />
-        <TooltipContent>{STAGE_DESC[status] ?? ''}</TooltipContent>
+        <TooltipContent side="bottom">{STAGE_DESC[status] ?? ''}</TooltipContent>
       </Tooltip>
     </TooltipProvider>
   );
@@ -125,7 +125,7 @@ export function PaymentBadge({
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger render={<span className={`${cls} cursor-default`}>{label}</span>} />
-        <TooltipContent>{PAY_DESC[state]}</TooltipContent>
+        <TooltipContent side="bottom">{PAY_DESC[state]}</TooltipContent>
       </Tooltip>
     </TooltipProvider>
   );
