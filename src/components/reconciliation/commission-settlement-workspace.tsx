@@ -74,7 +74,7 @@ export interface CommHistoryRow {
     sessions: number;
     gross_cents: number;
     commission_cents: number;
-    lines: { service_date: string; order_no: string; service: string; gross_cents: number; rate: number; commission_cents: number; warmup: boolean }[];
+    lines: { service_date: string; order_no: string; service: string; duration_minutes: number | null; gross_cents: number; rate: number; commission_cents: number; warmup: boolean }[];
   }[];
 }
 
@@ -290,6 +290,7 @@ export function CommissionSettlementWorkspace({
                             <TableHead className="w-32 font-bold">Date</TableHead>
                             <TableHead className="w-44 font-bold">Order No</TableHead>
                             <TableHead className="font-bold pl-6">Service</TableHead>
+                            <TableHead className="w-16 font-bold text-right">Mins</TableHead>
                             <TableHead className="w-28 font-bold text-right">Gross</TableHead>
                             <TableHead className="w-20 font-bold text-right">Rate</TableHead>
                             <TableHead className="w-32 font-bold text-right pr-4">Commission</TableHead>
@@ -304,6 +305,7 @@ export function CommissionSettlementWorkspace({
                                 {it.service}
                                 {it.warmup && <span className="ml-2 inline-flex items-center rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-bold text-amber-700 dark:text-amber-300">warm-up</span>}
                               </TableCell>
+                              <TableCell className="tabular text-right text-muted-foreground">{it.duration_minutes ?? '—'}</TableCell>
                               <TableCell className="tabular text-right text-muted-foreground">{peso(it.gross_cents)}</TableCell>
                               <TableCell className="tabular text-right text-muted-foreground">{(it.rate * 100).toFixed(0)}%</TableCell>
                               <TableCell className="font-bold tabular text-right pr-4">{peso(it.commission_cents)}</TableCell>
@@ -438,12 +440,14 @@ export function CommissionSettlementWorkspace({
                             <TableRow>
                               <TableCell colSpan={10} className="bg-muted/20 p-0">
                                 {/* Mirrors the parent's right-side widths (Commission w-32,
-                                    then w-24 + w-20) so amounts align across both tables. */}
+                                    then w-24 + w-20) so amounts align across both tables.
+                                    Mins (w-14) sits between Service and Gross. */}
                                 <Table className="table-fixed">
                                   <colgroup>
                                     <col className="w-32" />
                                     <col className="w-48" />
                                     <col />
+                                    <col className="w-14" />
                                     <col className="w-28" />
                                     <col className="w-16" />
                                     <col className="w-32" />
@@ -456,7 +460,7 @@ export function CommissionSettlementWorkspace({
                                       return (
                                       <Fragment key={g.therapist}>
                                         <TableRow className="border-t-2 border-primary/20 bg-primary/[0.07] hover:bg-primary/[0.07]">
-                                          <TableCell colSpan={5} className="py-2.5 pl-6">
+                                          <TableCell colSpan={6} className="py-2.5 pl-6">
                                             <span className="mr-2 inline-flex size-6 items-center justify-center rounded-full bg-primary/20 text-[11px] font-bold text-primary align-middle">{initials}</span>
                                             <span className="align-middle text-sm font-extrabold text-primary">{g.therapist}</span>
                                             <span className="ml-2 align-middle text-xs font-semibold text-muted-foreground">{g.sessions} session{g.sessions > 1 ? 's' : ''} · {peso(g.gross_cents)} gross</span>
@@ -469,6 +473,7 @@ export function CommissionSettlementWorkspace({
                                           <TableCell className="w-32 pl-12 py-1 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Date</TableCell>
                                           <TableCell className="w-44 py-1 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Order No</TableCell>
                                           <TableCell className="pl-4 py-1 text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Service</TableCell>
+                                          <TableCell className="w-14 py-1 text-[11px] font-bold uppercase tracking-wide text-muted-foreground text-right">Mins</TableCell>
                                           <TableCell className="w-28 py-1 text-[11px] font-bold uppercase tracking-wide text-muted-foreground text-right">Gross</TableCell>
                                           <TableCell className="w-16 py-1 text-[11px] font-bold uppercase tracking-wide text-muted-foreground text-right">Rate</TableCell>
                                           <TableCell className="w-32 py-1 text-[11px] font-bold uppercase tracking-wide text-muted-foreground text-right">Commission</TableCell>
@@ -483,6 +488,7 @@ export function CommissionSettlementWorkspace({
                                               {l.service}
                                               {l.warmup && <span className="ml-2 inline-flex items-center rounded bg-amber-500/15 px-1.5 py-0.5 text-[11px] font-bold text-amber-700 dark:text-amber-300">warm-up</span>}
                                             </TableCell>
+                                            <TableCell className="tabular text-right text-muted-foreground">{l.duration_minutes ?? '—'}</TableCell>
                                             <TableCell className="tabular text-right text-muted-foreground">{peso(l.gross_cents)}</TableCell>
                                             <TableCell className="tabular text-right text-muted-foreground">{(l.rate * 100).toFixed(0)}%</TableCell>
                                             <TableCell className="font-bold tabular text-right">{peso(l.commission_cents)}</TableCell>

@@ -16,6 +16,7 @@ export interface CommItemLine {
   service_date: string;
   order_no: string;
   service: string;
+  duration_minutes: number | null;
   occurrence: number;
   warmup: boolean;
   gross_cents: number;
@@ -135,6 +136,7 @@ async function computeGroups(branchId: string, from: string, to: string): Promis
         service_date: r.ord!.service_date,
         order_no: r.ord!.order_no,
         service: r.svc?.name ?? 'Service',
+        duration_minutes: r.it.duration_minutes ?? null,
         occurrence,
         warmup: warm != null,
         gross_cents: r.it.list_price_cents,

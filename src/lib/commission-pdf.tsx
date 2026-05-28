@@ -16,7 +16,7 @@ function longDate(ymd: string): string {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${ymd}T00:00:00Z`));
 }
 
-interface PdfCommLine { service_date: string; order_no: string; service: string; gross: number; rate: number; commission: number; warmup: boolean }
+interface PdfCommLine { service_date: string; order_no: string; service: string; minutes: number | null; gross: number; rate: number; commission: number; warmup: boolean }
 interface PdfCommGroup { therapist_name: string; sessions: number; gross: number; commission: number; lines: PdfCommLine[] }
 interface PdfData {
   period_no: string;
@@ -39,7 +39,7 @@ async function loadCommissionForPdf(periodId: string): Promise<PdfData | null> {
       total_sessions, total_commission_cents,
       branch:branches!commission_periods_branch_id_fkey ( name ),
       items:order_items!fk_order_items_commission_period (
-        list_price_cents, commission_rate, commission_amount_cents, status, actual_start,
+        list_price_cents, duration_minutes, commission_rate, commission_amount_cents, status, actual_start,
         therapist:employees!order_items_therapist_id_fkey ( id, name ),
         order:orders!order_items_order_id_fkey ( order_no, service_date ),
         service:service_items!order_items_service_item_id_fkey ( name )
@@ -51,7 +51,7 @@ async function loadCommissionForPdf(periodId: string): Promise<PdfData | null> {
 
   // Bucket lines by therapist; compute warmup (earliest session of the day).
   const byTh = new Map<string, PdfCommGroup>();
-  type RawLine = { service_date: string; order_no: string; service: string; gross: number; rate: number; commission: number; actual_start: string };
+  type RawLine = { service_date: string; order_no: string; service: string; minutes: number | null; gross: number; rate: number; commission: number; actual_start: string };
   const rawByTh = new Map<string, RawLine[]>();
   for (const it of (p.items ?? []).filter((i) => i.status !== 'cancelled')) {
     const th = one(it.therapist);
@@ -67,6 +67,7 @@ async function loadCommissionForPdf(periodId: string): Promise<PdfData | null> {
       service_date: one(it.order)?.service_date ?? '',
       order_no: one(it.order)?.order_no ?? '—',
       service: one(it.service)?.name ?? 'Service',
+      minutes: it.duration_minutes ?? null,
       gross: it.list_price_cents ?? 0,
       rate: Number(it.commission_rate ?? 0),
       commission: it.commission_amount_cents ?? 0,
@@ -84,6 +85,7 @@ async function loadCommissionForPdf(periodId: string): Promise<PdfData | null> {
     g.lines = raws
       .map((l) => ({
         service_date: l.service_date, order_no: l.order_no, service: l.service,
+        minutes: l.minutes,
         gross: l.gross, rate: l.rate, commission: l.commission,
         warmup: !!l.actual_start && l.actual_start === earliest.get(l.service_date),
       }))
@@ -129,10 +131,11 @@ const styles = StyleSheet.create({
   td: { fontSize: 9 },
   // Inter-column breathing room — without `paddingRight`, neighbouring cells
   // run into each other (Order No vs Service especially since order numbers
-  // are long: "SO-OSP2-20260527-004").
+  // are long: "SO-OSP2-20260527-004"). Mins sits between Service and Gross.
   cDate: { width: 64, paddingRight: 8 },
   cOrder: { width: 130, paddingRight: 8 },
   cSvc: { flex: 1, paddingRight: 8 },
+  cMins: { width: 40, paddingRight: 8, textAlign: 'right' },
   cGross: { width: 70, paddingRight: 8, textAlign: 'right' },
   cRate: { width: 36, paddingRight: 8, textAlign: 'right' },
   cComm: { width: 80, textAlign: 'right' },
@@ -192,6 +195,7 @@ function CommDoc({ d }: { d: PdfData }) {
               <Text style={[styles.rowHeadCell, styles.cDate]}>DATE</Text>
               <Text style={[styles.rowHeadCell, styles.cOrder]}>ORDER NO</Text>
               <Text style={[styles.rowHeadCell, styles.cSvc]}>SERVICE</Text>
+              <Text style={[styles.rowHeadCell, styles.cMins]}>MINS</Text>
               <Text style={[styles.rowHeadCell, styles.cGross]}>GROSS</Text>
               <Text style={[styles.rowHeadCell, styles.cRate]}>RATE</Text>
               <Text style={[styles.rowHeadCell, styles.cComm]}>COMMISSION</Text>
@@ -204,6 +208,7 @@ function CommDoc({ d }: { d: PdfData }) {
                   <Text style={styles.td}>{l.service}</Text>
                   {l.warmup && <Text style={styles.warm}>warm-up</Text>}
                 </View>
+                <Text style={[styles.td, styles.cMins]}>{l.minutes ?? '—'}</Text>
                 <Text style={[styles.td, styles.cGross]}>{php(l.gross)}</Text>
                 <Text style={[styles.td, styles.cRate]}>{(l.rate * 100).toFixed(0)}%</Text>
                 <Text style={[styles.td, styles.cComm]}>{php(l.commission)}</Text>
