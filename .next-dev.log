@@ -1,0 +1,29 @@
+
+> hhg-spa-pos@0.1.0 dev
+> next dev
+
+▲ Next.js 16.2.6 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://10.0.5.11:3000
+- Environments: .env.local
+✓ Ready in 311ms
+
+ GET /reconciliation/tips 200 in 3.0s (next.js: 626ms, proxy.ts: 116ms, application-code: 2.2s)
+ GET /reconciliation/soa 200 in 2.9s (next.js: 883ms, proxy.ts: 8ms, application-code: 1989ms)
+ GET /api/auth/logout 307 in 459ms (next.js: 209ms, application-code: 250ms)
+ GET /login 200 in 266ms (next.js: 141ms, proxy.ts: 19ms, application-code: 106ms)
+ POST /login 200 in 758ms (next.js: 13ms, proxy.ts: 17ms, application-code: 729ms)
+  └─ ƒ login({"password":"yun9925022A","username":"EP000513"}) in 647ms src/app/login/actions.ts
+ GET /dashboard 200 in 3.8s (next.js: 112ms, proxy.ts: 17ms, application-code: 3.7s)
+ GET /dashboard 200 in 3.8s (next.js: 18ms, proxy.ts: 55ms, application-code: 3.7s)
+ GET /reconciliation 200 in 3.0s (next.js: 105ms, proxy.ts: 9ms, application-code: 2.9s)
+ GET /reconciliation/tips 200 in 723ms (next.js: 6ms, proxy.ts: 9ms, application-code: 709ms)
+ POST /reconciliation/tips 200 in 22.8s (next.js: 7ms, proxy.ts: 8ms, application-code: 22.7s)
+  └─ ƒ retryTipPosting("daeece41-bdf0-4314-80ce-4185b294888f") in 21911ms src/app/(dashboard)/reconciliation/tips/actions.ts
+ GET /reconciliation/tips 200 in 768ms (next.js: 5ms, proxy.ts: 7ms, application-code: 756ms)
+ GET /reconciliation/tips/daeece41-bdf0-4314-80ce-4185b294888f/pdf 200 in 3.6s (next.js: 2.4s, proxy.ts: 8ms, application-code: 1179ms)
+ POST /reconciliation/tips 200 in 406ms (next.js: 11ms, proxy.ts: 18ms, application-code: 377ms)
+  └─ ƒ loadOpenTipGroups("27c44fec-becd-4d2e-9004-77937099fd49", "2026-05-16", "2026-05-31") in 344ms src/app/(dashboard)/reconciliation/tips/actions.ts
+ GET /reconciliation/tips 200 in 1113ms (next.js: 13ms, proxy.ts: 25ms, application-code: 1075ms)
+ POST /reconciliation/tips 200 in 469ms (next.js: 11ms, proxy.ts: 21ms, application-code: 437ms)
+  └─ ƒ loadOpenTipGroups("27c44fec-becd-4d2e-9004-77937099fd49", "2026-05-16", "2026-05-31") in 412ms src/app/(dashboard)/reconciliation/tips/actions.ts

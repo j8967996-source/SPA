@@ -160,6 +160,9 @@ interface PostBillToErpArgs {
   cashAccount: string;
   currency?: string;
   lines: APLine[];
+  /** HHG-Acumatica required UDFs (Request Category / Payment or Liquidation). */
+  requestCategory?: string;
+  paymentOrLiquidation?: string;
   /** Attach this stored file to the posted bill (best effort). */
   proofPath?: string;
   proofBucket?: string;
@@ -210,6 +213,8 @@ export async function postBillToErp(args: PostBillToErpArgs): Promise<PostToErpR
         vendor: args.vendor, vendor_ref: args.vendorRef, date: args.date,
         description: args.description, financial_branch: args.financialBranch,
         cash_account: args.cashAccount, currency: args.currency ?? 'PHP', lines: args.lines,
+        request_category: args.requestCategory,
+        payment_or_liquidation: args.paymentOrLiquidation,
       },
       cookie,
     );

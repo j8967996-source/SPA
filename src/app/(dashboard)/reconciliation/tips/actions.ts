@@ -32,24 +32,35 @@ async function postTipSettlementToErp(settlementId: string): Promise<PostToErpRe
 
   const { data: tipRows } = await supabase
     .from('tips')
-    .select('amount_cents, therapist:employees!tips_therapist_id_fkey ( id, name )')
+    .select('amount_cents, therapist:employees!tips_therapist_id_fkey ( id, name ), order:orders!tips_order_id_fkey ( order_no )')
     .eq('settlement_id', settlementId);
-  const byTherapist = new Map<string, { name: string; total: number }>();
+  const byTherapist = new Map<string, { name: string; total: number; orders: Set<string> }>();
   for (const t of tipRows ?? []) {
     const th = one(t.therapist);
+    const ord = one<{ order_no: string }>(t.order);
     if (!th) continue;
-    const g = byTherapist.get(th.id) ?? { name: th.name ?? '—', total: 0 };
+    const g = byTherapist.get(th.id) ?? { name: th.name ?? '—', total: 0, orders: new Set<string>() };
     g.total += t.amount_cents;
+    if (ord?.order_no) g.orders.add(ord.order_no);
     byTherapist.set(th.id, g);
   }
-  const apLines = [...byTherapist.values()].map((g) => ({
-    account: '20500',
-    sub_account: '000000000',
-    quantity: 1,
-    unit_cost: g.total / 100,
-    amount: g.total / 100,
-    transaction_desc: `Tips · ${g.name}`,
-  }));
+  // Acumatica's TransactionDescr is capped (~256 chars). Order numbers can
+  // pile up if a therapist had many tipped services in one settlement —
+  // truncate with an ellipsis once we'd otherwise overflow, so the bill is
+  // never rejected for description length.
+  const apLines = [...byTherapist.values()].map((g) => {
+    const orders = [...g.orders].sort().join(', ');
+    const base = `Tips · ${g.name}`;
+    const full = orders ? `${base} · ${orders}` : base;
+    return {
+      account: '20500',
+      sub_account: '000000000',
+      quantity: 1,
+      unit_cost: g.total / 100,
+      amount: g.total / 100,
+      transaction_desc: full.length > 250 ? `${full.slice(0, 247)}...` : full,
+    };
+  });
 
   return await postBillToErp({
     entityType: 'tip_settlement',
@@ -63,6 +74,10 @@ async function postTipSettlementToErp(settlementId: string): Promise<PostToErpRe
     cashAccount: process.env.ACUMATICA_TIPS_CASH_ACCOUNT ?? '',
     currency: 'PHP',
     lines: apLines,
+    // HHG Acumatica requires these custom attributes on every AP Bill. Set
+    // via env so non-tip flows (commission/expense) can override.
+    requestCategory: process.env.ACUMATICA_TIPS_REQUEST_CATEGORY ?? '',
+    paymentOrLiquidation: process.env.ACUMATICA_TIPS_PAYMENT_TYPE ?? '',
     proofPath: pdfPath ?? undefined,
     proofBucket: 'tip-pdfs',
   });

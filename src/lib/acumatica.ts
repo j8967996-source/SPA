@@ -256,6 +256,11 @@ export async function pushAPBill(
     cash_account: string;
     currency?: string;
     lines: APLine[];
+    // HHG Acumatica adds two required UDFs at the document level. Same
+    // contract as ENGO — request_category goes to AttributeBILLTYPE,
+    // payment_or_liquidation goes to AttributePPMTYPE.
+    request_category?: string;
+    payment_or_liquidation?: string;
   },
   userCookie: string | null | undefined,
 ): Promise<APBillPushResult> {
@@ -270,6 +275,12 @@ export async function pushAPBill(
     Description: { value: bill.description },
     BranchID: { value: bill.financial_branch },
     Hold: { value: true },
+    custom: {
+      Document: {
+        AttributeBILLTYPE: { type: 'CustomStringField', value: bill.request_category ?? '' },
+        AttributePPMTYPE: { type: 'CustomStringField', value: bill.payment_or_liquidation ?? '' },
+      },
+    },
     Details: bill.lines.map((l) => ({
       BranchID: { value: bill.financial_branch },
       Account: { value: l.account },
