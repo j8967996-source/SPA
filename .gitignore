@@ -53,3 +53,7 @@ next-env.d.ts
 .vscode/
 .idea/
 Thumbs.db
+
+# dev server logs
+.next-dev.log
+.next-dev.err
