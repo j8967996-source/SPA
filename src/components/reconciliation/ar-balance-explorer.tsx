@@ -156,17 +156,22 @@ export function ArBalanceExplorer({ ar }: { ar: ArBalance }) {
                               <Table className="table-fixed">
                                 {/* All columns fixed so table-fixed spreads the slack
                                     proportionally — the right side (amounts / status /
-                                    actions) gets roomy, even space instead of bunching. */}
+                                    actions) gets roomy, even space instead of bunching.
+                                    First column is the row-select checkbox (intercompany
+                                    only); third-party renders the column empty for layout
+                                    alignment. */}
                                 <colgroup>
+                                  <col className="w-10" />
                                   <col className="w-64" />
                                   <col className="w-44" />
                                   <col className="w-24" />
                                   <col className="w-32" />
                                   <col className="w-28" />
-                                  <col className="w-40" />
+                                  <col className="w-32" />
                                 </colgroup>
                                 <TableHeader>
                                   <TableRow>
+                                    <TableHead />
                                     <TableHead className="font-bold">SOA No</TableHead>
                                     <TableHead className="font-bold">Period</TableHead>
                                     <TableHead className="font-bold">Due</TableHead>
@@ -179,6 +184,16 @@ export function ArBalanceExplorer({ ar }: { ar: ArBalance }) {
                                   {d.soas.map((s) => (
                                     <Fragment key={s.id}>
                                     <TableRow>
+                                      <TableCell className="pl-4 pr-0">
+                                        {settleable && (
+                                          <input
+                                            type="checkbox"
+                                            className="size-4 cursor-pointer accent-primary"
+                                            checked={sel.has(s.id)}
+                                            onChange={() => toggleSel(s.id)}
+                                          />
+                                        )}
+                                      </TableCell>
                                       <TableCell className="font-mono font-bold">
                                         {s.status === 'partial_paid' && (
                                           <button type="button" onClick={() => toggleSoa(s.id)} className="mr-1 align-middle text-muted-foreground hover:text-foreground" aria-label="Show payments">
@@ -200,21 +215,13 @@ export function ArBalanceExplorer({ ar }: { ar: ArBalance }) {
                                       <TableCell className="text-center"><Badge variant={STATUS_VARIANT[s.status] ?? 'secondary'} className="font-bold capitalize">{s.status.replace('_', ' ')}</Badge></TableCell>
                                       <TableCell className="pr-4">
                                         <div className="flex items-center justify-end gap-2">
-                                          {settleable && (
-                                            <input
-                                              type="checkbox"
-                                              className="size-4 cursor-pointer accent-primary"
-                                              checked={sel.has(s.id)}
-                                              onChange={() => toggleSel(s.id)}
-                                            />
-                                          )}
                                           <SoaActions id={s.id} status={s.status} settlementType={s.settlement_type} outstandingCents={s.outstanding_cents} allowVoid={false} />
                                         </div>
                                       </TableCell>
                                     </TableRow>
                                     {openSoa.has(s.id) && (
                                       <TableRow>
-                                        <TableCell colSpan={6} className="bg-muted/20 p-3">
+                                        <TableCell colSpan={7} className="bg-muted/20 p-3">
                                           <SoaPaymentsList soaId={s.id} />
                                         </TableCell>
                                       </TableRow>
