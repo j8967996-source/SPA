@@ -4,7 +4,6 @@ import { createServiceClient } from '@/lib/supabase/server';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { loadReconStatus } from '@/lib/recon-status';
 import { OverdueCloseBanner } from '@/components/reconciliation/overdue-close-banner';
-import { currentSession, isManager } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,8 +48,7 @@ async function fetchData() {
 }
 
 export default async function DashboardPage() {
-  const [d, recon, session] = await Promise.all([fetchData(), loadReconStatus(), currentSession()]);
-  const canForce = isManager(session);
+  const [d, recon] = await Promise.all([fetchData(), loadReconStatus()]);
   const overdueItems = recon.branches
     .filter((b) => b.overdueClose)
     .map((b) => ({
@@ -81,7 +79,7 @@ export default async function DashboardPage() {
         <p className="text-sm font-semibold text-muted-foreground mt-1">Today · {d.today}</p>
       </div>
 
-      <OverdueCloseBanner items={overdueItems} canForce={canForce} />
+      <OverdueCloseBanner items={overdueItems} />
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-5">
         {kpis.map((k) => (

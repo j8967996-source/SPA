@@ -5,7 +5,6 @@ import { Card } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { loadReconStatus } from '@/lib/recon-status';
 import { OverdueCloseBanner } from '@/components/reconciliation/overdue-close-banner';
-import { currentSession, isManager } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,8 +13,7 @@ function peso(cents: number): string {
 }
 
 export default async function ReconciliationHubPage() {
-  const [s, session] = await Promise.all([loadReconStatus(), currentSession()]);
-  const canForce = isManager(session);
+  const s = await loadReconStatus();
   const overdueItems = s.branches
     .filter((b) => b.overdueClose)
     .map((b) => ({
@@ -74,7 +72,7 @@ export default async function ReconciliationHubPage() {
         </p>
       </div>
 
-      <OverdueCloseBanner items={overdueItems} canForce={canForce} />
+      <OverdueCloseBanner items={overdueItems} />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {modules.map((m) => (
