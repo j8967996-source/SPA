@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Receipt } from 'lucide-react';
+import { Receipt, TriangleAlert } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -31,6 +31,8 @@ export interface OrderRow {
   order_type: string;
   service_date: string;
   total_cents: number;
+  paid_cents: number;
+  is_ar: boolean;
   branch_code: string;
   billing_code: string | null;
   pax: number;
@@ -136,7 +138,6 @@ export function OrdersExplorer({ rows, billingCodes }: { rows: OrderRow[]; billi
             <TableRow>
               <TableHead className="w-56 font-bold">Order No</TableHead>
               <TableHead className="w-20 font-bold">Branch</TableHead>
-              <TableHead className="w-28 font-bold">Type</TableHead>
               <TableHead className="w-24 font-bold">Billing To</TableHead>
               <TableHead className="w-16 font-bold">PAX</TableHead>
               <TableHead className="w-32 font-bold">Service Date</TableHead>
@@ -145,13 +146,13 @@ export function OrdersExplorer({ rows, billingCodes }: { rows: OrderRow[]; billi
               <TableHead className="w-28 font-bold text-center">AR</TableHead>
               <TableHead className="w-32 font-bold text-center">Total</TableHead>
               <TableHead className="w-24 font-bold text-center">Tips</TableHead>
-              <TableHead className="w-28 font-bold text-center">Status</TableHead>
+              <TableHead className="w-36 font-bold text-center">Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filtered.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={12} className="text-center py-16">
+                <TableCell colSpan={11} className="text-center py-16">
                   <Receipt className="size-8 mx-auto text-muted-foreground/50" />
                   <p className="text-sm font-semibold text-muted-foreground mt-3">No orders match these filters.</p>
                 </TableCell>
@@ -163,7 +164,6 @@ export function OrdersExplorer({ rows, billingCodes }: { rows: OrderRow[]; billi
                     <Link href={`/sales-orders/${o.id}`} className="hover:text-primary">{o.order_no}</Link>
                   </TableCell>
                   <TableCell className="font-mono font-bold">{o.branch_code}</TableCell>
-                  <TableCell className="font-medium text-muted-foreground text-xs">{o.order_type}</TableCell>
                   <TableCell className="font-mono font-bold text-xs">{o.billing_code ?? '—'}</TableCell>
                   <TableCell className="font-bold tabular">{o.pax}</TableCell>
                   <TableCell className="font-medium tabular">{o.service_date}</TableCell>
@@ -176,6 +176,14 @@ export function OrdersExplorer({ rows, billingCodes }: { rows: OrderRow[]; billi
                     <Badge variant={STATUS_VARIANT[o.status] ?? 'secondary'} className="font-bold capitalize">
                       {o.status.replace('_', ' ')}
                     </Badge>
+                    {/* Service done but money not (fully) collected — a completed
+                        counter order is by definition unpaid (full payment would
+                        have advanced it to Paid). Loud red flag so it can't slip. */}
+                    {!o.is_ar && o.status === 'completed' && o.total_cents - o.paid_cents > 0 && (
+                      <div className="mt-1 flex items-center justify-center gap-1 text-[11px] font-bold text-destructive">
+                        <TriangleAlert className="size-3 shrink-0" /> {peso(o.total_cents - o.paid_cents)} due
+                      </div>
+                    )}
                   </TableCell>
                 </TableRow>
               ))

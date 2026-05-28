@@ -71,6 +71,8 @@ async function fetchData() {
       order_type: o.order_type,
       service_date: o.service_date,
       total_cents: o.total_cents,
+      paid_cents: o.paid_cents,
+      is_ar: isAR,
       branch_code: one(o.branch)?.code ?? '—',
       billing_code: billing?.code ?? null,
       pax: o.order_customers?.length ?? 0,
