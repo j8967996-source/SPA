@@ -4,13 +4,12 @@ import { ChevronLeft, TriangleAlert } from 'lucide-react';
 
 import { createServiceClient } from '@/lib/supabase/server';
 import { currentSession, isManager } from '@/lib/auth';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { OrderWorkspace } from '@/components/sales-orders/order-workspace';
 import { OrderNoteEditor } from '@/components/sales-orders/order-note-editor';
 import { PaymentAdjust } from '@/components/sales-orders/payment-adjust';
 import { OrderStatusActions } from '@/components/sales-orders/order-status-actions';
-import { SERVICE_LABEL, PaymentBadge } from '@/components/sales-orders/order-badges';
+import { ServiceBadge, PaymentBadge } from '@/components/sales-orders/order-badges';
 import { ReportIncidentDialog } from '@/components/incidents/report-incident-dialog';
 
 export const dynamic = 'force-dynamic';
@@ -18,11 +17,6 @@ export const dynamic = 'force-dynamic';
 function peso(cents: number): string {
   return `₱${(cents / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
 }
-
-const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive'> = {
-  draft: 'secondary', open: 'default', in_service: 'default', completed: 'default',
-  paid: 'default', closed: 'secondary', void: 'destructive',
-};
 
 function one<T>(v: T | T[] | null): T | null {
   return Array.isArray(v) ? (v[0] ?? null) : v;
@@ -313,9 +307,7 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
         </Link>
         <div className="flex items-center gap-3 mt-1 flex-wrap">
           <h2 className="text-3xl font-bold tracking-tight font-mono">{order.order_no}</h2>
-          <Badge variant={STATUS_VARIANT[order.status] ?? 'secondary'} className="font-bold">
-            {SERVICE_LABEL[order.status] ?? order.status.replace('_', ' ')}
-          </Badge>
+          <ServiceBadge status={order.status} />
           <PaymentBadge total_cents={order.total_cents} paid_cents={order.paid_cents} is_ar={arBilled} status={order.status} />
           <OrderStatusActions orderId={order.id} status={order.status} canManage={canManage} itemCount={items.length} hasPayments={payments.length > 0} />
           <div className="ml-auto flex items-center gap-3">

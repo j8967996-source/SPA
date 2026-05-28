@@ -4,8 +4,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Receipt } from 'lucide-react';
 
-import { Badge } from '@/components/ui/badge';
-import { SERVICE_LABEL, PaymentBadge, orderPaymentState } from '@/components/sales-orders/order-badges';
+import { ServiceBadge, PaymentBadge, orderPaymentState } from '@/components/sales-orders/order-badges';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -20,6 +19,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -43,10 +43,6 @@ export interface OrderRow {
   tip_cents: number;
 }
 
-const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive'> = {
-  reserved: 'secondary', draft: 'secondary', open: 'default', in_service: 'default',
-  completed: 'default', posting: 'secondary', paid: 'default', closed: 'secondary', void: 'destructive',
-};
 // Service / lifecycle axis. `completed` + `paid` both read as "Service done"
 // now, so they collapse into one filter option — payment is filtered separately.
 const SERVICE_OPTIONS: { value: string; label: string; match: (s: string) => boolean }[] = [
@@ -95,6 +91,24 @@ export function OrdersExplorer({ rows, billingCodes }: { rows: OrderRow[]; billi
         return true;
       }),
     [rows, from, to, billing, service, payment],
+  );
+
+  // Column sums for the footer — only over what's currently filtered/visible.
+  const totals = useMemo(
+    () =>
+      filtered.reduce(
+        (a, o) => {
+          a.cash += o.cash_cents;
+          a.paymaya += o.paymaya_cents;
+          a.ar += o.ar_cents;
+          a.outstanding += o.is_ar ? 0 : Math.max(0, o.total_cents - o.paid_cents);
+          a.total += o.total_cents;
+          a.tip += o.tip_cents;
+          return a;
+        },
+        { cash: 0, paymaya: 0, ar: 0, outstanding: 0, total: 0, tip: 0 },
+      ),
+    [filtered],
   );
 
   // Base UI's <SelectValue /> needs an items map to show labels in the trigger
@@ -220,9 +234,7 @@ export function OrdersExplorer({ rows, billingCodes }: { rows: OrderRow[]; billi
                     {/* Two axes: service/lifecycle badge + derived payment badge,
                         so a green "Service done" is never read as "paid". */}
                     <div className="flex flex-col items-center gap-1">
-                      <Badge variant={STATUS_VARIANT[o.status] ?? 'secondary'} className="font-bold">
-                        {SERVICE_LABEL[o.status] ?? o.status.replace('_', ' ')}
-                      </Badge>
+                      <ServiceBadge status={o.status} />
                       <PaymentBadge total_cents={o.total_cents} paid_cents={o.paid_cents} is_ar={o.is_ar} status={o.status} />
                     </div>
                   </TableCell>
@@ -230,6 +242,25 @@ export function OrdersExplorer({ rows, billingCodes }: { rows: OrderRow[]; billi
               ))
             )}
           </TableBody>
+          {filtered.length > 0 && (
+            <TableFooter>
+              {/* Column sums, aligned under the money columns above. */}
+              <TableRow className="border-t-2 border-border bg-muted/40 font-bold">
+                <TableCell colSpan={5} className="text-right text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Totals · {filtered.length} order{filtered.length === 1 ? '' : 's'}
+                </TableCell>
+                <TableCell className="tabular text-right bg-muted/30 border-l border-border">{moneyCell(totals.cash)}</TableCell>
+                <TableCell className="tabular text-right bg-muted/30">{moneyCell(totals.paymaya)}</TableCell>
+                <TableCell className="tabular text-right bg-muted/30 border-r border-border">{moneyCell(totals.ar)}</TableCell>
+                <TableCell className="tabular text-right">
+                  {totals.outstanding > 0 ? <span className="text-destructive">{peso(totals.outstanding)}</span> : <span className="text-muted-foreground">—</span>}
+                </TableCell>
+                <TableCell className="tabular text-right">{peso(totals.total)}</TableCell>
+                <TableCell className="tabular text-right">{moneyCell(totals.tip, 'text-primary')}</TableCell>
+                <TableCell />
+              </TableRow>
+            </TableFooter>
+          )}
         </Table>
       </Card>
     </div>
