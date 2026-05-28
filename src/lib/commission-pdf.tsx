@@ -129,16 +129,19 @@ const styles = StyleSheet.create({
 
   row: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: LINE, paddingVertical: 4, paddingHorizontal: 6 },
   td: { fontSize: 9 },
-  // Inter-column breathing room — without `paddingRight`, neighbouring cells
-  // run into each other (Order No vs Service especially since order numbers
-  // are long: "SO-OSP2-20260527-004"). Mins sits between Service and Gross.
-  cDate: { width: 64, paddingRight: 8 },
-  cOrder: { width: 130, paddingRight: 8 },
+  // Column widths reclaim slack from Date / Order / Mins (which had spare
+  // room) to widen Gross + Commission. Two goals:
+  //   1. push Rate visually right of Gross by widening Gross (~+16pt)
+  //   2. fit big amounts cleanly — Gross/Commission both handle up to
+  //      "PHP 999,999.00" (~72pt text) with room to spare.
+  // Service flex stays at ~103pt so "Thai Massage [warm-up]" still fits.
+  cDate: { width: 60, paddingRight: 8 },
+  cOrder: { width: 116, paddingRight: 8 },
   cSvc: { flex: 1, paddingRight: 8 },
-  cMins: { width: 40, paddingRight: 8, textAlign: 'right' },
-  cGross: { width: 70, paddingRight: 8, textAlign: 'right' },
-  cRate: { width: 36, paddingRight: 8, textAlign: 'right' },
-  cComm: { width: 80, textAlign: 'right' },
+  cMins: { width: 32, paddingRight: 8, textAlign: 'right' },
+  cGross: { width: 86, paddingRight: 8, textAlign: 'right' },
+  cRate: { width: 40, paddingRight: 8, textAlign: 'right' },
+  cComm: { width: 84, textAlign: 'right' },
 
   warm: { fontSize: 7, color: WARM, backgroundColor: WARMBG, paddingHorizontal: 3, paddingVertical: 1, marginLeft: 4, borderRadius: 2 },
 
