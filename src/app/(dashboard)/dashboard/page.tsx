@@ -119,18 +119,27 @@ export default async function DashboardPage() {
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {recon.branches.map((b) => {
-            const done = b.cashClosed && b.pendingConfirm === 0;
+            // "No activity" branches (0 orders today, nothing in either status)
+            // are treated as done — there's nothing to close.
+            const done = !b.hasActivity || (b.cashClosed && b.pendingConfirm === 0);
+            const quiet = !b.hasActivity;
             return (
               <Link key={b.id} href={`/reconciliation/revenue-confirm?branch=${b.id}&date=${recon.today}`}>
                 <Card className="transition-colors hover:bg-accent/40">
                   <CardHeader className="pb-2 flex-row items-center justify-between">
                     <CardTitle className="text-sm font-bold">{b.code}</CardTitle>
-                    {done ? <span className="text-xs font-bold text-primary">All done</span> : <span className="size-2.5 rounded-full bg-amber-500" />}
+                    {done
+                      ? <span className={`text-xs font-bold ${quiet ? 'text-muted-foreground' : 'text-primary'}`}>{quiet ? 'No activity' : 'All done'}</span>
+                      : <span className="size-2.5 rounded-full bg-amber-500" />}
                   </CardHeader>
                   <CardContent className="flex flex-col gap-1 text-sm font-semibold">
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">Cash</span>
-                      <span className={b.cashClosed ? 'text-primary' : 'text-amber-700 dark:text-amber-400'}>{b.cashClosed ? 'Closed' : 'Pending'}</span>
+                      <span className={quiet
+                        ? 'text-muted-foreground'
+                        : b.cashClosed ? 'text-primary' : 'text-amber-700 dark:text-amber-400'}>
+                        {quiet ? '—' : (b.cashClosed ? 'Closed' : 'Pending')}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">To confirm</span>

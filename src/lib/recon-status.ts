@@ -13,6 +13,9 @@ export interface ReconBranchStatus {
   cashClosed: boolean;
   pendingConfirm: number;
   pendingConfirmCents: number;
+  /** Any non-void orders today at this branch (any status). false → nothing to
+   *  close → UI should show "No activity" grey instead of amber "Pending". */
+  hasActivity: boolean;
   /** Oldest business-date at this branch with status != closed AND < today (PHT). */
   overdueClose: OverdueClose | null;
 }
@@ -46,15 +49,20 @@ export async function loadReconStatus(): Promise<ReconStatus> {
   const branchList = branches;
   const arId = arMethod?.id ?? null;
 
-  // --- Today's orders pending Revenue Confirm (per branch) ---
+  // --- Today's orders: include closed too so "activity" reflects the whole
+  //     day, not just pending. A branch with all-confirmed orders should
+  //     still show "All done" rather than "No activity". ---
   const { data: todayOrders } = await supabase
     .from('orders')
     .select('branch_id, status, total_cents, billing:billing_destinations!orders_billing_to_id_fkey ( default_payment_method_id )')
     .eq('service_date', today)
     .is('deleted_at', null)
-    .in('status', ['paid', 'completed']);
+    .in('status', ['paid', 'completed', 'closed']);
   const pendingByBranch = new Map<string, { n: number; cents: number }>();
+  const activityByBranch = new Set<string>();
   for (const o of todayOrders ?? []) {
+    activityByBranch.add(o.branch_id);
+    if (o.status === 'closed') continue; // already confirmed — counts as activity but not pending
     const isAR = !!arId && one(o.billing)?.default_payment_method_id === arId;
     if (!(o.status === 'paid' || (o.status === 'completed' && isAR))) continue;
     const cur = pendingByBranch.get(o.branch_id) ?? { n: 0, cents: 0 };
@@ -73,6 +81,7 @@ export async function loadReconStatus(): Promise<ReconStatus> {
       id: b.id, code: b.code, name: b.name,
       cashClosed: cashClosedFlags[i],
       pendingConfirm: p.n, pendingConfirmCents: p.cents,
+      hasActivity: activityByBranch.has(b.id),
       overdueClose: overdueCloses[i],
     };
   });
@@ -114,7 +123,9 @@ export async function loadReconStatus(): Promise<ReconStatus> {
   return {
     today,
     branches: branchStatus,
-    cashNotClosed: branchStatus.filter((b) => !b.cashClosed).length,
+    // No-activity branches don't owe a cash count today — exclude them so the
+    // "All branches closed" message isn't blocked by quiet branches.
+    cashNotClosed: branchStatus.filter((b) => !b.cashClosed && b.hasActivity).length,
     pendingConfirm: branchStatus.reduce((s, b) => s + b.pendingConfirm, 0),
     pendingConfirmCents: branchStatus.reduce((s, b) => s + b.pendingConfirmCents, 0),
     openTipsCount,
