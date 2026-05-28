@@ -69,7 +69,11 @@ async function postTipSettlementToErp(settlementId: string): Promise<PostToErpRe
     entityId: settlementId,
     vendor: process.env.ACUMATICA_TIPS_VENDOR ?? '',
     vendorRef: s.settlement_no,
-    date: new Date().toISOString().slice(0, 10),
+    // Same date policy as Revenue Confirm / Intercompany Settle: the AP
+    // Bill's date follows the period it represents, not the click time.
+    // Keeps AP Aging reports on the right month and makes cross-system
+    // reconciliation a 1:1 lookup by date.
+    date: s.period_to,
     description: `Tip settlement ${s.settlement_no} (${s.period_from} to ${s.period_to})`,
     financialBranch: one<{ code: string }>(s.branch)?.code ?? '',
     cashAccount: process.env.ACUMATICA_TIPS_CASH_ACCOUNT ?? '',
