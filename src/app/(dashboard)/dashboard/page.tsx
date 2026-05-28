@@ -119,12 +119,22 @@ export default async function DashboardPage() {
         </div>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {recon.branches.map((b) => {
-            // "No activity" branches (0 orders today, nothing in either status)
-            // are treated as done — there's nothing to close.
-            const done = !b.hasActivity || (b.cashClosed && b.pendingConfirm === 0);
-            const quiet = !b.hasActivity;
+            const quiet = b.dayStatus === 'no_activity';
+            const closed = b.dayStatus === 'closed';
+            const done = quiet || closed;
+            // Day-row colour follows the overall pipeline state, not the
+            // individual milestones (those are still shown on the Cash /
+            // To-confirm rows).
+            const dayClass =
+              closed ? 'text-primary' :
+              b.dayStatus === 'in_progress' ? 'text-amber-700 dark:text-amber-400' :
+              quiet ? 'text-muted-foreground' : 'text-muted-foreground';
+            const dayLabel =
+              closed ? 'Closed' :
+              b.dayStatus === 'in_progress' ? 'In progress' :
+              quiet ? '—' : 'Open';
             return (
-              <Link key={b.id} href={`/reconciliation/revenue-confirm?branch=${b.id}&date=${recon.today}`}>
+              <Link key={b.id} href={`/reconciliation/end-of-day?branch=${b.id}&date=${recon.today}`}>
                 <Card className="transition-colors hover:bg-accent/40">
                   <CardHeader className="pb-2 flex-row items-center justify-between">
                     <CardTitle className="text-sm font-bold">{b.code}</CardTitle>
@@ -146,6 +156,10 @@ export default async function DashboardPage() {
                       <span className={`tabular ${b.pendingConfirm > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-muted-foreground'}`}>
                         {b.pendingConfirm > 0 ? `${b.pendingConfirm} · ${peso(b.pendingConfirmCents)}` : '0'}
                       </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Day</span>
+                      <span className={dayClass}>{dayLabel}</span>
                     </div>
                   </CardContent>
                 </Card>

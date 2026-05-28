@@ -6,6 +6,14 @@ import { getOldestOverdueClose, type OverdueClose } from '@/lib/business-day';
 
 const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
 
+/** Per-branch summary of the 4-step End-of-Day pipeline status for today.
+ *  no_activity → 0 orders today, no work owed.
+ *  open        → row not started, or started but no milestones hit yet.
+ *  in_progress → at least one of (order_reviewed_at / balances_ok_at /
+ *                revenue_confirmed_at) is set but day is not closed.
+ *  closed      → status='closed' (4-step pipeline done). */
+export type DayStatus = 'closed' | 'in_progress' | 'open' | 'no_activity';
+
 export interface ReconBranchStatus {
   id: string;
   code: string;
@@ -16,6 +24,8 @@ export interface ReconBranchStatus {
   /** Any non-void orders today at this branch (any status). false → nothing to
    *  close → UI should show "No activity" grey instead of amber "Pending". */
   hasActivity: boolean;
+  /** Today's overall EoD-pipeline state for this branch. */
+  dayStatus: DayStatus;
   /** Oldest business-date at this branch with status != closed AND < today (PHT). */
   overdueClose: OverdueClose | null;
 }
@@ -70,18 +80,33 @@ export async function loadReconStatus(): Promise<ReconStatus> {
     pendingByBranch.set(o.branch_id, cur);
   }
 
-  // --- Cash closed per branch (today) + oldest overdue EoD close ---
-  const [cashClosedFlags, overdueCloses] = await Promise.all([
+  // --- Cash closed + overdue EoD + today's bdc state per branch ---
+  const [cashClosedFlags, overdueCloses, { data: bdcToday }] = await Promise.all([
     Promise.all(branchList.map((b) => isDayCashClosed(b.id, today))),
     Promise.all(branchList.map((b) => getOldestOverdueClose(b.id))),
+    supabase.from('business_day_close')
+      .select('branch_id, status, order_reviewed_at, balances_ok_at, revenue_confirmed_at, closed_at')
+      .eq('business_date', today)
+      .in('branch_id', branchList.map((b) => b.id)),
   ]);
+  type BdcRow = { branch_id: string; status: string; order_reviewed_at: string | null; balances_ok_at: string | null; revenue_confirmed_at: string | null; closed_at: string | null };
+  const bdcByBranch = new Map<string, BdcRow>((bdcToday as BdcRow[] | null ?? []).map((r) => [r.branch_id, r]));
+
   const branchStatus: ReconBranchStatus[] = branchList.map((b, i) => {
     const p = pendingByBranch.get(b.id) ?? { n: 0, cents: 0 };
+    const hasActivity = activityByBranch.has(b.id);
+    const rec = bdcByBranch.get(b.id) ?? null;
+    let dayStatus: DayStatus;
+    if (!hasActivity) dayStatus = 'no_activity';
+    else if (rec && (rec.status === 'closed' || rec.closed_at)) dayStatus = 'closed';
+    else if (rec && (rec.order_reviewed_at || rec.balances_ok_at || rec.revenue_confirmed_at)) dayStatus = 'in_progress';
+    else dayStatus = 'open';
     return {
       id: b.id, code: b.code, name: b.name,
       cashClosed: cashClosedFlags[i],
       pendingConfirm: p.n, pendingConfirmCents: p.cents,
-      hasActivity: activityByBranch.has(b.id),
+      hasActivity,
+      dayStatus,
       overdueClose: overdueCloses[i],
     };
   });
