@@ -24,7 +24,7 @@ import { closeCashReconciliation, reopenCashReconciliation } from '@/app/(dashbo
 import { type ShiftStatus } from '@/app/(dashboard)/reconciliation/cash/shifts';
 
 function peso(cents: number): string {
-  return `₱${(cents / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
+  return `₱${(cents / 100).toLocaleString('en-PH', { maximumFractionDigits: 0 })}`;
 }
 
 interface Props {

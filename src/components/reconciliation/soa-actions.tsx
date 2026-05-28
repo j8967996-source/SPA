@@ -86,7 +86,7 @@ function RecordPaymentDialog({ id, outstandingCents }: { id: string; outstanding
         <DialogHeader>
           <DialogTitle className="font-bold">Record Payment</DialogTitle>
           <DialogDescription className="font-medium">
-            Outstanding: ₱{(outstandingCents / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })}
+            Outstanding: ₱{(outstandingCents / 100).toLocaleString('en-PH', { maximumFractionDigits: 0 })}
           </DialogDescription>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-3 py-2">

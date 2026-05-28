@@ -17,7 +17,7 @@ import {
 import type { ConfirmableOrder } from '@/app/(dashboard)/reconciliation/revenue-confirm/actions';
 
 function peso(cents: number): string {
-  return `₱${(cents / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
+  return `₱${(cents / 100).toLocaleString('en-PH', { maximumFractionDigits: 0 })}`;
 }
 function moneyCell(cents: number): string {
   return cents > 0 ? peso(cents) : '—';
@@ -82,13 +82,12 @@ export function RevenueConfirmHistory({ orders }: { orders: ConfirmableOrder[] }
                 <TableHeader>
                   <TableRow>
                     <TableHead className="font-bold">Order No</TableHead>
-                    <TableHead className="w-28 font-bold">Type</TableHead>
                     <TableHead className="w-16 font-bold text-center">PAX</TableHead>
                     <TableHead className="w-24 font-bold">Settle</TableHead>
                     <TableHead className="font-bold">Billing</TableHead>
-                    <TableHead className="w-28 font-bold text-right">Cash</TableHead>
-                    <TableHead className="w-28 font-bold text-right">PAYMAYA</TableHead>
-                    <TableHead className="w-28 font-bold text-right">AR</TableHead>
+                    <TableHead className="w-28 font-bold text-center">Cash</TableHead>
+                    <TableHead className="w-28 font-bold text-center">PAYMAYA</TableHead>
+                    <TableHead className="w-28 font-bold text-center">AR</TableHead>
                     <TableHead className="w-32 font-bold text-right pr-4">Total</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -98,7 +97,6 @@ export function RevenueConfirmHistory({ orders }: { orders: ConfirmableOrder[] }
                       <TableCell className="font-mono font-bold">
                         <Link href={`/sales-orders/${o.id}`} className="hover:text-primary">{o.order_no}</Link>
                       </TableCell>
-                      <TableCell className="font-medium text-muted-foreground text-xs capitalize">{o.order_type.replace('_', ' ')}</TableCell>
                       <TableCell className="font-bold tabular text-center">{o.pax}</TableCell>
                       <TableCell><Badge variant={o.isAR ? 'secondary' : 'default'} className="font-bold">{o.isAR ? 'AR' : 'Paid'}</Badge></TableCell>
                       <TableCell className="font-medium text-muted-foreground">{o.billing_label ?? 'Self-pay'}</TableCell>

@@ -5,7 +5,7 @@ import { createServiceClient } from '@/lib/supabase/server';
 
 function php(cents: number): string {
   // Built-in Helvetica has no ₱ glyph, so spell the currency.
-  return `PHP ${(cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+  return `PHP ${(cents / 100).toLocaleString('en-US', { maximumFractionDigits: 0 })}`;
 }
 const one = <T,>(v: T | T[] | null): T | null => (Array.isArray(v) ? (v[0] ?? null) : v);
 

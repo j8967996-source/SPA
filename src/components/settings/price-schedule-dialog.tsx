@@ -34,7 +34,7 @@ import {
 } from '@/app/(dashboard)/settings/service-items/actions';
 
 function peso(cents: number): string {
-  return `₱${(cents / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
+  return `₱${(cents / 100).toLocaleString('en-PH', { maximumFractionDigits: 0 })}`;
 }
 function todayISO(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());

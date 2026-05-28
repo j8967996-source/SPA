@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils';
 import { takePayment } from '@/app/(dashboard)/sales-orders/actions';
 
 function peso(cents: number): string {
-  return `₱${(cents / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
+  return `₱${(cents / 100).toLocaleString('en-PH', { maximumFractionDigits: 0 })}`;
 }
 
 export interface TipTarget {

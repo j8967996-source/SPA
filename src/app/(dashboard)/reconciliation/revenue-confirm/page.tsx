@@ -25,7 +25,7 @@ function todayPHT(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 }
 function peso(cents: number): string {
-  return `₱${(cents / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
+  return `₱${(cents / 100).toLocaleString('en-PH', { maximumFractionDigits: 0 })}`;
 }
 function moneyCell(cents: number): string {
   return cents > 0 ? peso(cents) : '—';
@@ -38,7 +38,6 @@ function OrderRow({ o, showDate }: { o: ConfirmableOrder; showDate?: boolean }) 
       <TableCell className="font-mono font-bold">
         <Link href={`/sales-orders/${o.id}`} className="hover:text-primary">{o.order_no}</Link>
       </TableCell>
-      <TableCell className="font-medium text-muted-foreground text-xs capitalize">{o.order_type.replace('_', ' ')}</TableCell>
       <TableCell className="font-bold tabular text-center">{o.pax}</TableCell>
       <TableCell><Badge variant={o.isAR ? 'secondary' : 'default'} className="font-bold">{o.isAR ? 'AR' : 'Paid'}</Badge></TableCell>
       <TableCell className="font-medium text-muted-foreground">{o.billing_label ?? 'Self-pay'}</TableCell>
@@ -68,6 +67,10 @@ export default async function RevenueConfirmPage({
   const history = branchId && view === 'history' ? await loadConfirmedHistory(branchId) : [];
   const total = orders.reduce((s, o) => s + o.total_cents, 0);
   const histTotal = history.reduce((s, o) => s + o.total_cents, 0);
+  // Column totals for the footer row
+  const cashTotal = orders.reduce((s, o) => s + o.cash_cents, 0);
+  const paymayaTotal = orders.reduce((s, o) => s + o.paymaya_cents, 0);
+  const arTotal = orders.reduce((s, o) => s + (o.isAR ? o.total_cents : 0), 0);
 
   const tabLink = (v: 'confirm' | 'history') => `/reconciliation/revenue-confirm?branch=${branchId}&date=${date}&view=${v}`;
 
@@ -138,21 +141,30 @@ export default async function RevenueConfirmPage({
               <TableHeader>
                 <TableRow>
                   <TableHead className="font-bold">Order No</TableHead>
-                  <TableHead className="w-28 font-bold">Type</TableHead>
                   <TableHead className="w-16 font-bold text-center">PAX</TableHead>
                   <TableHead className="w-24 font-bold">Settle</TableHead>
                   <TableHead className="font-bold">Billing</TableHead>
-                  <TableHead className="w-28 font-bold text-right">Cash</TableHead>
-                  <TableHead className="w-28 font-bold text-right">PAYMAYA</TableHead>
-                  <TableHead className="w-28 font-bold text-right">AR</TableHead>
+                  <TableHead className="w-28 font-bold text-center">Cash</TableHead>
+                  <TableHead className="w-28 font-bold text-center">PAYMAYA</TableHead>
+                  <TableHead className="w-28 font-bold text-center">AR</TableHead>
                   <TableHead className="w-32 font-bold text-right">Total</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {orders.length === 0 ? (
-                  <TableRow><TableCell colSpan={9} className="text-center py-10 text-sm font-semibold text-muted-foreground">No orders pending confirmation for this branch/day.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={8} className="text-center py-10 text-sm font-semibold text-muted-foreground">No orders pending confirmation for this branch/day.</TableCell></TableRow>
                 ) : (
-                  orders.map((o) => <OrderRow key={o.id} o={o} />)
+                  <>
+                    {orders.map((o) => <OrderRow key={o.id} o={o} />)}
+                    {/* Totals footer: aligned with Cash / PAYMAYA / AR / Total columns. */}
+                    <TableRow className="border-t-2 border-border bg-muted/30 hover:bg-muted/30">
+                      <TableCell colSpan={4} className="font-bold text-right pr-3">Totals</TableCell>
+                      <TableCell className="font-bold tabular text-right">{moneyCell(cashTotal)}</TableCell>
+                      <TableCell className="font-bold tabular text-right">{moneyCell(paymayaTotal)}</TableCell>
+                      <TableCell className="font-bold tabular text-right">{moneyCell(arTotal)}</TableCell>
+                      <TableCell className="font-extrabold tabular text-right">{peso(total)}</TableCell>
+                    </TableRow>
+                  </>
                 )}
               </TableBody>
             </Table>

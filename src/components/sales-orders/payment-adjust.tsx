@@ -24,7 +24,7 @@ interface Method { id: string; code: string; display_name: string }
 interface Card { id: string; card_no: string; balance_cents: number; customer_name: string | null }
 
 function peso(cents: number): string {
-  return `₱${(cents / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
+  return `₱${(cents / 100).toLocaleString('en-PH', { maximumFractionDigits: 0 })}`;
 }
 
 // Manager-only post-payment corrections on a completed/paid order: collect an

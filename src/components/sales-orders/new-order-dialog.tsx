@@ -208,17 +208,10 @@ export function NewOrderDialog({ branches, sources, billingDestinations, lockBra
               )}
             </div>
 
-            <div className="flex flex-col gap-2">
-              <Label className="font-semibold">Order Type *</Label>
-              <Select items={ORDER_TYPES} value={orderType} onValueChange={(v) => v && pickOrderType(v)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {ORDER_TYPES.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Order Type is hidden — manual SO creation is always walk_in by
+                definition; reservation / stored_value / external flow through
+                their own conversion paths. Removing the picker prevents the
+                "walk_in + intercompany source" inconsistency. */}
 
             <div className="flex flex-col gap-2">
               <Label className="font-semibold">Customer Source</Label>

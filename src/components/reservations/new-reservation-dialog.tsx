@@ -634,13 +634,18 @@ export function NewReservationDialog({
                 </div>
               </>
             )}
-            {!walkIn && !lockedBed && (
+            {!walkIn && (
               <div className="flex flex-col gap-2 col-span-2">
                 <Label className="font-semibold">Location</Label>
                 <Select items={LOCATION_TYPES} value={locationType} onValueChange={(v) => v && pickLocation(v)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>{LOCATION_TYPES.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
                 </Select>
+                {lockedBed && locationType === 'external_hotel' && (
+                  <p className="text-[11px] font-medium text-amber-700 dark:text-amber-400">
+                    Switching to External — the locked bed will be released on save (therapist travels to the hotel room).
+                  </p>
+                )}
               </div>
             )}
             <div className="flex flex-col gap-2 col-span-2">

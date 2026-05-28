@@ -54,7 +54,7 @@ import { InterruptDialog } from '@/components/sales-orders/interrupt-dialog';
 import { ANY_GENDER, canPerformGroup, matchesGender } from '@/lib/therapist-availability';
 
 function peso(cents: number): string {
-  return `₱${(cents / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
+  return `₱${(cents / 100).toLocaleString('en-PH', { maximumFractionDigits: 0 })}`;
 }
 
 interface OrderItem {
