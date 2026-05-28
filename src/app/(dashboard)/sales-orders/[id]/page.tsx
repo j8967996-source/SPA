@@ -10,6 +10,7 @@ import { OrderNoteEditor } from '@/components/sales-orders/order-note-editor';
 import { PaymentAdjust } from '@/components/sales-orders/payment-adjust';
 import { OrderStatusActions } from '@/components/sales-orders/order-status-actions';
 import { ServiceBadge, PaymentBadge } from '@/components/sales-orders/order-badges';
+import { RetryOrderPostingButton } from '@/components/sales-orders/retry-order-posting-button';
 import { ReportIncidentDialog } from '@/components/incidents/report-incident-dialog';
 
 export const dynamic = 'force-dynamic';
@@ -364,10 +365,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
       {erp.posting_status === 'failed' && (
         <div className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3">
           <TriangleAlert className="size-5 shrink-0 text-destructive mt-0.5" />
-          <div className="text-sm">
+          <div className="flex-1 text-sm">
             <p className="font-bold text-destructive">ERP posting failed — reverted to the previous status.</p>
-            <p className="font-medium text-destructive/80">{erp.posting_error ?? 'Unknown error'} — a manager can retry the posting.</p>
+            <p className="font-medium text-destructive/80">{erp.posting_error ?? 'Unknown error'}</p>
           </div>
+          <RetryOrderPostingButton orderId={order.id} canManage={canManage} />
         </div>
       )}
 

@@ -19,8 +19,20 @@ export function ConfirmRevenueButton({ branchId, date, count, disabled }: Props)
   function confirm() {
     startTransition(async () => {
       const r = await confirmRevenue({ branch_id: branchId, date });
-      if (r.ok) toast.success(`Confirmed — ${r.data?.closed ?? 0} order(s) closed`);
-      else toast.error(r.error);
+      if (r.ok) {
+        const closed = r.data?.closed ?? 0;
+        const failed = r.data?.failed ?? 0;
+        if (failed > 0) {
+          // Partial: some orders posted, others failed and stayed in their
+          // prior status. Open the failed orders to retry from the ERP banner.
+          toast.error(
+            `Closed ${closed} · ${failed} ERP post failed — open the order(s) to retry. (${r.data?.first_error ?? ''})`,
+            { duration: 12000 },
+          );
+        } else {
+          toast.success(`Confirmed — ${closed} order(s) closed`);
+        }
+      } else toast.error(r.error);
     });
   }
 
