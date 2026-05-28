@@ -377,6 +377,7 @@ export function SoaWorkspace({
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" className="size-4 cursor-pointer accent-primary" checked={allHistSelected} onChange={toggleAllHist} />
               <span className="text-sm font-bold">Select all ({filteredHistory.length})</span>
+              <span className="text-xs font-medium text-muted-foreground">— pick statements to download as PDF / ZIP</span>
             </label>
             {histSel.size > 0 && (
               <div className="flex items-center gap-3">
@@ -430,9 +431,6 @@ export function SoaWorkspace({
                         <TableCell className="text-center"><Badge variant={STATUS_VARIANT[s.status] ?? 'secondary'} className="font-bold capitalize">{s.status.replace('_', ' ')}</Badge></TableCell>
                         <TableCell>
                           <div className="flex items-center justify-end gap-1">
-                            <a href={`/reconciliation/soa/${s.id}/pdf`} title="Download PDF" className="rounded p-1 text-muted-foreground hover:text-primary hover:bg-accent">
-                              <Download className="size-4" />
-                            </a>
                             <SoaActions id={s.id} status={s.status} settlementType={s.settlement_type} outstandingCents={s.outstanding_cents} collect={false} />
                           </div>
                         </TableCell>

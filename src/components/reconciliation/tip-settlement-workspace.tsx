@@ -19,6 +19,16 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
 import { loadOpenTipGroups, settleTips, voidTipSettlement, retryTipPosting, type TipGroup } from '@/app/(dashboard)/reconciliation/tips/actions';
 
@@ -74,6 +84,7 @@ export function TipSettlementWorkspace({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [histExpanded, setHistExpanded] = useState<Set<string>>(new Set());
+  const [voidConfirmId, setVoidConfirmId] = useState<string | null>(null);
   const [loading, startLoad] = useTransition();
   const [pending, startGen] = useTransition();
 
@@ -323,7 +334,7 @@ export function TipSettlementWorkspace({
                             <Download className="size-3.5" /> PDF
                           </a>
                           {s.status === 'closed' && (
-                            <Button size="sm" variant="ghost" className="text-destructive" onClick={() => doVoid(s.id)} disabled={pending}>Void</Button>
+                            <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setVoidConfirmId(s.id)} disabled={pending}>Void</Button>
                           )}
                         </div>
                       </TableCell>
@@ -375,6 +386,27 @@ export function TipSettlementWorkspace({
           </Table>
         </Card>
       )}
+
+      <AlertDialog open={!!voidConfirmId} onOpenChange={(o) => { if (!o) setVoidConfirmId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Void this tip settlement?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The settlement is marked void and its tips return to the open pool so they can be re-settled. Any ERP posting on this settlement is left intact — reverse it in Acumatica if needed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { if (voidConfirmId) doVoid(voidConfirmId); setVoidConfirmId(null); }}
+              disabled={pending}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              Void
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

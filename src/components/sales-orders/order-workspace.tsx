@@ -246,6 +246,7 @@ export function OrderWorkspace({
   const [interruptItem, setInterruptItem] = useState<OrderItem | null>(null);
   const [confirmFinish, setConfirmFinish] = useState<OrderItem | null>(null);
   const [cancelItem, setCancelItem] = useState<OrderItem | null>(null);
+  const [voidPaymentId, setVoidPaymentId] = useState<string | null>(null);
 
   const due = Math.max(0, order.total_cents - order.paid_cents);
   const totalTips = payments.reduce((s, p) => s + p.tip_cents, 0);
@@ -1067,7 +1068,7 @@ export function OrderWorkspace({
                       {p.amount_cents < 0 && <span className="rounded bg-destructive/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-destructive">Refund</span>}
                       <span className="font-bold tabular">{peso(p.amount_cents)}</span>
                       {order.status !== 'paid' && (
-                        <Button size="icon-sm" variant="ghost" onClick={() => doVoidPayment(p.id)} disabled={pending} title="Remove payment">
+                        <Button size="icon-sm" variant="ghost" onClick={() => setVoidPaymentId(p.id)} disabled={pending} title="Remove payment">
                           <Trash2 className="size-3.5 text-destructive" />
                         </Button>
                       )}
@@ -1186,6 +1187,27 @@ export function OrderWorkspace({
             <AlertDialogCancel>Keep it</AlertDialogCancel>
             <AlertDialogAction onClick={() => { if (cancelItem) doSkipItem(cancelItem.id); setCancelItem(null); }}>
               Cancel service
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!voidPaymentId} onOpenChange={(o) => { if (!o) setVoidPaymentId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove this payment?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The amount returns to the order's outstanding balance. A stored-value redemption is refunded back onto the card; tips on this payment are removed. Already-settled tips block the removal.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>Keep it</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { if (voidPaymentId) doVoidPayment(voidPaymentId); setVoidPaymentId(null); }}
+              disabled={pending}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              Remove payment
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

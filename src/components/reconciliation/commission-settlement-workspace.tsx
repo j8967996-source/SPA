@@ -19,6 +19,16 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { cn } from '@/lib/utils';
 import { loadCommissionGroups, settleCommission, voidCommissionPeriod, type CommGroup } from '@/app/(dashboard)/reconciliation/commission/actions';
 
@@ -78,6 +88,7 @@ export function CommissionSettlementWorkspace({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [histExpanded, setHistExpanded] = useState<Set<string>>(new Set());
+  const [voidConfirmId, setVoidConfirmId] = useState<string | null>(null);
   const [loading, startLoad] = useTransition();
   const [pending, startGen] = useTransition();
 
@@ -299,7 +310,7 @@ export function CommissionSettlementWorkspace({
                       <TableCell onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end">
                           {p.status === 'closed' && (
-                            <Button size="sm" variant="ghost" className="text-destructive" onClick={() => doVoid(p.id)} disabled={pending}>Void</Button>
+                            <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setVoidConfirmId(p.id)} disabled={pending}>Void</Button>
                           )}
                         </div>
                       </TableCell>
@@ -375,6 +386,27 @@ export function CommissionSettlementWorkspace({
           </Table>
         </Card>
       )}
+
+      <AlertDialog open={!!voidConfirmId} onOpenChange={(o) => { if (!o) setVoidConfirmId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Void this commission period?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The period is marked void and its commission entries return to the open pool so they can be re-settled. Already-paid commission (handled outside this system) isn't affected here.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { if (voidConfirmId) doVoid(voidConfirmId); setVoidConfirmId(null); }}
+              disabled={pending}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              Void
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

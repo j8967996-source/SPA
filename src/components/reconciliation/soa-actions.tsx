@@ -5,6 +5,16 @@ import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -137,6 +147,7 @@ export function SoaActions({
   allowVoid?: boolean; // show Void (statement management lives in SOA History)
 }) {
   const [pending, startTransition] = useTransition();
+  const [voidOpen, setVoidOpen] = useState(false);
   const run = (fn: () => Promise<{ ok: boolean; error?: string }>, ok: string) =>
     startTransition(async () => {
       const r = await fn();
@@ -148,17 +159,39 @@ export function SoaActions({
   if (!collect && !allowVoid) return null;
 
   return (
-    <div className="flex items-center gap-2">
-      {collect && (settlementType === 'intercompany' ? (
-        // Intercompany: one-click settle = transfer to cost (no cash).
-        <Button size="sm" onClick={() => run(() => settleSOA(id), 'SOA settled')} disabled={pending}>Settle</Button>
-      ) : (
-        // Third-party: collect money via recorded payments.
-        <RecordPaymentDialog id={id} outstandingCents={outstandingCents} />
-      ))}
-      {allowVoid && (
-        <Button size="sm" variant="ghost" className="text-destructive" onClick={() => run(() => voidSOA(id), 'SOA voided')} disabled={pending}>Void</Button>
-      )}
-    </div>
+    <>
+      <div className="flex items-center gap-2">
+        {collect && (settlementType === 'intercompany' ? (
+          // Intercompany: one-click settle = transfer to cost (no cash).
+          <Button size="sm" onClick={() => run(() => settleSOA(id), 'SOA settled')} disabled={pending}>Settle</Button>
+        ) : (
+          // Third-party: collect money via recorded payments.
+          <RecordPaymentDialog id={id} outstandingCents={outstandingCents} />
+        ))}
+        {allowVoid && (
+          <Button size="sm" variant="ghost" className="text-destructive" onClick={() => setVoidOpen(true)} disabled={pending}>Void</Button>
+        )}
+      </div>
+      <AlertDialog open={voidOpen} onOpenChange={setVoidOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Void this statement?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The SOA is voided and its covered orders are released back to the Generate pool. Only an unsettled, unpaid statement can be plain-voided — settled or partly-paid statements need a reversal.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={pending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { run(() => voidSOA(id), 'SOA voided'); setVoidOpen(false); }}
+              disabled={pending}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              Void
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
