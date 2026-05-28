@@ -7,8 +7,10 @@ import { createAuditedClient } from '@/lib/supabase/server';
 import { currentSession, isManager } from '@/lib/auth';
 import { canAccessBranch } from '@/lib/branch-access';
 import { isDayCashClosed } from '@/app/(dashboard)/reconciliation/cash/actions';
-import { postToErp, type PostToErpResult } from '@/lib/erp-posting';
-import type { GLLine } from '@/lib/acumatica';
+import { acumaticaConfigured } from '@/lib/erp-posting';
+import { pushGLEntry, type GLLine } from '@/lib/acumatica';
+import { readAcuSessionCookie } from '@/lib/session';
+import { createServiceClient } from '@/lib/supabase/server';
 import { assertNoBlockedClose } from '@/lib/business-day';
 
 const REVENUE_ACCOUNT = '40140'; // services revenue
@@ -50,7 +52,18 @@ async function lookupTx(
  * failure, gl_batch_nbr written on success). Skipped end-to-end when Acumatica
  * isn't configured (status just flips to closed, no GL call).
  */
-async function postOrderRevenueToErp(orderId: string, arMethodId: string | null): Promise<PostToErpResult> {
+/** Build the per-order GL lines (DR money / CR revenue + tip pair). Returns
+ *  the lines plus the order's branch_id/code so the caller can batch many
+ *  orders into one journal. Pure compute — no DB writes, no ERP push.
+ *
+ *  An order's lines stay aggregated WITHIN the order (e.g. PAYMAYA payment +
+ *  PAYMAYA tip share one DR 10121 line tagged with the order_no) but are NOT
+ *  merged across orders — every order keeps its own per-account lines so the
+ *  posted GL voucher shows each order's full detail (user requirement). */
+async function buildOrderRevenueLines(
+  orderId: string,
+  arMethodId: string | null,
+): Promise<{ ok: true; lines: GLLine[]; branchId: string; branchCode: string; orderNo: string; serviceDate: string } | { ok: false; error: string }> {
   const supabase = await createAuditedClient();
   const { data: o } = await supabase
     .from('orders')
@@ -77,8 +90,8 @@ async function postOrderRevenueToErp(orderId: string, arMethodId: string | null)
   }
   const tipsTotal = (o.tips ?? []).reduce((s, t) => s + t.amount_cents, 0);
 
-  // One ledger keyed by account+sub — same account from multiple sources
-  // (e.g. PAYMAYA bill + PAYMAYA tip → DR 10121) aggregates into one line.
+  // Ledger scoped to THIS order — same account from multiple sources
+  // (e.g. PAYMAYA bill + PAYMAYA tip → DR 10121) aggregates within the order.
   const ledger = new Map<string, { sub: string; dr: number; cr: number; desc: string }>();
   function add(account: string, sub: string | null, drCents: number, crCents: number, desc: string) {
     const subUse = (sub && sub.length > 0 ? sub : '000000000');
@@ -93,7 +106,7 @@ async function postOrderRevenueToErp(orderId: string, arMethodId: string | null)
     // AR-billed order: DR 10200 / CR 40140 = total.
     const tx = await lookupTx(supabase, o.branch_id, arMethodId, REVENUE_ACCOUNT);
     if (!tx?.debit_account || !tx?.credit_account) {
-      return { ok: false, error: `Missing AR revenue tx code for this branch` };
+      return { ok: false, error: `${o.order_no}: missing AR revenue tx code` };
     }
     add(tx.debit_account, tx.debit_subaccount, o.total_cents, 0, `${o.order_no} AR`);
     add(tx.credit_account, tx.credit_subaccount, 0, o.total_cents, `${o.order_no} revenue`);
@@ -102,7 +115,7 @@ async function postOrderRevenueToErp(orderId: string, arMethodId: string | null)
       if (amount === 0) continue;
       const tx = await lookupTx(supabase, o.branch_id, methodId, REVENUE_ACCOUNT);
       if (!tx?.debit_account || !tx?.credit_account) {
-        return { ok: false, error: `Missing revenue tx code for a payment method on ${o.order_no}` };
+        return { ok: false, error: `${o.order_no}: missing revenue tx code for a payment method` };
       }
       add(tx.debit_account, tx.debit_subaccount, amount, 0, `${o.order_no} receipt`);
       add(tx.credit_account, tx.credit_subaccount, 0, amount, `${o.order_no} revenue`);
@@ -130,17 +143,7 @@ async function postOrderRevenueToErp(orderId: string, arMethodId: string | null)
     transaction_desc: v.desc,
   }));
 
-  return await postToErp({
-    entityType: 'revenue_confirm',
-    table: 'orders',
-    entityId: orderId,
-    date: o.service_date,
-    branch: branchCode,
-    description: `Revenue ${o.order_no}`,
-    lines,
-    fromStatus: o.status,
-    toStatus: 'closed',
-  });
+  return { ok: true, lines, branchId: o.branch_id, branchCode, orderNo: o.order_no, serviceDate: o.service_date };
 }
 
 export type ActionResult<T = unknown> = { ok: true; data?: T } | { ok: false; error: string };
@@ -230,7 +233,7 @@ export async function isCashClosed(branchId: string, date: string): Promise<bool
 
 const schema = z.object({ branch_id: z.string().uuid(), date: z.string().min(1) });
 
-export async function confirmRevenue(input: unknown): Promise<ActionResult<{ closed: number; failed: number; first_error?: string }>> {
+export async function confirmRevenue(input: unknown): Promise<ActionResult<{ closed: number; failed: number; batchNbr?: string | null; first_error?: string }>> {
   const session = await currentSession();
   if (!isManager(session)) return { ok: false, error: 'Manager permission required to confirm revenue' };
   const parsed = schema.safeParse(input);
@@ -251,76 +254,138 @@ export async function confirmRevenue(input: unknown): Promise<ActionResult<{ clo
   if (eligible.length === 0) return { ok: false, error: 'No orders to confirm for this branch/day' };
 
   const supabase = await createAuditedClient();
+  const svc = createServiceClient(); // for updates that need to bypass RLS during the batch
   const { data: arRow } = await supabase.from('payment_methods').select('id').eq('code', 'ar').maybeSingle();
   const arMethodId = arRow?.id ?? null;
 
-  // Per-order ERP post. Each order = one GL journal (DR money / CR revenue +
-  // tip pair). A single failure doesn't block the batch — successful orders
-  // close cleanly with a batch number; failures stay in their prior status with
-  // posting_status='failed' + posting_error (retriable from the order page).
-  const now = new Date().toISOString();
-  const errors: string[] = [];
-  let closed = 0;
+  // --- Build aggregated GL lines (no DB writes, no ERP push yet) ---
+  // One journal for the whole day: lines stay per-order (each tagged with the
+  // order_no in transaction_desc) so the posted voucher shows full detail. If
+  // ANY order fails to build (missing tx code, etc.) the whole batch aborts
+  // before we touch ERP — atomic by design.
+  const allLines: GLLine[] = [];
+  let branchCode = '';
   for (const o of eligible) {
-    const r = await postOrderRevenueToErp(o.id, arMethodId);
-    if (r.ok) {
-      closed += 1;
-      await supabase.from('order_status_log').insert({
-        entity_type: 'order',
-        entity_id: o.id,
-        from_status: o.status,
-        to_status: 'closed',
-        reason: 'Daily Revenue Confirm',
-        changed_by_staff_id: session!.staffUserId,
-        changed_at: now,
-      });
-    } else {
-      errors.push(`${o.order_no}: ${r.error}`);
-    }
+    const r = await buildOrderRevenueLines(o.id, arMethodId);
+    if (!r.ok) return { ok: false, error: r.error };
+    allLines.push(...r.lines);
+    branchCode = r.branchCode;
   }
 
-  revalidatePath('/reconciliation/revenue-confirm');
-  revalidatePath('/sales-orders');
+  const now = new Date().toISOString();
+  const orderIds = eligible.map((o) => o.id);
+  const orderNos = eligible.map((o) => o.order_no);
 
-  if (closed === 0) return { ok: false, error: errors[0] ?? 'Could not close any orders' };
-  return { ok: true, data: { closed, failed: errors.length, first_error: errors[0] } };
+  // --- ERP not configured: just close all orders (dev / pre-integration mode) ---
+  if (!acumaticaConfigured()) {
+    for (const o of eligible) {
+      await (svc.from('orders') as unknown as { update: (p: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<unknown> } })
+        .update({ status: 'closed' })
+        .eq('id', o.id);
+      await supabase.from('order_status_log').insert({
+        entity_type: 'order', entity_id: o.id,
+        from_status: o.status, to_status: 'closed',
+        reason: 'Daily Revenue Confirm (no ERP)',
+        changed_by_staff_id: session!.staffUserId, changed_at: now,
+      });
+    }
+    revalidatePath('/reconciliation/revenue-confirm');
+    revalidatePath('/sales-orders');
+    return { ok: true, data: { closed: eligible.length, failed: 0, batchNbr: null } };
+  }
+
+  // --- Atomic batch post ---
+  // Mark all eligible orders as posting (audit trail + visible spinner state).
+  await (svc.from('orders') as unknown as { update: (p: Record<string, unknown>) => { in: (c: string, ids: string[]) => Promise<unknown> } })
+    .update({ posting_status: 'posting', posting_error: null })
+    .in('id', orderIds);
+
+  // Log row for the whole batch — entity_id is the first order id as an anchor,
+  // payload carries all order ids + count for traceability.
+  const { data: logRow } = await (supabase.from('erp_posting_log') as unknown as {
+    insert: (p: Record<string, unknown>) => { select: (c: string) => { single: () => Promise<{ data: { id: string } | null }> } };
+  })
+    .insert({
+      entity_type: 'revenue_confirm_batch',
+      entity_id: eligible[0].id,
+      status: 'pending',
+      payload: { kind: 'revenue_confirm', branch_id, date, order_ids: orderIds, order_nos: orderNos, count: eligible.length, lines: allLines },
+      posted_by_staff_id: session?.staffUserId ?? null,
+      acu_session_user_id: session?.acumaticaUserId ?? null,
+    })
+    .select('id')
+    .single();
+
+  try {
+    const cookie = await readAcuSessionCookie();
+    const res = await pushGLEntry(
+      {
+        date, // service_date (all eligible orders share it via loadConfirmable filter)
+        branch: branchCode,
+        description: `Revenue Confirm ${date} (${eligible.length} order${eligible.length > 1 ? 's' : ''})`,
+        currency: 'PHP',
+        lines: allLines,
+      },
+      cookie,
+    );
+
+    // Success: every order gets the SAME batch_nbr — one voucher, many orders.
+    await (svc.from('orders') as unknown as { update: (p: Record<string, unknown>) => { in: (c: string, ids: string[]) => Promise<unknown> } })
+      .update({ status: 'closed', gl_batch_nbr: res.batchNbr, posting_status: 'posted', posting_error: null })
+      .in('id', orderIds);
+
+    if (logRow) {
+      await (supabase.from('erp_posting_log') as unknown as { update: (p: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<unknown> } })
+        .update({ status: 'success', batch_nbr: res.batchNbr, erp_response: res.raw })
+        .eq('id', logRow.id);
+    }
+
+    for (const o of eligible) {
+      await supabase.from('order_status_log').insert({
+        entity_type: 'order', entity_id: o.id,
+        from_status: o.status, to_status: 'closed',
+        reason: `Daily Revenue Confirm · GL ${res.batchNbr ?? '?'}`,
+        changed_by_staff_id: session!.staffUserId, changed_at: now,
+      });
+    }
+
+    revalidatePath('/reconciliation/revenue-confirm');
+    revalidatePath('/sales-orders');
+    return { ok: true, data: { closed: eligible.length, failed: 0, batchNbr: res.batchNbr } };
+  } catch (err) {
+    const errMsg = (err as Error).message || 'GL push failed';
+    // Revert: all orders go back to their prior status (status didn't change
+    // yet, only posting_status); just stamp the error so it's visible.
+    await (svc.from('orders') as unknown as { update: (p: Record<string, unknown>) => { in: (c: string, ids: string[]) => Promise<unknown> } })
+      .update({ posting_status: 'failed', posting_error: errMsg })
+      .in('id', orderIds);
+    if (logRow) {
+      await (supabase.from('erp_posting_log') as unknown as { update: (p: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<unknown> } })
+        .update({ status: 'failed', error_message: errMsg })
+        .eq('id', logRow.id);
+    }
+    revalidatePath('/reconciliation/revenue-confirm');
+    return { ok: false, error: errMsg };
+  }
 }
 
 /** Re-attempt the ERP post for an order whose Revenue Confirm posting failed.
- *  Manager-gated; refuses when the order is already closed or never failed. */
+ *  Manager-gated; retries the WHOLE batch for that order's service_date (since
+ *  Revenue Confirm now posts one journal per day-branch, not per order). The
+ *  caller sees this as a per-order retry but it actually re-confirms every
+ *  eligible order at the same branch+date. */
 export async function retryOrderRevenuePosting(orderId: string): Promise<ActionResult> {
   const session = await currentSession();
   if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
   const supabase = await createAuditedClient();
-  const { data: o } = await supabase.from('orders').select('branch_id, status').eq('id', orderId).maybeSingle();
+  const { data: o } = await supabase.from('orders').select('branch_id, service_date, status').eq('id', orderId).maybeSingle();
   if (!o) return { ok: false, error: 'Order not found' };
   if (!o.branch_id || !(await canAccessBranch(o.branch_id))) return { ok: false, error: 'No access to this branch' };
   if (o.status === 'closed') return { ok: false, error: 'Order is already closed' };
-  try {
-    await assertNoBlockedClose(o.branch_id);
-  } catch (e) {
-    return { ok: false, error: (e as Error).message };
-  }
 
-  // posting_status isn't in the generated DB types yet — cast read.
-  const sb = supabase as unknown as {
-    from: (t: string) => { select: (c: string) => { eq: (k: string, v: string) => { maybeSingle: () => Promise<{ data: { posting_status: string | null } | null }> } } };
-  };
-  const pr = await sb.from('orders').select('posting_status').eq('id', orderId).maybeSingle();
-  if (pr.data?.posting_status !== 'failed') return { ok: false, error: 'Posting is not in a failed state' };
-
-  const { data: arRow } = await supabase.from('payment_methods').select('id').eq('code', 'ar').maybeSingle();
-  const r = await postOrderRevenueToErp(orderId, arRow?.id ?? null);
-  if (r.ok) {
-    await supabase.from('order_status_log').insert({
-      entity_type: 'order', entity_id: orderId,
-      from_status: o.status, to_status: 'closed',
-      reason: 'Revenue Confirm Retry',
-      changed_by_staff_id: session!.staffUserId, changed_at: new Date().toISOString(),
-    });
-  }
-  revalidatePath('/reconciliation/revenue-confirm');
+  // Re-run confirmRevenue for the order's branch+date — it will pick up every
+  // still-eligible order (including this one) and post them as one journal.
+  const r = await confirmRevenue({ branch_id: o.branch_id, date: o.service_date });
   revalidatePath(`/sales-orders/${orderId}`);
-  if (!r.ok) return { ok: false, error: r.error };
-  return { ok: true };
+  return r as ActionResult;
 }
