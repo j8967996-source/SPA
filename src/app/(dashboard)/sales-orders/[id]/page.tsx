@@ -269,6 +269,22 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
   });
 
   const editable = ['draft', 'open', 'in_service'].includes(order.status);
+  // ERP posting outcome (denormalised columns). Read in a separate, cast query so
+  // the typed select stays clean and the page is safe even before the migration
+  // that adds these columns is applied (missing-column errors are tolerated).
+  let erp: { posting_status: string | null; gl_batch_nbr: string | null; posting_error: string | null } = {
+    posting_status: null, gl_batch_nbr: null, posting_error: null,
+  };
+  {
+    const sb = createServiceClient();
+    const r = await (sb.from('orders') as unknown as {
+      select: (c: string) => { eq: (k: string, v: string) => { maybeSingle: () => Promise<{ data: typeof erp | null; error: unknown }> } };
+    })
+      .select('posting_status, gl_batch_nbr, posting_error')
+      .eq('id', id)
+      .maybeSingle();
+    if (!r.error && r.data) erp = r.data;
+  }
 
   // Change history — merged audit timeline (status changes + edits/reopens).
   const supabaseLog = createServiceClient();
@@ -309,6 +325,11 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           <h2 className="text-3xl font-bold tracking-tight font-mono">{order.order_no}</h2>
           <ServiceBadge status={order.status} />
           <PaymentBadge total_cents={order.total_cents} paid_cents={order.paid_cents} is_ar={arBilled} status={order.status} />
+          {erp.gl_batch_nbr && (
+            <span className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs font-bold text-muted-foreground" title="Acumatica GL journal batch">
+              GL #{erp.gl_batch_nbr}
+            </span>
+          )}
           <OrderStatusActions orderId={order.id} status={order.status} canManage={canManage} itemCount={items.length} hasPayments={payments.length > 0} />
           <div className="ml-auto flex items-center gap-3">
             {canManage && !arBilled && ['completed', 'paid'].includes(order.status) && (
@@ -334,6 +355,18 @@ export default async function OrderDetailPage({ params }: { params: Promise<{ id
           <div className="text-sm">
             <p className="font-bold text-destructive">Not fully paid — {peso(order.total_cents - order.paid_cents)} still due</p>
             <p className="font-medium text-destructive/80">Collect the balance from the guest before they leave.</p>
+          </div>
+        </div>
+      )}
+
+      {/* ERP posting failed → the order was reverted to its prior status; show
+          the error so a manager can retry the GL post. */}
+      {erp.posting_status === 'failed' && (
+        <div className="flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3">
+          <TriangleAlert className="size-5 shrink-0 text-destructive mt-0.5" />
+          <div className="text-sm">
+            <p className="font-bold text-destructive">ERP posting failed — reverted to the previous status.</p>
+            <p className="font-medium text-destructive/80">{erp.posting_error ?? 'Unknown error'} — a manager can retry the posting.</p>
           </div>
         </div>
       )}
