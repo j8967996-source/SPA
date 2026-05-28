@@ -16,7 +16,7 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { settleSOA, voidSOA, recordSoaPayment } from '@/app/(dashboard)/reconciliation/soa/actions';
+import { settleSOA, voidSOA, recordSoaPayment, uploadArProof } from '@/app/(dashboard)/reconciliation/soa/actions';
 
 function todayISO(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
@@ -38,21 +38,31 @@ function RecordPaymentDialog({ id, outstandingCents }: { id: string; outstanding
   const [method, setMethod] = useState('cash');
   const [reference, setReference] = useState('');
   const [date, setDate] = useState(todayISO());
+  const [file, setFile] = useState<File | null>(null);
   const [pending, start] = useTransition();
   // Cash drops into today's till → its date is fixed to today and it feeds the
   // shift cash count. The server stamps the real time of entry.
   const isCash = method === 'cash';
 
+  // Upload the proof, then record + post. The proof is required — it's the
+  // evidence for the collection (cash photo / bank remittance slip).
   function submit() {
+    if (!file) { toast.error(isCash ? 'Attach a cash photo' : 'Attach the remittance slip'); return; }
     start(async () => {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('soa_id', id);
+      const up = await uploadArProof(fd);
+      if (!up.ok) { toast.error(up.error); return; }
       const r = await recordSoaPayment({
         soa_id: id,
         amount: Number(amount),
         payment_method: method || null,
         reference_no: reference || null,
         paid_at: isCash ? todayISO() : date,
+        proof_file_path: up.data?.path ?? null,
       });
-      if (r.ok) { toast.success('Payment recorded'); setOpen(false); }
+      if (r.ok) { toast.success('Payment recorded & posted'); setOpen(false); }
       else toast.error(r.error);
     });
   }
@@ -89,6 +99,13 @@ function RecordPaymentDialog({ id, outstandingCents }: { id: string; outstanding
             <Label className="text-xs font-semibold">Reference</Label>
             <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Txn / slip no." />
           </div>
+          <div className="flex flex-col gap-1 col-span-2">
+            <Label className="text-xs font-semibold">
+              {isCash ? 'Cash photo' : 'Remittance slip'} <span className="text-destructive">*</span>
+            </Label>
+            <Input type="file" accept="image/*,application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+            <span className="text-[11px] font-medium text-muted-foreground">Required — attached as proof of collection. Image or PDF, max 10 MB.</span>
+          </div>
           {isCash && (
             <p className="col-span-2 text-[11px] font-medium text-amber-700 dark:text-amber-400">
               Cash is counted into today&apos;s shift cash count.
@@ -97,7 +114,7 @@ function RecordPaymentDialog({ id, outstandingCents }: { id: string; outstanding
         </div>
         <DialogFooter>
           <Button type="button" variant="ghost" onClick={() => setOpen(false)} disabled={pending}>Cancel</Button>
-          <Button type="button" onClick={submit} disabled={pending || !amount}>{pending ? 'Saving…' : 'Record'}</Button>
+          <Button type="button" onClick={submit} disabled={pending || !amount || !file}>{pending ? 'Saving…' : 'Confirm & post'}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -604,6 +604,37 @@ export async function recordSoaPayment(input: unknown): Promise<ActionResult> {
   return { ok: true };
 }
 
+/** Upload an AR collection proof (remittance slip / cash photo) to the private
+ *  ar-proofs bucket. Returns the storage path to store on the payment row. */
+export async function uploadArProof(formData: FormData): Promise<ActionResult<{ path: string }>> {
+  const session = await currentSession();
+  if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
+  const file = formData.get('file');
+  const soaId = formData.get('soa_id');
+  if (!(file instanceof File) || file.size === 0) return { ok: false, error: 'Choose a file to upload' };
+  if (typeof soaId !== 'string') return { ok: false, error: 'Missing statement reference' };
+  if (file.size > 10 * 1024 * 1024) return { ok: false, error: 'File is too large (max 10 MB)' };
+  const supabase = await createAuditedClient();
+  const ext = (file.name.split('.').pop() ?? 'bin').toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin';
+  const path = `${soaId}/${Date.now()}.${ext}`;
+  const buf = Buffer.from(await file.arrayBuffer());
+  const { error } = await supabase.storage
+    .from('ar-proofs')
+    .upload(path, buf, { contentType: file.type || 'application/octet-stream', upsert: false });
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: { path } };
+}
+
+/** Short-lived signed URL to view a stored AR proof (bucket is private). */
+export async function getArProofUrl(path: string): Promise<ActionResult<{ url: string }>> {
+  const session = await currentSession();
+  if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
+  const supabase = await createAuditedClient();
+  const { data, error } = await supabase.storage.from('ar-proofs').createSignedUrl(path, 600);
+  if (error || !data) return { ok: false, error: error?.message ?? 'Could not generate link' };
+  return { ok: true, data: { url: data.signedUrl } };
+}
+
 export async function voidSOA(id: string): Promise<ActionResult> {
   const session = await currentSession();
   if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
