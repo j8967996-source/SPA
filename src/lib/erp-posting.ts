@@ -3,7 +3,7 @@ import 'server-only';
 import { createServiceClient } from '@/lib/supabase/server';
 import { currentSession } from '@/lib/auth';
 import { readAcuSessionCookie } from '@/lib/session';
-import { pushGLEntry, attachFileToJournal, type GLLine } from '@/lib/acumatica';
+import { pushGLEntry, attachFileToJournal, pushAPBill, attachFileToBill, type GLLine, type APLine } from '@/lib/acumatica';
 
 export const acumaticaConfigured = (): boolean => !!process.env.ACUMATICA_BASE_URL;
 
@@ -138,6 +138,118 @@ export async function postToErp(args: PostToErpArgs): Promise<PostToErpResult> {
     const patch: Record<string, unknown> = { posting_status: 'failed', posting_error: error };
     if (args.fromStatus) patch[statusCol] = args.fromStatus; // revert
     await patchRow(patch);
+    if (log) {
+      await supabase.from('erp_posting_log').update({ status: 'failed', error_message: error }).eq('id', log.id);
+    }
+    return { ok: false, error };
+  }
+}
+
+interface PostBillToErpArgs {
+  /** Audit-log entity type, e.g. 'tip_settlement'. */
+  entityType: string;
+  /** Table that carries the posting columns. */
+  table: PostingTable;
+  entityId: string;
+  /** Acumatica AP Bill fields. */
+  vendor: string;
+  vendorRef: string;
+  date: string; // YYYY-MM-DD
+  description: string;
+  financialBranch: string;
+  cashAccount: string;
+  currency?: string;
+  lines: APLine[];
+  /** Attach this stored file to the posted bill (best effort). */
+  proofPath?: string;
+  proofBucket?: string;
+}
+
+/**
+ * Post an AP Bill to Acumatica (mirrors postToErp but for AP, not GL). Same
+ * rule: failure → posting_status='failed' + posting_error + log retriable;
+ * success → posting_status='posted' + voucher number (the Bill ReferenceNbr,
+ * stored in gl_batch_nbr) + log success + attach the detail PDF to the bill.
+ * No-op until Acumatica is configured.
+ */
+export async function postBillToErp(args: PostBillToErpArgs): Promise<PostToErpResult> {
+  const supabase = createServiceClient();
+  const patchRow = (patch: Record<string, unknown>) =>
+    (supabase.from(args.table) as unknown as {
+      update: (p: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<unknown> };
+    })
+      .update(patch)
+      .eq('id', args.entityId);
+
+  if (!acumaticaConfigured()) return { ok: true, batchNbr: null, skipped: true };
+
+  const session = await currentSession();
+  const cookie = await readAcuSessionCookie();
+
+  await patchRow({ posting_status: 'posting', posting_error: null });
+  const { data: log } = await supabase
+    .from('erp_posting_log')
+    .insert({
+      entity_type: args.entityType,
+      entity_id: args.entityId,
+      status: 'pending',
+      payload: {
+        kind: 'ap_bill', vendor: args.vendor, vendor_ref: args.vendorRef, date: args.date,
+        description: args.description, financial_branch: args.financialBranch,
+        cash_account: args.cashAccount, currency: args.currency ?? 'PHP', lines: args.lines,
+      } as never,
+      posted_by_staff_id: session?.staffUserId ?? null,
+      acu_session_user_id: session?.acumaticaUserId ?? null,
+    })
+    .select('id')
+    .single();
+
+  try {
+    const res = await pushAPBill(
+      {
+        vendor: args.vendor, vendor_ref: args.vendorRef, date: args.date,
+        description: args.description, financial_branch: args.financialBranch,
+        cash_account: args.cashAccount, currency: args.currency ?? 'PHP', lines: args.lines,
+      },
+      cookie,
+    );
+    const ref = res.refNbr;
+    await patchRow({ posting_status: 'posted', gl_batch_nbr: ref, posting_error: null });
+    if (log) {
+      await supabase
+        .from('erp_posting_log')
+        .update({ status: 'success', batch_nbr: ref, erp_response: res.raw as never })
+        .eq('id', log.id);
+    }
+
+    // Attach the detail PDF to the bill. Best-effort: bill is already posted.
+    if (args.proofPath && ref) {
+      try {
+        const bucket = args.proofBucket ?? 'tip-pdfs';
+        const dl = await supabase.storage.from(bucket).download(args.proofPath);
+        if (dl.data) {
+          const buf = await dl.data.arrayBuffer();
+          const filename = args.proofPath.split('/').pop() ?? 'attachment.pdf';
+          await attachFileToBill(
+            { refNbr: ref, filename, fileBuffer: buf, mimeType: dl.data.type || 'application/pdf' },
+            cookie,
+          );
+        }
+      } catch (attachErr) {
+        const msg = attachErr instanceof Error ? attachErr.message : String(attachErr);
+        console.error('[ERP attach] bill attach failed:', msg);
+        if (log) {
+          await supabase
+            .from('erp_posting_log')
+            .update({ error_message: `Posted (ref ${ref}) but attach failed: ${msg}` })
+            .eq('id', log.id);
+        }
+      }
+    }
+    return { ok: true, batchNbr: ref };
+  } catch (e) {
+    const error = e instanceof Error ? e.message : 'AP posting failed';
+    await patchRow({ posting_status: 'failed', posting_error: error });
     if (log) {
       await supabase.from('erp_posting_log').update({ status: 'failed', error_message: error }).eq('id', log.id);
     }

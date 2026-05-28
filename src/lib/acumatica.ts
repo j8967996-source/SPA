@@ -221,6 +221,133 @@ export async function pushGLEntry(
   return { batchNbr, raw: created };
 }
 
+// ── AP Bill (tips → payroll, refunds, etc.) ──────────────────────────────────
+// Pattern mirrors the sibling HHGeeeeeeee/ENGO repo's pushAPBill: two-phase PUT
+// (Hold:true to insert + details → second PUT with ReferenceNbr + Hold:false to
+// release) so the bill ends up as open AP (not stuck on hold).
+
+export interface APLine {
+  account: string;
+  sub_account: string;
+  quantity: number;
+  unit_cost: number;
+  amount: number;
+  transaction_desc: string;
+}
+
+export interface APBillPushResult {
+  refNbr: string | null;
+  raw: unknown;
+}
+
+export async function pushAPBill(
+  bill: {
+    vendor: string;
+    vendor_ref: string;
+    date: string;
+    description: string;
+    financial_branch: string;
+    cash_account: string;
+    currency?: string;
+    lines: APLine[];
+  },
+  userCookie: string | null | undefined,
+): Promise<APBillPushResult> {
+  const cookie = ensureCookie(userCookie);
+  const body = {
+    Type: { value: 'Bill' },
+    CurrencyID: { value: bill.currency ?? 'PHP' },
+    CashAccount: { value: bill.cash_account },
+    Vendor: { value: bill.vendor },
+    VendorRef: { value: bill.vendor_ref },
+    Date: { value: bill.date },
+    Description: { value: bill.description },
+    BranchID: { value: bill.financial_branch },
+    Hold: { value: true },
+    Details: bill.lines.map((l) => ({
+      BranchID: { value: bill.financial_branch },
+      Account: { value: l.account },
+      // Acumatica subaccount can't contain dashes — strip before posting.
+      Subaccount: { value: l.sub_account.replace(/-/g, '') },
+      Qty: { value: l.quantity },
+      UnitCost: { value: l.unit_cost },
+      Amount: { value: l.amount },
+      TransactionDescription: { value: l.transaction_desc },
+    })),
+  };
+
+  const res = await fetch(`${api()}/Bill?$expand=Details`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Cookie: cookie },
+    body: JSON.stringify(body),
+  });
+  if (res.status === 401) throw new AcuSessionRequiredError();
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`AP Bill push failed (${res.status}): ${text.slice(0, 1500)}`);
+  }
+  const created = (await res.json()) as { ReferenceNbr?: { value?: string } };
+  const refNbr = created?.ReferenceNbr?.value ?? null;
+
+  // Phase 2: release the hold → the bill is open AP (vendor balance updated).
+  if (refNbr) {
+    const r2 = await fetch(`${api()}/Bill`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Cookie: cookie },
+      body: JSON.stringify({
+        Type: { value: 'Bill' },
+        ReferenceNbr: { value: refNbr },
+        Vendor: { value: bill.vendor },
+        Hold: { value: false },
+      }),
+    });
+    if (r2.status === 401) throw new AcuSessionRequiredError();
+    if (!r2.ok) {
+      const text = await r2.text().catch(() => '');
+      throw new Error(`AP Bill release failed (${r2.status}): ${text.slice(0, 1500)}`);
+    }
+  }
+
+  return { refNbr, raw: created };
+}
+
+/**
+ * Attach a file to a posted AP Bill (e.g. the tip-settlement detail PDF).
+ * Uses the same `/files/{filename}` PUT pattern as the journal attach.
+ */
+export async function attachFileToBill(
+  opts: {
+    refNbr?: string | null;
+    guid?: string | null;
+    filename: string;
+    fileBuffer: ArrayBuffer;
+    mimeType: string;
+  },
+  userCookie: string | null | undefined,
+): Promise<true> {
+  const cookie = ensureCookie(userCookie);
+  const safeName = encodeURIComponent(opts.filename);
+  let url: string;
+  if (opts.refNbr) {
+    url = `${api()}/Bill/Bill/${encodeURIComponent(opts.refNbr)}/files/${safeName}`;
+  } else if (opts.guid) {
+    url = `${api()}/Bill/${opts.guid}/files/${safeName}`;
+  } else {
+    throw new Error('attachFileToBill: refNbr or guid required');
+  }
+  const res = await fetch(url, {
+    method: 'PUT',
+    headers: { Cookie: cookie, 'Content-Type': opts.mimeType || 'application/octet-stream', Accept: 'application/json' },
+    body: opts.fileBuffer,
+  });
+  if (res.status === 401) throw new AcuSessionRequiredError();
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Attach file to bill failed (${res.status}): ${text.slice(0, 800)}`);
+  }
+  return true;
+}
+
 /**
  * Attach a file to an already-posted JournalTransaction (e.g. the AR collection
  * proof — remittance slip / cash photo). Acumatica file-attach pattern (per the

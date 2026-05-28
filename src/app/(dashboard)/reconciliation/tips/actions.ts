@@ -6,6 +6,8 @@ import { z } from 'zod';
 import { createAuditedClient } from '@/lib/supabase/server';
 import { currentSession, isManager } from '@/lib/auth';
 import { canAccessBranch } from '@/lib/branch-access';
+import { postBillToErp } from '@/lib/erp-posting';
+import { renderTipPdf } from '@/lib/tip-pdf';
 
 export type ActionResult<T = unknown> = { ok: true; data?: T } | { ok: false; error: string };
 
@@ -66,7 +68,7 @@ export async function settleTips(input: unknown): Promise<ActionResult<{ id: str
   const supabase = await createAuditedClient();
   const { data: rows } = await supabase
     .from('tips')
-    .select('id, amount_cents, status, settlement_id, order:orders!tips_order_id_fkey ( service_date, branch_id )')
+    .select('id, amount_cents, status, settlement_id, therapist:employees!tips_therapist_id_fkey ( id, name ), order:orders!tips_order_id_fkey ( service_date, branch_id )')
     .in('id', tip_ids);
   const valid = (rows ?? []).filter((t) => t.status === 'open' && !t.settlement_id && one(t.order)?.branch_id === branch_id);
   if (valid.length === 0) return { ok: false, error: 'No open tips to settle for the selection' };
@@ -94,6 +96,58 @@ export async function settleTips(input: unknown): Promise<ActionResult<{ id: str
   const ids = valid.map((t) => t.id);
   const { error: te } = await supabase.from('tips').update({ settlement_id: settlement.id, status: 'closed' }).in('id', ids);
   if (te) return { ok: false, error: te.message };
+
+  // Render the per-therapist detail PDF and stash it in our private bucket — we
+  // keep a copy regardless of ERP. The same buffer is attached to the AP Bill
+  // on a successful post (best effort).
+  const pdf = await renderTipPdf(settlement.id);
+  let pdfPath: string | null = null;
+  if (pdf) {
+    pdfPath = `${settlement.id}.pdf`;
+    const up = await supabase.storage.from('tip-pdfs').upload(pdfPath, pdf.buffer, { contentType: 'application/pdf', upsert: true });
+    if (up.error) { console.error('[tip-pdf] upload failed:', up.error.message); pdfPath = null; }
+    else {
+      await (supabase.from('tip_settlements') as unknown as { update: (p: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<unknown> } })
+        .update({ pdf_file_path: pdfPath })
+        .eq('id', settlement.id);
+    }
+  }
+
+  // AP Bill: DR 20500 Tips Payable (per therapist) / CR 20100 AP (Acumatica
+  // auto). One line per therapist so payroll downstream can split cleanly.
+  // Vendor + cash account come from env (set at Acumatica integration time);
+  // postBillToErp is a no-op until ACUMATICA_BASE_URL is configured.
+  const byTherapist = new Map<string, { name: string; total: number }>();
+  for (const t of valid) {
+    const th = one(t.therapist);
+    if (!th) continue;
+    const g = byTherapist.get(th.id) ?? { name: th.name ?? '—', total: 0 };
+    g.total += t.amount_cents;
+    byTherapist.set(th.id, g);
+  }
+  const apLines = [...byTherapist.values()].map((g) => ({
+    account: '20500', // Tips Payable — matches OSP2-SETTLE-TIP-TO-AP
+    sub_account: '000000000',
+    quantity: 1,
+    unit_cost: g.total / 100,
+    amount: g.total / 100,
+    transaction_desc: `Tips · ${g.name}`,
+  }));
+  await postBillToErp({
+    entityType: 'tip_settlement',
+    table: 'tip_settlements',
+    entityId: settlement.id,
+    vendor: process.env.ACUMATICA_TIPS_VENDOR ?? '',
+    vendorRef: settlement_no,
+    date: new Date().toISOString().slice(0, 10),
+    description: `Tip settlement ${settlement_no} (${period_from} to ${period_to})`,
+    financialBranch: branch?.code ?? '',
+    cashAccount: process.env.ACUMATICA_TIPS_CASH_ACCOUNT ?? '',
+    currency: 'PHP',
+    lines: apLines,
+    proofPath: pdfPath ?? undefined,
+    proofBucket: 'tip-pdfs',
+  });
 
   revalidatePath('/reconciliation/tips');
   return { ok: true, data: { id: settlement.id, count: valid.length } };
