@@ -509,23 +509,24 @@ const paymentSchema = z.object({
   reference_no: z.string().max(120).optional().nullable(),
   paid_at: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Pick a date').optional(),
   note: z.string().max(300).optional().nullable(),
+  proof_file_path: z.string().max(400).optional().nullable(),
 });
 
 /**
  * Record a (possibly partial) payment against a THIRD-PARTY statement. Updates
- * paid / outstanding and flips to partial_paid or settled.
- * NOTE: ERP cash-receipt posting (DR 10111 → CR 10200) deferred.
+ * paid / outstanding and flips to partial_paid or settled, then posts the cash
+ * receipt to ERP: DR cash/bank (per method, from transaction_codes) / CR AR.
  */
 export async function recordSoaPayment(input: unknown): Promise<ActionResult> {
   const session = await currentSession();
   if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
   const parsed = paymentSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
-  const { soa_id, amount, payment_method, reference_no, paid_at, note } = parsed.data;
+  const { soa_id, amount, payment_method, reference_no, paid_at, note, proof_file_path } = parsed.data;
   const supabase = await createAuditedClient();
   const { data: soa } = await supabase
     .from('revenue_soa')
-    .select('status, total_cents, paid_cents, settlement_type, branch_id')
+    .select('soa_no, status, total_cents, paid_cents, settlement_type, branch_id, branch:branches ( code )')
     .eq('id', soa_id)
     .single();
   if (!soa) return { ok: false, error: 'SOA not found' };
@@ -544,12 +545,18 @@ export async function recordSoaPayment(input: unknown): Promise<ActionResult> {
   const paidAtIso = isCash
     ? new Date().toISOString()
     : (paid_at ? `${paid_at}T00:00:00+08:00` : new Date().toISOString());
-  const ins = await supabase.from('revenue_soa_payments').insert({
-    soa_id, amount_cents: amountCents, paid_at: paidAtIso,
-    payment_method: payment_method || null, reference_no: reference_no || null, note: note || null,
-    recorded_by: session!.staffUserId,
-  });
-  if (ins.error) return { ok: false, error: ins.error.message };
+  const ins = await supabase
+    .from('revenue_soa_payments')
+    .insert({
+      soa_id, amount_cents: amountCents, paid_at: paidAtIso,
+      payment_method: payment_method || null, reference_no: reference_no || null, note: note || null,
+      proof_file_path: proof_file_path || null,
+      recorded_by: session!.staffUserId,
+    } as never)
+    .select('id')
+    .single();
+  if (ins.error || !ins.data) return { ok: false, error: ins.error?.message ?? 'Payment insert failed' };
+  const paymentId = (ins.data as { id: string }).id;
 
   const newPaid = soa.paid_cents + amountCents;
   const newOutstanding = soa.total_cents - newPaid;
@@ -558,6 +565,39 @@ export async function recordSoaPayment(input: unknown): Promise<ActionResult> {
     .update({ paid_cents: newPaid, outstanding_cents: newOutstanding, status: newOutstanding <= 0 ? 'settled' : 'partial_paid' })
     .eq('id', soa_id);
   if (upd.error) return { ok: false, error: upd.error.message };
+
+  // ERP: clear the receivable — DR cash/bank (per method, from transaction_codes
+  // settle code), CR AR. The payment is already recorded; a posting failure is
+  // noted on the payment row (retriable), it doesn't undo the collection. No-op
+  // until Acumatica is configured. Intercompany uses settleSOA, not this path.
+  const methodCode = (payment_method ?? '').toLowerCase();
+  const { data: pm } = await supabase.from('payment_methods').select('id').eq('code', methodCode).maybeSingle();
+  const { data: tx } = pm
+    ? await supabase
+        .from('transaction_codes')
+        .select('debit_account, debit_subaccount, credit_account, credit_subaccount')
+        .eq('branch_id', soa.branch_id)
+        .eq('transaction_type', 'settle')
+        .eq('payment_method_id', pm.id)
+        .eq('active', true)
+        .maybeSingle()
+    : { data: null };
+  if (tx?.debit_account && tx?.credit_account) {
+    const tag = soa.soa_no ?? '';
+    await postToErp({
+      entityType: 'soa_payment',
+      table: 'revenue_soa_payments',
+      entityId: paymentId,
+      date: paidAtIso.slice(0, 10),
+      branch: one<{ code: string }>(soa.branch)?.code ?? '',
+      description: `${tag} AR collection (${methodCode})`.trim(),
+      lines: [
+        { account: tx.debit_account, sub_account: tx.debit_subaccount ?? '000000000', debit_amount: amount, credit_amount: null, transaction_desc: `${tag} ${methodCode} receipt`.trim() },
+        { account: tx.credit_account, sub_account: tx.credit_subaccount ?? '000000000', debit_amount: null, credit_amount: amount, transaction_desc: `${tag} AR settle`.trim() },
+      ],
+    });
+  }
+
   revalidatePath('/reconciliation/soa');
   // A cash collection feeds the shift cash count — refresh that page too.
   if (isCash) revalidatePath('/reconciliation/cash');

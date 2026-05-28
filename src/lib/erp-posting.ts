@@ -7,7 +7,7 @@ import { pushGLEntry, type GLLine } from '@/lib/acumatica';
 
 export const acumaticaConfigured = (): boolean => !!process.env.ACUMATICA_BASE_URL;
 
-export type PostingTable = 'orders' | 'revenue_soa' | 'tip_settlements';
+export type PostingTable = 'orders' | 'revenue_soa' | 'revenue_soa_payments' | 'tip_settlements';
 
 interface PostToErpArgs {
   /** Audit-log entity type, e.g. 'revenue_confirm' | 'soa_settle' | 'tip_settlement'. */

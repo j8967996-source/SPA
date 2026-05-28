@@ -22,21 +22,20 @@ function todayISO(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 }
 
-// Settled methods. 'cash' is special — cash physically enters the front-desk
-// till, so a cash collection is counted into today's shift cash count (and is
-// therefore always dated today); the others are back-office (no till impact).
+// Collection methods. Each maps to a branch transaction_code (settle): cash →
+// DR 10108, bank → DR 10111, both CR 10200 AR. 'cash' is special — it physically
+// enters the front-desk till, so it's counted into today's shift cash count (and
+// dated today); a bank deposit is back-office (no till impact).
 const METHOD_OPTIONS = [
   { value: 'cash', label: 'Cash' },
-  { value: 'bank_transfer', label: 'Bank transfer' },
-  { value: 'cheque', label: 'Cheque' },
-  { value: 'other', label: 'Other' },
+  { value: 'bank', label: 'Bank deposit' },
 ];
 
 // Third-party: record a (possibly partial) payment against the statement.
 function RecordPaymentDialog({ id, outstandingCents }: { id: string; outstandingCents: number }) {
   const [open, setOpen] = useState(false);
   const [amount, setAmount] = useState(String(outstandingCents / 100));
-  const [method, setMethod] = useState('bank_transfer');
+  const [method, setMethod] = useState('cash');
   const [reference, setReference] = useState('');
   const [date, setDate] = useState(todayISO());
   const [pending, start] = useTransition();
@@ -88,7 +87,7 @@ function RecordPaymentDialog({ id, outstandingCents }: { id: string; outstanding
           </div>
           <div className="flex flex-col gap-1 col-span-2">
             <Label className="text-xs font-semibold">Reference</Label>
-            <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Txn / cheque no." />
+            <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Txn / slip no." />
           </div>
           {isCash && (
             <p className="col-span-2 text-[11px] font-medium text-amber-700 dark:text-amber-400">
