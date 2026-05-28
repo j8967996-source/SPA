@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
-import { Check, ExternalLink, TriangleAlert } from 'lucide-react';
+import { useCallback, useEffect, useState, useTransition } from 'react';
+import { Check, ExternalLink, RotateCcw, TriangleAlert } from 'lucide-react';
 import { toast } from 'sonner';
 
-import { loadSoaPayments, getArProofUrl, type SoaPaymentRow } from '@/app/(dashboard)/reconciliation/soa/actions';
+import { loadSoaPayments, getArProofUrl, retrySoaPaymentPosting, type SoaPaymentRow } from '@/app/(dashboard)/reconciliation/soa/actions';
 
 function peso(c: number): string {
   return `₱${(c / 100).toLocaleString('en-PH', { minimumFractionDigits: 2 })}`;
@@ -21,17 +21,27 @@ export function SoaPaymentsList({ soaId }: { soaId: string }) {
   const [rows, setRows] = useState<SoaPaymentRow[] | null>(null);
   const [pending, start] = useTransition();
 
-  useEffect(() => {
+  const refresh = useCallback(() => {
     let cancel = false;
     loadSoaPayments(soaId).then((d) => { if (!cancel) setRows(d); });
     return () => { cancel = true; };
   }, [soaId]);
+
+  useEffect(() => refresh(), [refresh]);
 
   function viewProof(path: string) {
     start(async () => {
       const r = await getArProofUrl(path);
       if (r.ok) window.open(r.data!.url, '_blank', 'noopener');
       else toast.error(r.error);
+    });
+  }
+
+  function retry(paymentId: string) {
+    start(async () => {
+      const r = await retrySoaPaymentPosting(paymentId);
+      if (r.ok) { toast.success('Retried — posted to ERP'); refresh(); }
+      else { toast.error(r.error); refresh(); /* error message may have changed */ }
     });
   }
 
@@ -82,11 +92,22 @@ export function SoaPaymentsList({ soaId }: { soaId: string }) {
                     <Check className="size-3" /> GL #{p.gl_batch_nbr}
                   </span>
                 ) : p.posting_status === 'failed' ? (
-                  <span
-                    title={p.posting_error ?? 'ERP posting failed'}
-                    className="inline-flex items-center gap-1 rounded bg-destructive/10 px-1.5 py-0.5 font-bold text-destructive"
-                  >
-                    <TriangleAlert className="size-3" /> Failed
+                  <span className="inline-flex items-center gap-1">
+                    <span
+                      title={p.posting_error ?? 'ERP posting failed'}
+                      className="inline-flex items-center gap-1 rounded bg-destructive/10 px-1.5 py-0.5 font-bold text-destructive"
+                    >
+                      <TriangleAlert className="size-3" /> Failed
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => retry(p.id)}
+                      disabled={pending}
+                      className="inline-flex items-center gap-1 font-bold text-primary hover:underline disabled:opacity-50"
+                      title="Re-attempt the ERP post"
+                    >
+                      <RotateCcw className="size-3" /> Retry
+                    </button>
                   </span>
                 ) : (
                   <span className="text-muted-foreground">—</span>

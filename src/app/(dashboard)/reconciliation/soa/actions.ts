@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { createAuditedClient } from '@/lib/supabase/server';
 import { currentSession, isManager } from '@/lib/auth';
 import { canAccessBranch, getAllowedBranchIds } from '@/lib/branch-access';
-import { postToErp } from '@/lib/erp-posting';
+import { postToErp, type PostToErpResult } from '@/lib/erp-posting';
 
 // AR control account — constant for the whole SPA entity (CR side of a settle).
 const AR_ACCOUNT = '10200';
@@ -513,6 +513,53 @@ const paymentSchema = z.object({
 });
 
 /**
+ * Compose + post the GL entry for a third-party SOA collection. Resolves the
+ * branch's settle transaction_code by payment method (cash → DR 10108, bank →
+ * DR 10111, both CR 10200), and posts via postToErp with the proof attached.
+ * Shared by recordSoaPayment (first attempt) and retrySoaPaymentPosting.
+ */
+async function postSoaPaymentToErp(args: {
+  paymentId: string;
+  soaNo: string;
+  branchId: string;
+  branchCode: string;
+  paidAtIso: string;
+  amountCents: number;
+  methodCode: string;
+  proofPath: string | null;
+}): Promise<PostToErpResult> {
+  const supabase = await createAuditedClient();
+  const amount = args.amountCents / 100;
+  const { data: pm } = await supabase.from('payment_methods').select('id').eq('code', args.methodCode).maybeSingle();
+  if (!pm) return { ok: false, error: `No payment method "${args.methodCode}"` };
+  const { data: tx } = await supabase
+    .from('transaction_codes')
+    .select('debit_account, debit_subaccount, credit_account, credit_subaccount')
+    .eq('branch_id', args.branchId)
+    .eq('transaction_type', 'settle')
+    .eq('payment_method_id', pm.id)
+    .eq('active', true)
+    .maybeSingle();
+  if (!tx?.debit_account || !tx?.credit_account) {
+    return { ok: false, error: `No settle transaction code configured for ${args.methodCode}` };
+  }
+  const tag = args.soaNo;
+  return await postToErp({
+    entityType: 'soa_payment',
+    table: 'revenue_soa_payments',
+    entityId: args.paymentId,
+    date: args.paidAtIso.slice(0, 10),
+    branch: args.branchCode,
+    description: `${tag} AR collection (${args.methodCode})`.trim(),
+    lines: [
+      { account: tx.debit_account, sub_account: tx.debit_subaccount ?? '000000000', debit_amount: amount, credit_amount: null, transaction_desc: `${tag} ${args.methodCode} receipt`.trim() },
+      { account: tx.credit_account, sub_account: tx.credit_subaccount ?? '000000000', debit_amount: null, credit_amount: amount, transaction_desc: `${tag} AR settle`.trim() },
+    ],
+    proofPath: args.proofPath ?? undefined,
+  });
+}
+
+/**
  * Record a (possibly partial) payment against a THIRD-PARTY statement. Updates
  * paid / outstanding and flips to partial_paid or settled, then posts the cash
  * receipt to ERP: DR cash/bank (per method, from transaction_codes) / CR AR.
@@ -567,42 +614,91 @@ export async function recordSoaPayment(input: unknown): Promise<ActionResult> {
   if (upd.error) return { ok: false, error: upd.error.message };
 
   // ERP: clear the receivable — DR cash/bank (per method, from transaction_codes
-  // settle code), CR AR. The payment is already recorded; a posting failure is
-  // noted on the payment row (retriable), it doesn't undo the collection. No-op
-  // until Acumatica is configured. Intercompany uses settleSOA, not this path.
-  const methodCode = (payment_method ?? '').toLowerCase();
-  const { data: pm } = await supabase.from('payment_methods').select('id').eq('code', methodCode).maybeSingle();
-  const { data: tx } = pm
-    ? await supabase
-        .from('transaction_codes')
-        .select('debit_account, debit_subaccount, credit_account, credit_subaccount')
-        .eq('branch_id', soa.branch_id)
-        .eq('transaction_type', 'settle')
-        .eq('payment_method_id', pm.id)
-        .eq('active', true)
-        .maybeSingle()
-    : { data: null };
-  if (tx?.debit_account && tx?.credit_account) {
-    const tag = soa.soa_no ?? '';
-    await postToErp({
-      entityType: 'soa_payment',
-      table: 'revenue_soa_payments',
-      entityId: paymentId,
-      date: paidAtIso.slice(0, 10),
-      branch: one<{ code: string }>(soa.branch)?.code ?? '',
-      description: `${tag} AR collection (${methodCode})`.trim(),
-      lines: [
-        { account: tx.debit_account, sub_account: tx.debit_subaccount ?? '000000000', debit_amount: amount, credit_amount: null, transaction_desc: `${tag} ${methodCode} receipt`.trim() },
-        { account: tx.credit_account, sub_account: tx.credit_subaccount ?? '000000000', debit_amount: null, credit_amount: amount, transaction_desc: `${tag} AR settle`.trim() },
-      ],
-      // Attach the proof (remittance slip / cash photo) to the journal on success.
-      proofPath: proof_file_path || undefined,
-    });
-  }
+  // settle code), CR AR + attach the proof. The payment is already recorded; a
+  // posting failure is noted on the payment row (retriable), it doesn't undo
+  // the collection. No-op until Acumatica is configured. Intercompany uses
+  // settleSOA, not this path.
+  await postSoaPaymentToErp({
+    paymentId,
+    soaNo: soa.soa_no ?? '',
+    branchId: soa.branch_id,
+    branchCode: one<{ code: string }>(soa.branch)?.code ?? '',
+    paidAtIso,
+    amountCents,
+    methodCode: (payment_method ?? '').toLowerCase(),
+    proofPath: proof_file_path ?? null,
+  });
 
   revalidatePath('/reconciliation/soa');
   // A cash collection feeds the shift cash count — refresh that page too.
   if (isCash) revalidatePath('/reconciliation/cash');
+  return { ok: true };
+}
+
+/**
+ * Re-attempt the ERP posting for a SOA payment whose previous posting failed.
+ * Reads the payment + parent SOA, then re-runs the same compose-and-post via
+ * postSoaPaymentToErp. The payment row's posting_status/error/batch_nbr is
+ * updated by postToErp's own contract (success → posted + batch + attach proof;
+ * failure → still failed, error refreshed, retried_count incremented in the
+ * log). Manager-gated; only valid for rows that aren't already posted.
+ */
+export async function retrySoaPaymentPosting(paymentId: string): Promise<ActionResult> {
+  const session = await currentSession();
+  if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
+  const supabase = await createAuditedClient();
+
+  // The new columns (posting_status / proof_file_path / ...) aren't in the
+  // generated types yet — cast the read.
+  const sb = supabase as unknown as {
+    from: (t: string) => {
+      select: (c: string) => {
+        eq: (k: string, v: string) => {
+          maybeSingle: () => Promise<{
+            data: {
+              id: string;
+              soa_id: string;
+              amount_cents: number;
+              payment_method: string | null;
+              paid_at: string;
+              proof_file_path: string | null;
+              posting_status: string | null;
+            } | null;
+            error: unknown;
+          }>;
+        };
+      };
+    };
+  };
+  const pr = await sb
+    .from('revenue_soa_payments')
+    .select('id, soa_id, amount_cents, payment_method, paid_at, proof_file_path, posting_status')
+    .eq('id', paymentId)
+    .maybeSingle();
+  if (!pr.data) return { ok: false, error: 'Payment not found' };
+  const pay = pr.data;
+  if (pay.posting_status === 'posted') return { ok: false, error: 'Already posted to ERP' };
+
+  const { data: soa } = await supabase
+    .from('revenue_soa')
+    .select('soa_no, branch_id, branch:branches ( code )')
+    .eq('id', pay.soa_id)
+    .single();
+  if (!soa) return { ok: false, error: 'Statement not found' };
+  if (!soa.branch_id || !(await canAccessBranch(soa.branch_id))) return { ok: false, error: 'No access to this branch' };
+
+  const r = await postSoaPaymentToErp({
+    paymentId: pay.id,
+    soaNo: soa.soa_no ?? '',
+    branchId: soa.branch_id,
+    branchCode: one<{ code: string }>(soa.branch)?.code ?? '',
+    paidAtIso: pay.paid_at,
+    amountCents: pay.amount_cents,
+    methodCode: (pay.payment_method ?? '').toLowerCase(),
+    proofPath: pay.proof_file_path ?? null,
+  });
+  revalidatePath('/reconciliation/soa');
+  if (!r.ok) return { ok: false, error: r.error };
   return { ok: true };
 }
 
