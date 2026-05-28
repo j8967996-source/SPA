@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useEffect, useState, useTransition } from 'react';
+import { Fragment, useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
@@ -19,6 +19,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { SoaActions } from '@/components/reconciliation/soa-actions';
 import { ArBalanceExplorer } from '@/components/reconciliation/ar-balance-explorer';
@@ -33,6 +40,14 @@ function peso(cents: number): string {
 const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive'> = {
   draft: 'secondary', issued: 'default', partial_paid: 'secondary', settled: 'default', void: 'destructive',
 };
+
+const HIST_STATUS_OPTIONS = [
+  { value: 'all', label: 'All' },
+  { value: 'issued', label: 'Issued' },
+  { value: 'partial_paid', label: 'Partial paid' },
+  { value: 'settled', label: 'Settled' },
+  { value: 'void', label: 'Void' },
+];
 
 export function SoaWorkspace({
   initialFrom,
@@ -115,9 +130,26 @@ export function SoaWorkspace({
     });
   }
 
+  // --- History filter (date + status). Date filter is overlap: a SOA is in
+  // range if its period intersects the chosen window. Selection respects the
+  // filter — Select all selects the currently-visible rows only. ---
+  const [histFrom, setHistFrom] = useState('');
+  const [histTo, setHistTo] = useState('');
+  const [histStatus, setHistStatus] = useState('all');
+  const filteredHistory = useMemo(
+    () =>
+      history.filter((s) => {
+        if (histFrom && s.period_to < histFrom) return false;
+        if (histTo && s.period_from > histTo) return false;
+        if (histStatus !== 'all' && s.status !== histStatus) return false;
+        return true;
+      }),
+    [history, histFrom, histTo, histStatus],
+  );
+
   // --- History selection: ANY statement can be selected (for PDF download);
   // settling acts only on the settleable subset of the selection. ---
-  const allHistSelected = history.length > 0 && histSel.size === history.length;
+  const allHistSelected = filteredHistory.length > 0 && filteredHistory.every((s) => histSel.has(s.id));
   function toggleHistSel(id: string) {
     setHistSel((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
@@ -125,7 +157,12 @@ export function SoaWorkspace({
     setHistExp((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
   function toggleAllHist() {
-    setHistSel(allHistSelected ? new Set() : new Set(history.map((s) => s.id)));
+    setHistSel((prev) => {
+      const n = new Set(prev);
+      if (allHistSelected) for (const s of filteredHistory) n.delete(s.id);
+      else for (const s of filteredHistory) n.add(s.id);
+      return n;
+    });
   }
   // 1 selected → that statement's PDF; many → a ZIP of separate PDFs.
   const pdfHref = histSel.size === 1
@@ -283,21 +320,63 @@ export function SoaWorkspace({
         </>
       )}
 
-      {tab === 'history' && (history.length === 0 ? (
-        <Card className="border-dashed bg-muted/30">
-          <CardContent className="py-10 text-center">
-            <FileText className="size-8 mx-auto text-muted-foreground/50" />
-            <p className="text-sm font-semibold text-muted-foreground mt-3">No statements generated yet.</p>
-          </CardContent>
-        </Card>
-      ) : (
+      {tab === 'history' && (
         <div className="flex flex-col gap-3">
+          {/* Filter row — narrow the list by SOA period (overlap) and status.
+              Selection respects the filter: "Select all" picks the visible rows
+              only, so a follow-up ZIP download is scoped to what's filtered. */}
+          <Card className="p-4">
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs font-semibold">Date From</Label>
+                <Input type="date" value={histFrom} onChange={(e) => setHistFrom(e.target.value)} className="w-40" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs font-semibold">Date To</Label>
+                <Input type="date" value={histTo} onChange={(e) => setHistTo(e.target.value)} className="w-40" />
+              </div>
+              <div className="flex flex-col gap-1">
+                <Label className="text-xs font-semibold">Status</Label>
+                <Select items={HIST_STATUS_OPTIONS} value={histStatus} onValueChange={(v) => v && setHistStatus(v)}>
+                  <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {HIST_STATUS_OPTIONS.map((o) => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              {(histFrom || histTo || histStatus !== 'all') && (
+                <button type="button" onClick={() => { setHistFrom(''); setHistTo(''); setHistStatus('all'); }} className="self-end mb-2 text-xs font-semibold text-primary hover:underline">
+                  Clear filters
+                </button>
+              )}
+              <span className="ml-auto self-end mb-2 text-xs font-semibold text-muted-foreground">
+                {filteredHistory.length} of {history.length}
+              </span>
+            </div>
+          </Card>
+
+          {history.length === 0 ? (
+            <Card className="border-dashed bg-muted/30">
+              <CardContent className="py-10 text-center">
+                <FileText className="size-8 mx-auto text-muted-foreground/50" />
+                <p className="text-sm font-semibold text-muted-foreground mt-3">No statements generated yet.</p>
+              </CardContent>
+            </Card>
+          ) : filteredHistory.length === 0 ? (
+            <Card className="border-dashed bg-muted/30">
+              <CardContent className="py-10 text-center">
+                <FileText className="size-8 mx-auto text-muted-foreground/50" />
+                <p className="text-sm font-semibold text-muted-foreground mt-3">No statements match the filters.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
           {/* Selection bar — pick statements to download as PDF. Collection
               (settle / record payment) is done in the AR Balance view. */}
           <div className="sticky top-2 z-20 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-card px-4 py-2.5 shadow-sm">
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" className="size-4 cursor-pointer accent-primary" checked={allHistSelected} onChange={toggleAllHist} />
-              <span className="text-sm font-bold">Select all ({history.length})</span>
+              <span className="text-sm font-bold">Select all ({filteredHistory.length})</span>
             </label>
             {histSel.size > 0 && (
               <div className="flex items-center gap-3">
@@ -323,14 +402,14 @@ export function SoaWorkspace({
                   <TableHead className="font-bold">SOA No</TableHead>
                   <TableHead className="font-bold">Billing</TableHead>
                   <TableHead className="w-28 font-bold text-center">Type</TableHead>
-                  <TableHead className="font-bold text-right">Period</TableHead>
+                  <TableHead className="font-bold text-center">Period</TableHead>
                   <TableHead className="w-32 font-bold text-right pr-2">Total</TableHead>
                   <TableHead className="w-28 font-bold text-center">Status</TableHead>
                   <TableHead className="w-32" />
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {history.map((s) => {
+                {filteredHistory.map((s) => {
                   const isOpen = histExp.has(s.id);
                   return (
                     <Fragment key={s.id}>
@@ -346,7 +425,7 @@ export function SoaWorkspace({
                         <TableCell className="font-mono font-bold">{s.soa_no}</TableCell>
                         <TableCell className="font-medium">{s.billing_code ? `${s.billing_code} — ${s.billing_name}` : '—'}</TableCell>
                         <TableCell className="text-center"><Badge variant="secondary" className="font-bold capitalize">{(s.settlement_type ?? '').replace('_', '-')}</Badge></TableCell>
-                        <TableCell className="font-medium tabular text-muted-foreground text-right">{s.period_from} → {s.period_to}</TableCell>
+                        <TableCell className="font-medium tabular text-muted-foreground text-center">{s.period_from} → {s.period_to}</TableCell>
                         <TableCell className="font-bold tabular text-right pr-2">{peso(s.total_cents)}</TableCell>
                         <TableCell className="text-center"><Badge variant={STATUS_VARIANT[s.status] ?? 'secondary'} className="font-bold capitalize">{s.status.replace('_', ' ')}</Badge></TableCell>
                         <TableCell>
@@ -420,8 +499,10 @@ export function SoaWorkspace({
               </TableBody>
             </Table>
           </Card>
+        </>
+      )}
         </div>
-      ))}
+      )}
 
       {tab === 'ar' && <ArBalanceExplorer ar={arBalance} />}
     </div>
