@@ -76,13 +76,26 @@ export function ArBalanceExplorer({ ar }: { ar: ArBalance }) {
   const thirdParty = ar.debtors.filter((d) => d.settlement_type === 'third_party');
   const intercompany = ar.debtors.filter((d) => d.settlement_type === 'intercompany');
 
+  // Bulk settle is intercompany-only (third-party collects per Record Payment).
+  // We surface this at page level via a sticky bar that mirrors the SOA / Tip /
+  // Commission workspaces — one place for "select all + action", no per-section
+  // checkbox cluttering the headers.
+  const interCoSoas = intercompany.flatMap((d) => d.soas);
+  const interCoIds = interCoSoas.map((s) => s.id);
+  const allIntercoSel = interCoIds.length > 0 && interCoIds.every((id) => sel.has(id));
+  const selectedTotal = interCoSoas.filter((s) => sel.has(s.id)).reduce((sum, s) => sum + s.outstanding_cents, 0);
+  function toggleAllInterco() {
+    setSel((p) => {
+      const n = new Set(p);
+      if (allIntercoSel) interCoIds.forEach((id) => n.delete(id));
+      else interCoIds.forEach((id) => n.add(id));
+      return n;
+    });
+  }
+
   function section(title: string, hint: string, debtors: ArDebtor[], settleable = false) {
     if (debtors.length === 0) return null;
     const subtotal = debtors.reduce((s, d) => s + d.total_cents, 0);
-    // Only intercompany statements settle in bulk (cost transfer); third-party
-    // is collected per-payment, so no select-all there.
-    const soaIds = settleable ? debtors.flatMap((d) => d.soas.map((x) => x.id)) : [];
-    const allSel = soaIds.length > 0 && soaIds.every((id) => sel.has(id));
     return (
       <div className="flex flex-col gap-2">
         <div className="flex items-baseline justify-between gap-3">
@@ -90,25 +103,7 @@ export function ArBalanceExplorer({ ar }: { ar: ArBalance }) {
             <h3 className="text-sm font-bold uppercase tracking-wide text-muted-foreground">{title}</h3>
             <p className="text-xs font-medium text-muted-foreground/80">{hint}</p>
           </div>
-          <div className="flex items-center gap-3">
-            {settleable && soaIds.length > 0 && (
-              <label className="flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-muted-foreground">
-                <input
-                  type="checkbox"
-                  className="size-4 cursor-pointer accent-primary"
-                  checked={allSel}
-                  onChange={() => setSel((p) => {
-                    const n = new Set(p);
-                    if (allSel) soaIds.forEach((id) => n.delete(id));
-                    else soaIds.forEach((id) => n.add(id));
-                    return n;
-                  })}
-                />
-                Select all <span className="font-medium text-muted-foreground/70">— pick to batch settle</span>
-              </label>
-            )}
-            <span className="text-sm font-bold tabular">{peso(subtotal)}</span>
-          </div>
+          <span className="text-sm font-bold tabular">{peso(subtotal)}</span>
         </div>
         <Card className="p-0 overflow-hidden">
           <Table className="table-fixed">
@@ -265,12 +260,26 @@ export function ArBalanceExplorer({ ar }: { ar: ArBalance }) {
         As of {fmtDate(ar.today)} · &quot;Overdue&quot; = third-party statements past their due date. Intercompany has no due date (settled by internal cost transfer).
       </p>
 
-      {sel.size > 0 && (
-        <div className="sticky top-2 z-20 flex items-center justify-between gap-4 rounded-xl border border-primary/40 bg-card px-4 py-2.5 shadow-sm">
-          <span className="text-sm font-bold">{sel.size} intercompany statement{sel.size > 1 ? 's' : ''} selected</span>
-          <Button size="sm" onClick={doSettle} disabled={settling}>
-            {settling ? 'Settling…' : `Settle & post (${sel.size})`}
-          </Button>
+      {interCoIds.length > 0 && (
+        <div className="sticky top-2 z-20 flex items-center justify-between gap-4 rounded-xl border border-border bg-card px-4 py-2.5 shadow-sm">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              className="size-4 cursor-pointer accent-primary"
+              checked={allIntercoSel}
+              onChange={toggleAllInterco}
+            />
+            <span className="text-sm font-bold">Select all ({interCoIds.length})</span>
+            <span className="text-xs font-medium text-muted-foreground">— pick intercompany statements to batch settle</span>
+          </label>
+          {sel.size > 0 && (
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-bold">{sel.size} selected · {peso(selectedTotal)}</span>
+              <Button size="sm" onClick={doSettle} disabled={settling}>
+                {settling ? 'Settling…' : `Settle & post (${sel.size})`}
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
