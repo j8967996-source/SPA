@@ -4,7 +4,7 @@ import { Fragment, useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { ChevronRight, ChevronDown, HandCoins } from 'lucide-react';
+import { ChevronRight, ChevronDown, Download, HandCoins } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -282,7 +282,16 @@ export function TipSettlementWorkspace({
                       <TableCell className="font-bold tabular text-right">{peso(s.subtotal_cents)}</TableCell>
                       <TableCell className="pl-6"><Badge variant={STATUS_VARIANT[s.status] ?? 'secondary'} className="font-bold capitalize">{s.status}</Badge></TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>
-                        <div className="flex justify-end">
+                        <div className="flex justify-end items-center gap-1">
+                          <a
+                            href={`/reconciliation/tips/${s.id}/pdf`}
+                            target="_blank"
+                            rel="noopener"
+                            title="Download settlement detail (PDF)"
+                            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-bold text-primary hover:underline"
+                          >
+                            <Download className="size-3.5" /> PDF
+                          </a>
                           {s.status === 'closed' && (
                             <Button size="sm" variant="ghost" className="text-destructive" onClick={() => doVoid(s.id)} disabled={pending}>Void</Button>
                           )}
