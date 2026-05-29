@@ -676,7 +676,9 @@ export function ScheduleBoard({
           serviceItems={dialog.serviceItems}
           reservation={synthetic}
           prefillConfirmed
-          lockedBed={{ name: beds.find((b) => b.id === add.bedId)?.name ?? 'Bed' }}
+          // Pass the bed's resource_type so the dialog auto-checks the
+          // matching Service Type (Bed #1 → Massage, Hair Chair A → Hair, etc.).
+          lockedBed={(() => { const b = beds.find((x) => x.id === add.bedId); return { name: b?.name ?? 'Bed', type: b?.type }; })()}
           open
           onOpenChange={(o) => { if (!o) { setAdd(null); router.refresh(); } }}
         />

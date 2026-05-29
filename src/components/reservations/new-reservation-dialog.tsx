@@ -77,7 +77,11 @@ interface Props {
   prefillConfirmed?: boolean;
   // Opened from the schedule board on a specific bed: lock + show that bed
   // (hide the picker and the Location selector) so the booking is clearly tied.
-  lockedBed?: { name: string };
+  // `type` is the bed's resource_type (massage_bed / hair_chair / nail_station);
+  // the dialog uses it to auto-default Service Types to whatever category
+  // requires that resource — picking Bed #1 already commits the user to a
+  // Massage booking, so pre-checking that box saves a click.
+  lockedBed?: { name: string; type?: string };
   // Lock the branch to a fixed one (the desk's home branch) — non-admins can't
   // book for another branch. Admin omits this to keep the picker.
   lockBranchId?: string;
@@ -121,7 +125,21 @@ export function NewReservationDialog({
 
   const [branchId, setBranchId] = useState(reservation?.branch_id ?? lockBranchId ?? branches[0]?.id ?? '');
   const [sourceId, setSourceId] = useState(reservation?.source_id ?? defaultSourceId);
-  const [categoryIds, setCategoryIds] = useState<string[]>(reservation?.service_category_ids ?? []);
+  // Auto-prefill Service Types when the dialog is opened from a specific bed
+  // on the schedule board: pick whichever category requires that bed's type
+  // (massage_bed → Massage, hair_chair → Hair Salon, nail_station → Nail
+  // Salon). The user can still tick / untick — this is a sensible default,
+  // not a lock. The reservation prop (edit mode) always wins.
+  const [categoryIds, setCategoryIds] = useState<string[]>(() => {
+    if (reservation?.service_category_ids?.length) return reservation.service_category_ids;
+    if (lockedBed?.type) {
+      const matching = serviceCategories
+        .filter((c) => c.requiredResourceType === lockedBed.type)
+        .map((c) => c.id);
+      if (matching.length) return matching;
+    }
+    return reservation?.service_category_ids ?? [];
+  });
   const [guestName, setGuestName] = useState(reservation?.guest_name ?? '');
   const [guestPhone, setGuestPhone] = useState(reservation?.guest_phone ?? '');
   const [pax, setPax] = useState(String(reservation?.pax ?? 1));
