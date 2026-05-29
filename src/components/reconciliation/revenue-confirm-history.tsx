@@ -89,16 +89,22 @@ export function RevenueConfirmHistory({ orders }: { orders: ConfirmableOrder[] }
         Confirmed (Closed) · <span className="tabular">{grand.orderCount}</span> order{grand.orderCount === 1 ? '' : 's'} across <span className="tabular">{grand.dayCount}</span> day{grand.dayCount === 1 ? '' : 's'} · grouped by service date
       </div>
       <Table className="table-fixed">
+        {/* Column widths rebalanced: pull slack OUT of the left side (Order No
+            / PAX / Settle were oversized for their content) and PUSH it into
+            the amount columns, so 5+ digit ₱ values (₱99,999, ₱999,999) keep
+            breathing room without crowding the headers. Billing stays flex
+            but with much less slack to absorb, so the GL chip + summary
+            numbers sit closer to the data they belong to. */}
         <colgroup>
-          <col className="w-56" />{/* Order No / Date */}
-          <col className="w-16" />{/* PAX */}
-          <col className="w-24" />{/* Settle */}
-          <col />                 {/* Billing (flex) */}
-          <col className="w-28" />{/* Cash */}
-          <col className="w-28" />{/* PAYMAYA */}
-          <col className="w-28" />{/* AR */}
-          <col className="w-28" />{/* Total */}
-          <col className="w-32" />{/* Tip (a hair wider so "Pass-through" fits) */}
+          <col className="w-52" />{/* Order No / Date */}
+          <col className="w-14" />{/* PAX */}
+          <col className="w-20" />{/* Settle */}
+          <col />                 {/* Billing (flex, but now bounded) */}
+          <col className="w-32" />{/* Cash */}
+          <col className="w-32" />{/* PAYMAYA */}
+          <col className="w-32" />{/* AR */}
+          <col className="w-36" />{/* Total — widest amount column */}
+          <col className="w-32" />{/* Tip */}
         </colgroup>
         <TableHeader>
           {/* Group brackets: SALES (4 cols) + a separate single-column box
@@ -144,18 +150,24 @@ export function RevenueConfirmHistory({ orders }: { orders: ConfirmableOrder[] }
                       {isOpen ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronRight className="size-4 text-muted-foreground" />}
                       <span className="tabular">{g.date}</span>
                       <span className="text-xs font-medium text-muted-foreground">({g.rows.length} order{g.rows.length > 1 ? 's' : ''})</span>
+                      {/* GL voucher # and PDF download are separated:
+                          - The chip is a static label (number you copy/read)
+                          - The download icon is the actual action */}
                       {g.batches.map((b) => (
                         <Fragment key={b}>
+                          <span className="ml-1 inline-flex items-center gap-1 rounded bg-primary/15 px-1.5 py-0.5 text-xs font-bold text-primary font-mono">
+                            GL #{b}
+                          </span>
                           <a
                             href={`/reconciliation/revenue-confirm/${b}/pdf`}
                             target="_blank"
                             rel="noopener"
                             onClick={(e) => e.stopPropagation()}
                             title={`Download GL #${b} voucher PDF`}
-                            className="ml-1 inline-flex items-center gap-1 rounded bg-primary/15 px-1.5 py-0.5 text-xs font-bold text-primary font-mono hover:bg-primary/25 transition-colors"
+                            className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-xs font-bold text-foreground hover:bg-accent transition-colors"
                           >
                             <Download className="size-3" />
-                            GL #{b}
+                            PDF
                           </a>
                         </Fragment>
                       ))}
