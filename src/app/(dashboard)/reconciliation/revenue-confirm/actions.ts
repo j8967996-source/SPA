@@ -158,9 +158,13 @@ export interface ConfirmableOrder {
   pax: number;
   isAR: boolean;
   service_date: string;
-  total_cents: number;
-  cash_cents: number;
-  paymaya_cents: number;
+  total_cents: number;     // Sales side (Cash + PAYMAYA + AR sums to this for paid orders)
+  cash_cents: number;      // Sales
+  paymaya_cents: number;   // Sales
+  /** Pass-through tip (PAYMAYA only). Collected on behalf of the therapist;
+   *  posted as DR 10121 / CR 20500 — does not affect revenue. Shown in its
+   *  own "Pass-through" column on the Revenue Confirm grid. */
+  tip_cents: number;
   billing_label: string | null;
 }
 
@@ -168,7 +172,8 @@ const ORDER_SELECT = `
   id, order_no, status, order_type, service_date, total_cents,
   billing:billing_destinations!orders_billing_to_id_fkey ( code, name, default_payment_method_id ),
   order_customers ( id ),
-  payments ( amount_cents, method:payment_methods ( code ) )
+  payments ( amount_cents, method:payment_methods ( code ) ),
+  tips ( amount_cents )
 `;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function mapOrderRow(o: any, arMethodId: string | null): ConfirmableOrder {
@@ -177,10 +182,13 @@ function mapOrderRow(o: any, arMethodId: string | null): ConfirmableOrder {
   const pays = o.payments ?? [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sumByCode = (code: string) => pays.filter((p: any) => one<{ code: string }>(p.method)?.code === code).reduce((s: number, p: any) => s + p.amount_cents, 0);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const tipsTotal = (o.tips ?? []).reduce((s: number, t: any) => s + (t.amount_cents ?? 0), 0);
   return {
     id: o.id, order_no: o.order_no, status: o.status, order_type: o.order_type,
     pax: o.order_customers?.length ?? 0, isAR, service_date: o.service_date, total_cents: o.total_cents,
     cash_cents: sumByCode('cash'), paymaya_cents: sumByCode('paymaya'),
+    tip_cents: tipsTotal,
     billing_label: b ? `${b.code} — ${b.name}` : null,
   };
 }

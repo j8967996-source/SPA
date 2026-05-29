@@ -40,6 +40,7 @@ export function RevenueConfirmHistory({ orders }: { orders: ConfirmableOrder[] }
         cash: rows.reduce((s, o) => s + o.cash_cents, 0),
         paymaya: rows.reduce((s, o) => s + o.paymaya_cents, 0),
         ar: rows.reduce((s, o) => s + (o.isAR ? o.total_cents : 0), 0),
+        tip: rows.reduce((s, o) => s + o.tip_cents, 0),
       }));
   }, [orders]);
 
@@ -75,20 +76,29 @@ export function RevenueConfirmHistory({ orders }: { orders: ConfirmableOrder[] }
                 {g.paymaya > 0 && <span>PAYMAYA {peso(g.paymaya)}</span>}
                 {g.ar > 0 && <span>AR {peso(g.ar)}</span>}
                 <span className="text-base font-extrabold text-foreground">Total: {peso(g.total)}</span>
+                {g.tip > 0 && <span className="pl-2 border-l border-border">Tip {peso(g.tip)}</span>}
               </span>
             </button>
             {isOpen && (
               <Table className="table-fixed">
+                {/* Grouped header: Cash/PAYMAYA/AR/Total under "Sales", Tip
+                    under "Pass-through" (代收代付). Mirrors the Confirm tab. */}
                 <TableHeader>
+                  <TableRow className="border-b-0 hover:bg-transparent">
+                    <TableHead colSpan={4} />
+                    <TableHead colSpan={4} className="text-center font-bold text-[10px] uppercase tracking-[0.15em] text-muted-foreground pb-0">Sales</TableHead>
+                    <TableHead className="text-center font-bold text-[10px] uppercase tracking-[0.15em] text-muted-foreground pb-0 pr-4">Pass-through</TableHead>
+                  </TableRow>
                   <TableRow>
                     <TableHead className="w-56 font-bold">Order No</TableHead>
                     <TableHead className="w-16 font-bold text-center">PAX</TableHead>
                     <TableHead className="w-24 font-bold">Settle</TableHead>
                     <TableHead className="font-bold">Billing</TableHead>
-                    <TableHead className="w-32 font-bold text-center">Cash</TableHead>
-                    <TableHead className="w-32 font-bold text-center">PAYMAYA</TableHead>
-                    <TableHead className="w-32 font-bold text-center">AR</TableHead>
-                    <TableHead className="w-32 font-bold text-right pr-4">Total</TableHead>
+                    <TableHead className="w-28 font-bold text-center">Cash</TableHead>
+                    <TableHead className="w-28 font-bold text-center">PAYMAYA</TableHead>
+                    <TableHead className="w-28 font-bold text-center">AR</TableHead>
+                    <TableHead className="w-28 font-bold text-right">Total</TableHead>
+                    <TableHead className="w-24 font-bold text-right pr-4">Tip</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -103,7 +113,8 @@ export function RevenueConfirmHistory({ orders }: { orders: ConfirmableOrder[] }
                       <TableCell className="font-medium tabular text-right text-muted-foreground">{moneyCell(o.cash_cents)}</TableCell>
                       <TableCell className="font-medium tabular text-right text-muted-foreground">{moneyCell(o.paymaya_cents)}</TableCell>
                       <TableCell className="font-medium tabular text-right text-muted-foreground">{moneyCell(o.isAR ? o.total_cents : 0)}</TableCell>
-                      <TableCell className="font-bold tabular text-right pr-4">{peso(o.total_cents)}</TableCell>
+                      <TableCell className="font-bold tabular text-right">{peso(o.total_cents)}</TableCell>
+                      <TableCell className="font-medium tabular text-right text-muted-foreground pr-4">{moneyCell(o.tip_cents)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

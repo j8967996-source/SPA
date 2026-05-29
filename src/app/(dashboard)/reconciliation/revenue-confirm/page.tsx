@@ -45,7 +45,8 @@ function OrderRow({ o, showDate }: { o: ConfirmableOrder; showDate?: boolean }) 
       <TableCell className="font-medium tabular text-right text-muted-foreground">{moneyCell(o.cash_cents)}</TableCell>
       <TableCell className="font-medium tabular text-right text-muted-foreground">{moneyCell(o.paymaya_cents)}</TableCell>
       <TableCell className="font-medium tabular text-right text-muted-foreground">{moneyCell(o.isAR ? o.total_cents : 0)}</TableCell>
-      <TableCell className="font-bold tabular text-right pr-4">{peso(o.total_cents)}</TableCell>
+      <TableCell className="font-bold tabular text-right">{peso(o.total_cents)}</TableCell>
+      <TableCell className="font-medium tabular text-right text-muted-foreground pr-4">{moneyCell(o.tip_cents)}</TableCell>
     </TableRow>
   );
 }
@@ -81,6 +82,7 @@ export default async function RevenueConfirmPage({
   const cashTotal = orders.reduce((s, o) => s + o.cash_cents, 0);
   const paymayaTotal = orders.reduce((s, o) => s + o.paymaya_cents, 0);
   const arTotal = orders.reduce((s, o) => s + (o.isAR ? o.total_cents : 0), 0);
+  const tipTotal = orders.reduce((s, o) => s + o.tip_cents, 0);
 
   const tabLink = (v: 'confirm' | 'history') => `/reconciliation/revenue-confirm?branch=${branchId}&date=${date}&view=${v}`;
 
@@ -152,32 +154,43 @@ export default async function RevenueConfirmPage({
               {/* Pin Order No to its content width (~22 chars) — without this
                   it absorbs ~half the table width via auto-layout slack and
                   leaves a huge gap to PAX. Amount columns widened so 5-digit
-                  totals (₱99,999) still have breathing room. */}
+                  totals (₱99,999) still have breathing room.
+                  Header is grouped: Cash / PAYMAYA / AR / Total live under
+                  "Sales"; the rightmost Tip column under "Pass-through"
+                  (代收代付 — collected on behalf of the therapist, posted as
+                  DR 10121 / CR 20500, no impact on revenue). */}
               <TableHeader>
+                <TableRow className="border-b-0 hover:bg-transparent">
+                  <TableHead colSpan={4} />
+                  <TableHead colSpan={4} className="text-center font-bold text-[10px] uppercase tracking-[0.15em] text-muted-foreground pb-0">Sales</TableHead>
+                  <TableHead className="text-center font-bold text-[10px] uppercase tracking-[0.15em] text-muted-foreground pb-0 pr-4">Pass-through</TableHead>
+                </TableRow>
                 <TableRow>
                   <TableHead className="w-56 font-bold">Order No</TableHead>
                   <TableHead className="w-16 font-bold text-center">PAX</TableHead>
                   <TableHead className="w-24 font-bold">Settle</TableHead>
                   <TableHead className="font-bold">Billing</TableHead>
-                  <TableHead className="w-32 font-bold text-center">Cash</TableHead>
-                  <TableHead className="w-32 font-bold text-center">PAYMAYA</TableHead>
-                  <TableHead className="w-32 font-bold text-center">AR</TableHead>
-                  <TableHead className="w-32 font-bold text-right pr-4">Total</TableHead>
+                  <TableHead className="w-28 font-bold text-center">Cash</TableHead>
+                  <TableHead className="w-28 font-bold text-center">PAYMAYA</TableHead>
+                  <TableHead className="w-28 font-bold text-center">AR</TableHead>
+                  <TableHead className="w-28 font-bold text-right">Total</TableHead>
+                  <TableHead className="w-24 font-bold text-right pr-4">Tip</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {orders.length === 0 ? (
-                  <TableRow><TableCell colSpan={8} className="text-center py-10 text-sm font-semibold text-muted-foreground">No orders pending confirmation for this branch/day.</TableCell></TableRow>
+                  <TableRow><TableCell colSpan={9} className="text-center py-10 text-sm font-semibold text-muted-foreground">No orders pending confirmation for this branch/day.</TableCell></TableRow>
                 ) : (
                   <>
                     {orders.map((o) => <OrderRow key={o.id} o={o} />)}
-                    {/* Totals footer: aligned with Cash / PAYMAYA / AR / Total columns. */}
+                    {/* Totals footer: aligned with Cash / PAYMAYA / AR / Total / Tip columns. */}
                     <TableRow className="border-t-2 border-border bg-muted/30 hover:bg-muted/30">
                       <TableCell colSpan={4} className="font-bold text-right pr-3">Totals</TableCell>
                       <TableCell className="font-bold tabular text-right">{moneyCell(cashTotal)}</TableCell>
                       <TableCell className="font-bold tabular text-right">{moneyCell(paymayaTotal)}</TableCell>
                       <TableCell className="font-bold tabular text-right">{moneyCell(arTotal)}</TableCell>
-                      <TableCell className="font-extrabold tabular text-right pr-4">{peso(total)}</TableCell>
+                      <TableCell className="font-extrabold tabular text-right">{peso(total)}</TableCell>
+                      <TableCell className="font-bold tabular text-right pr-4">{moneyCell(tipTotal)}</TableCell>
                     </TableRow>
                   </>
                 )}
