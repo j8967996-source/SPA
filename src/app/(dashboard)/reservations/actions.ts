@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { createAuditedClient } from '@/lib/supabase/server';
 import { canAccessBranch } from '@/lib/branch-access';
+import { currentSession } from '@/lib/auth';
 import { getReservationGraceMinutes, isReservationOverdue } from '@/lib/reservations';
 import { canPerformAny, matchesGender } from '@/lib/therapist-availability';
 import { addOrderItem } from '@/app/(dashboard)/sales-orders/actions';
@@ -662,7 +663,11 @@ export async function setReservationStatus(
   id: string,
   status: 'reserved' | 'confirmed' | 'cancelled' | 'no_show',
 ): Promise<ActionResult> {
+  if (!(await currentSession())) return { ok: false, error: 'Sign in required' };
   const supabase = await createAuditedClient();
+  const { data: r } = await supabase.from('reservations').select('branch_id').eq('id', id).maybeSingle();
+  if (!r?.branch_id) return { ok: false, error: 'Reservation not found' };
+  if (!(await canAccessBranch(r.branch_id))) return { ok: false, error: 'No access to this branch' };
   const { error } = await supabase.from('reservations').update({ status }).eq('id', id);
   if (error) return { ok: false, error: error.message };
   revalidatePath('/reservations');
@@ -675,6 +680,7 @@ export async function setReservationStatus(
 // occupancy: explicit pins must still be free (else error → adjust & retry); a
 // seat-together group is auto-assigned fresh adjacent beds now.
 export async function confirmReservation(id: string): Promise<ActionResult> {
+  if (!(await currentSession())) return { ok: false, error: 'Sign in required' };
   const supabase = await createAuditedClient();
   const { data: r } = await supabase
     .from('reservations')
@@ -682,6 +688,7 @@ export async function confirmReservation(id: string): Promise<ActionResult> {
     .eq('id', id)
     .maybeSingle();
   if (!r) return { ok: false, error: 'Reservation not found' };
+  if (!(await canAccessBranch(r.branch_id))) return { ok: false, error: 'No access to this branch' };
   if (r.status !== 'reserved') return { ok: false, error: 'Only a pending reservation can be confirmed' };
 
   const categoryIds = (r.reservation_service_categories ?? []).map((x) => x.service_category_id);
@@ -704,6 +711,7 @@ export async function confirmReservation(id: string): Promise<ActionResult> {
 
 // Create a draft Sales Order from a reservation and mark it converted.
 export async function convertReservationToOrder(id: string): Promise<ActionResult<{ orderId: string }>> {
+  if (!(await currentSession())) return { ok: false, error: 'Sign in required' };
   const supabase = await createAuditedClient();
   const { data: r, error: re } = await supabase
     .from('reservations')
@@ -711,6 +719,7 @@ export async function convertReservationToOrder(id: string): Promise<ActionResul
     .eq('id', id)
     .single();
   if (re || !r) return { ok: false, error: 'Reservation not found' };
+  if (!(await canAccessBranch(r.branch_id))) return { ok: false, error: 'No access to this branch' };
   if (r.status === 'converted') return { ok: false, error: 'Already converted' };
   if (['cancelled', 'no_show'].includes(r.status)) return { ok: false, error: `Cannot convert a ${r.status} reservation` };
 

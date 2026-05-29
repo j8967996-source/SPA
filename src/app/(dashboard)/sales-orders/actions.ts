@@ -9,6 +9,34 @@ import { isBusinessDayClosed } from '@/app/(dashboard)/reconciliation/end-of-day
 import { canAccessBranch } from '@/lib/branch-access';
 import { canPerformGroup, matchesGender } from '@/lib/therapist-availability';
 
+// Shared guard for operational order actions: enforce a logged-in session AND
+// branch scoping by looking up the order's branch_id. Used by the service-flow
+// + cashier actions that previously had no permission check.
+async function requireOrderBranchAccess(orderId: string): Promise<{ ok: false; error: string } | { ok: true }> {
+  if (!(await currentSession())) return { ok: false, error: 'Sign in required' };
+  const sb = await createAuditedClient();
+  const { data } = await sb.from('orders').select('branch_id').eq('id', orderId).maybeSingle();
+  if (!data?.branch_id) return { ok: false, error: 'Order not found' };
+  if (!(await canAccessBranch(data.branch_id))) return { ok: false, error: 'No access to this branch' };
+  return { ok: true };
+}
+
+// Same guard, but the lookup starts from an order_item_id (the caller doesn't
+// know its parent order yet). Used by the service-flow actions that take only
+// itemId / itemId+orderId where orderId may not be trustworthy.
+async function requireItemBranchAccess(itemId: string): Promise<{ ok: false; error: string } | { ok: true }> {
+  if (!(await currentSession())) return { ok: false, error: 'Sign in required' };
+  const sb = await createAuditedClient();
+  const { data } = await sb.from('order_items')
+    .select('order:orders!order_items_order_id_fkey ( branch_id )')
+    .eq('id', itemId)
+    .maybeSingle();
+  const branchId = Array.isArray(data?.order) ? data?.order[0]?.branch_id : data?.order?.branch_id;
+  if (!branchId) return { ok: false, error: 'Order item not found' };
+  if (!(await canAccessBranch(branchId))) return { ok: false, error: 'No access to this branch' };
+  return { ok: true };
+}
+
 // Append a row to the generic status-change audit log.
 async function logStatus(
   orderId: string,
@@ -388,10 +416,15 @@ const updateCustomerSchema = z.object({
 // Rename / re-phone an existing guest (e.g. fill in a converted booking's
 // "Guest 2" placeholder once they're at the desk).
 export async function updateOrderCustomer(input: unknown): Promise<ActionResult> {
+  if (!(await currentSession())) return { ok: false, error: 'Sign in required' };
   const parsed = updateCustomerSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
   const supabase = await createAuditedClient();
+  // Branch scoping piggybacks on the parent order — order_customers itself
+  // doesn't carry branch_id.
+  const { data: ord } = await supabase.from('orders').select('branch_id').eq('id', d.order_id).maybeSingle();
+  if (!ord?.branch_id || !(await canAccessBranch(ord.branch_id))) return { ok: false, error: 'No access to this branch' };
   const { error } = await supabase
     .from('order_customers')
     .update({ customer_name: d.customer_name, customer_phone: d.customer_phone || null })
@@ -636,6 +669,8 @@ export async function removeOrderItem(itemId: string, orderId: string): Promise<
 
 // Per-item service timing — drives real-time therapist availability.
 export async function startOrderItem(itemId: string, orderId: string): Promise<ActionResult> {
+  const auth = await requireOrderBranchAccess(orderId);
+  if (!auth.ok) return auth;
   const supabase = await createAuditedClient();
   const now = new Date().toISOString();
 
@@ -734,6 +769,8 @@ export async function startOrderItem(itemId: string, orderId: string): Promise<A
 // their first line). Reuses startOrderItem so all the busy/booking checks and
 // the order auto-advance apply.
 export async function startAllServices(orderId: string): Promise<ActionResult<{ started: number; skipped: number }>> {
+  const auth = await requireOrderBranchAccess(orderId);
+  if (!auth.ok) return auth;
   const supabase = await createAuditedClient();
   const { data: items } = await supabase
     .from('order_items')
@@ -762,6 +799,8 @@ export async function startAllServices(orderId: string): Promise<ActionResult<{ 
 }
 
 export async function finishOrderItem(itemId: string, orderId: string): Promise<ActionResult> {
+  const auth = await requireOrderBranchAccess(orderId);
+  if (!auth.ok) return auth;
   const supabase = await createAuditedClient();
   const now = new Date().toISOString();
   const { data: item } = await supabase
@@ -793,6 +832,8 @@ export async function finishOrderItem(itemId: string, orderId: string): Promise<
 // A finished line holds its bed for the service's cleanup_after_minutes (the bed
 // auto-frees when that window passes); stamping bed_released_at frees it at once.
 export async function releaseBed(itemId: string): Promise<ActionResult> {
+  const auth = await requireItemBranchAccess(itemId);
+  if (!auth.ok) return auth;
   const supabase = await createAuditedClient();
   const { data: item } = await supabase
     .from('order_items')
@@ -816,6 +857,8 @@ export async function releaseBed(itemId: string): Promise<ActionResult> {
 // Skip a not-yet-started service line (guest decides not to do it). It's marked
 // cancelled, drops out of the totals, and no longer blocks auto-completion.
 export async function skipOrderItem(itemId: string, orderId: string): Promise<ActionResult> {
+  const auth = await requireOrderBranchAccess(orderId);
+  if (!auth.ok) return auth;
   const supabase = await createAuditedClient();
   const { data: item } = await supabase.from('order_items').select('status').eq('id', itemId).single();
   if (!item) return { ok: false, error: 'Service line not found' };
@@ -843,6 +886,8 @@ export async function interruptOrderItem(input: unknown): Promise<ActionResult> 
   const parsed = interruptSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
+  const auth = await requireItemBranchAccess(d.item_id);
+  if (!auth.ok) return auth;
   const supabase = await createAuditedClient();
 
   const { data: item } = await supabase
@@ -976,6 +1021,8 @@ export async function submitFeedback(input: unknown): Promise<ActionResult> {
   const parsed = feedbackSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'A score (1-10) is required' };
   const d = parsed.data;
+  const auth = await requireItemBranchAccess(d.order_item_id);
+  if (!auth.ok) return auth;
   const supabase = await createAuditedClient();
 
   const { data: item } = await supabase
@@ -1053,13 +1100,15 @@ const ALLOWED_NEXT: Record<string, string[]> = {
 
 export async function setOrderStatus(orderId: string, next: string): Promise<ActionResult> {
   const session = await currentSession();
+  if (!session) return { ok: false, error: 'Sign in required' };
   const supabase = await createAuditedClient();
   const { data: order, error: oe } = await supabase
     .from('orders')
-    .select('status, total_cents, paid_cents')
+    .select('status, total_cents, paid_cents, branch_id')
     .eq('id', orderId)
     .single();
   if (oe || !order) return { ok: false, error: 'Order not found' };
+  if (order.branch_id && !(await canAccessBranch(order.branch_id))) return { ok: false, error: 'No access to this branch' };
   const allowed = ALLOWED_NEXT[order.status] ?? [];
   if (!allowed.includes(next)) {
     return { ok: false, error: `Cannot move from ${order.status} to ${next}` };
@@ -1114,6 +1163,7 @@ const paymentSchema = z.object({
 });
 
 export async function takePayment(input: unknown): Promise<ActionResult> {
+  if (!(await currentSession())) return { ok: false, error: 'Sign in required' };
   const parsed = paymentSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
@@ -1126,6 +1176,7 @@ export async function takePayment(input: unknown): Promise<ActionResult> {
     .eq('id', d.order_id)
     .single();
   if (oe || !order) return { ok: false, error: 'Order not found' };
+  if (order.branch_id && !(await canAccessBranch(order.branch_id))) return { ok: false, error: 'No access to this branch' };
   if (['closed', 'void'].includes(order.status)) {
     return { ok: false, error: 'Order is already closed or void' };
   }

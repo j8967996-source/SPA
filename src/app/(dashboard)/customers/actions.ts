@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import { createAuditedClient } from '@/lib/supabase/server';
+import { currentSession } from '@/lib/auth';
 import type { Database } from '@/types/database';
 
 type CustomerUpdate = Database['public']['Tables']['customers']['Update'];
@@ -23,6 +24,7 @@ const updateSchema = schema.partial({ phone: true }).extend({ id: z.string().uui
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
 export async function createCustomer(input: unknown): Promise<ActionResult> {
+  if (!(await currentSession())) return { ok: false, error: 'Sign in required' };
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
@@ -46,6 +48,7 @@ export async function createCustomer(input: unknown): Promise<ActionResult> {
 }
 
 export async function updateCustomer(input: unknown): Promise<ActionResult> {
+  if (!(await currentSession())) return { ok: false, error: 'Sign in required' };
   const parsed = updateSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
@@ -64,6 +67,7 @@ export async function updateCustomer(input: unknown): Promise<ActionResult> {
 }
 
 export async function setCustomerStatus(id: string, status: 'active' | 'inactive'): Promise<ActionResult> {
+  if (!(await currentSession())) return { ok: false, error: 'Sign in required' };
   const supabase = await createAuditedClient();
   const { error } = await supabase.from('customers').update({ status }).eq('id', id);
   if (error) return { ok: false, error: error.message };

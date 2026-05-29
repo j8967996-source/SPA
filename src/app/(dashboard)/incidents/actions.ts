@@ -23,6 +23,7 @@ export async function reportIncident(input: unknown): Promise<ActionResult> {
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
   const session = await currentSession();
+  if (!session) return { ok: false, error: 'Sign in required' };
   const supabase = await createAuditedClient();
   const { error } = await supabase.from('incident_log').insert({
     related_order_id: d.related_order_id || null,

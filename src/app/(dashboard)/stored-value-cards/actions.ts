@@ -34,9 +34,11 @@ async function nextCardNo(): Promise<string> {
 }
 
 export async function issueCard(input: unknown): Promise<ActionResult> {
+  if (!(await currentSession())) return { ok: false, error: 'Sign in required' };
   const parsed = issueSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
+  if (!(await canAccessBranch(d.branch_id))) return { ok: false, error: 'No access to this branch' };
   const supabase = await createAuditedClient();
   const initialCents = Math.round(d.initial_amount * 100);
   const bonusCents = Math.round(d.bonus_amount * 100);
@@ -85,6 +87,7 @@ const topUpSchema = z.object({
 });
 
 export async function topUpCard(input: unknown): Promise<ActionResult> {
+  if (!(await currentSession())) return { ok: false, error: 'Sign in required' };
   const parsed = topUpSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
@@ -97,6 +100,7 @@ export async function topUpCard(input: unknown): Promise<ActionResult> {
     .eq('id', d.card_id)
     .single();
   if (ce || !card) return { ok: false, error: 'Card not found' };
+  if (card.branch_id && !(await canAccessBranch(card.branch_id))) return { ok: false, error: 'No access to this branch' };
   if (card.status !== 'active') return { ok: false, error: 'Card is not active' };
 
   const newBalance = card.current_balance_cents + addCents;
