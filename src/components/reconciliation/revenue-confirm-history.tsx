@@ -6,6 +6,7 @@ import { ChevronRight, ChevronDown, CalendarCheck, Download } from 'lucide-react
 
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 import {
   Table,
   TableBody,
@@ -68,6 +69,33 @@ export function RevenueConfirmHistory({ orders }: { orders: ConfirmableOrder[] }
     setExpanded((prev) => { const n = new Set(prev); n.has(date) ? n.delete(date) : n.add(date); return n; });
   }
 
+  // --- Selection for batch PDF / ZIP download (mirrors Tip Settlement) ---
+  // Days WITHOUT a gl_batch_nbr (pre-ERP confirms or skipped batches) aren't
+  // selectable — there's nothing to render a voucher from.
+  const selectableDates = groups.filter((g) => g.batches.length > 0).map((g) => g.date);
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  function toggleSel(date: string) {
+    setSel((p) => { const n = new Set(p); n.has(date) ? n.delete(date) : n.add(date); return n; });
+  }
+  const allSelected = selectableDates.length > 0 && selectableDates.every((d) => sel.has(d));
+  function toggleAll() {
+    setSel((prev) => {
+      const n = new Set(prev);
+      if (allSelected) for (const d of selectableDates) n.delete(d);
+      else for (const d of selectableDates) n.add(d);
+      return n;
+    });
+  }
+  // Flatten the user's day picks back to the underlying batch numbers (some
+  // days could in theory have more than one batch from retries). 1 batch
+  // total → direct PDF; many → ZIP.
+  const selectedBatches = groups
+    .filter((g) => sel.has(g.date))
+    .flatMap((g) => g.batches);
+  const pdfHref = selectedBatches.length === 1
+    ? `/reconciliation/revenue-confirm/${selectedBatches[0]}/pdf`
+    : `/reconciliation/revenue-confirm/pdf-zip?batches=${selectedBatches.join(',')}`;
+
   if (groups.length === 0) {
     return (
       <Card className="border-dashed bg-muted/30">
@@ -88,6 +116,36 @@ export function RevenueConfirmHistory({ orders }: { orders: ConfirmableOrder[] }
       <div className="px-4 py-3 bg-muted/30 border-b border-border text-sm font-semibold">
         Confirmed (Closed) · <span className="tabular">{grand.orderCount}</span> order{grand.orderCount === 1 ? '' : 's'} across <span className="tabular">{grand.dayCount}</span> day{grand.dayCount === 1 ? '' : 's'} · grouped by service date
       </div>
+
+      {/* Selection bar — pick days to bundle their GL voucher PDFs.
+          Mirrors the Tip Settlement history pattern: single → one PDF,
+          many → a ZIP. Days without a GL # are not selectable. */}
+      {selectableDates.length > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border bg-card px-4 py-2.5">
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              className="size-4 cursor-pointer accent-primary"
+              checked={allSelected}
+              onChange={toggleAll}
+            />
+            <span className="text-sm font-bold">Select all ({selectableDates.length})</span>
+            <span className="text-xs font-medium text-muted-foreground">— pick days to download as PDF / ZIP</span>
+          </label>
+          {sel.size > 0 && (
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-bold">{sel.size} selected</span>
+              <a
+                href={pdfHref}
+                className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-bold text-primary-foreground hover:bg-primary/90"
+              >
+                <Download className="size-4" /> Download PDF ({sel.size})
+              </a>
+            </div>
+          )}
+        </div>
+      )}
+
       <Table className="table-fixed">
         {/* Column widths rebalanced: pull slack OUT of the left side (Order No
             / PAX / Settle were oversized for their content) and PUSH it into
@@ -96,6 +154,7 @@ export function RevenueConfirmHistory({ orders }: { orders: ConfirmableOrder[] }
             but with much less slack to absorb, so the GL chip + summary
             numbers sit closer to the data they belong to. */}
         <colgroup>
+          <col className="w-8" /> {/* Checkbox */}
           <col className="w-52" />{/* Order No / Date */}
           <col className="w-14" />{/* PAX */}
           <col className="w-20" />{/* Settle */}
@@ -111,6 +170,7 @@ export function RevenueConfirmHistory({ orders }: { orders: ConfirmableOrder[] }
               for the tip. Label shortened to "TIPS" so it stops getting
               truncated. */}
           <TableRow>
+            <TableHead className="bg-transparent" />{/* checkbox */}
             <TableHead className="bg-transparent" />
             <TableHead className="bg-transparent" />
             <TableHead className="bg-transparent" />
@@ -123,6 +183,7 @@ export function RevenueConfirmHistory({ orders }: { orders: ConfirmableOrder[] }
             </TableHead>
           </TableRow>
           <TableRow>
+            <TableHead className="bg-transparent" />{/* checkbox */}
             <TableHead className="font-bold">Date / Order No</TableHead>
             <TableHead className="font-bold text-center">PAX</TableHead>
             <TableHead className="font-bold">Settle</TableHead>
@@ -143,33 +204,32 @@ export function RevenueConfirmHistory({ orders }: { orders: ConfirmableOrder[] }
                     directly under their column headers thanks to the colgroup. */}
                 <TableRow
                   onClick={() => toggle(g.date)}
-                  className="cursor-pointer bg-muted/30 hover:bg-muted/40 border-t-2 border-border"
+                  className={cn(
+                    'cursor-pointer hover:bg-muted/40 border-t-2 border-border',
+                    sel.has(g.date) ? 'bg-primary/5' : 'bg-muted/30',
+                  )}
                 >
+                  <TableCell className="pr-0" onClick={(e) => e.stopPropagation()}>
+                    {g.batches.length > 0 && (
+                      <input
+                        type="checkbox"
+                        className="size-4 cursor-pointer accent-primary ml-2"
+                        checked={sel.has(g.date)}
+                        onChange={() => toggleSel(g.date)}
+                      />
+                    )}
+                  </TableCell>
                   <TableCell colSpan={4} className="font-bold">
                     <span className="inline-flex items-center gap-2 flex-wrap">
                       {isOpen ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronRight className="size-4 text-muted-foreground" />}
                       <span className="tabular">{g.date}</span>
                       <span className="text-xs font-medium text-muted-foreground">({g.rows.length} order{g.rows.length > 1 ? 's' : ''})</span>
-                      {/* GL voucher # and PDF download are separated:
-                          - The chip is a static label (number you copy/read)
-                          - The download icon is the actual action */}
+                      {/* GL voucher # as a static label — the actual download
+                          happens via the Select-all bar above. */}
                       {g.batches.map((b) => (
-                        <Fragment key={b}>
-                          <span className="ml-1 inline-flex items-center gap-1 rounded bg-primary/15 px-1.5 py-0.5 text-xs font-bold text-primary font-mono">
-                            GL #{b}
-                          </span>
-                          <a
-                            href={`/reconciliation/revenue-confirm/${b}/pdf`}
-                            target="_blank"
-                            rel="noopener"
-                            onClick={(e) => e.stopPropagation()}
-                            title={`Download GL #${b} voucher PDF`}
-                            className="inline-flex items-center gap-1 rounded border border-border bg-card px-1.5 py-0.5 text-xs font-bold text-foreground hover:bg-accent transition-colors"
-                          >
-                            <Download className="size-3" />
-                            PDF
-                          </a>
-                        </Fragment>
+                        <span key={b} className="ml-1 inline-flex items-center gap-1 rounded bg-primary/15 px-1.5 py-0.5 text-xs font-bold text-primary font-mono">
+                          GL #{b}
+                        </span>
                       ))}
                     </span>
                   </TableCell>
@@ -182,7 +242,8 @@ export function RevenueConfirmHistory({ orders }: { orders: ConfirmableOrder[] }
                 {/* Detail rows for this day — only rendered when group is open. */}
                 {isOpen && g.rows.map((o) => (
                   <TableRow key={o.id}>
-                    <TableCell className="font-mono font-bold pl-9">
+                    <TableCell />{/* blank to align under checkbox column */}
+                    <TableCell className="font-mono font-bold pl-5">
                       <Link href={`/sales-orders/${o.id}`} className="hover:text-primary">{o.order_no}</Link>
                     </TableCell>
                     <TableCell className="font-bold tabular text-center">{o.pax}</TableCell>
@@ -205,7 +266,7 @@ export function RevenueConfirmHistory({ orders }: { orders: ConfirmableOrder[] }
             as the period close-out for whatever filter the user has applied. */}
         <TableFooter>
           <TableRow className="border-t-2 border-border bg-muted/50 hover:bg-muted/50">
-            <TableCell colSpan={4} className="font-extrabold uppercase text-xs tracking-wider text-muted-foreground pl-4">
+            <TableCell colSpan={5} className="font-extrabold uppercase text-xs tracking-wider text-muted-foreground pl-4">
               Grand Totals
               <span className="ml-2 text-muted-foreground/70 normal-case tracking-normal text-[11px]">
                 ({grand.orderCount} order{grand.orderCount === 1 ? '' : 's'} · {grand.dayCount} day{grand.dayCount === 1 ? '' : 's'})
