@@ -326,7 +326,20 @@ export function OrderWorkspace({
   // Pick the first free therapist + a matching free station for this line.
   // "Free" = not mid-service anywhere, and not already taken by another live
   // line on this same order. Station type is matched to the service when known.
+  //
+  // Honour what's already there: a station / therapist that's been set by an
+  // earlier flow (e.g. carried over from a reservation that already pinned
+  // Bed #6) is kept as-is. Auto-assign only fills empty slots. That way the
+  // operator can click the button as a "fill in whatever's still blank" shortcut
+  // without it silently overriding pre-committed allocations.
   function autoAssign() {
+    const hasTherapist = !!therapistId;
+    const hasStation = !!resourceId;
+    if (hasTherapist && hasStation) {
+      toast.info('Therapist and station already set — nothing to auto-assign');
+      return;
+    }
+
     const takenTherapists = new Set<string>(busyTherapistIds);
     const takenStations = new Set<string>(busyResourceIds);
     items
@@ -354,17 +367,33 @@ export function OrderWorkspace({
       (r) => !takenStations.has(r.id) && (!neededType || r.resource_type === neededType),
     );
 
-    if (freeTherapist) setTherapistId(freeTherapist.id);
-    if (freeStation) setResourceId(freeStation.id);
+    // Only set fields that were empty — preserves the pinned bed from the
+    // reservation (or any earlier manual pick) instead of overwriting it.
+    const setTherapistNow = !hasTherapist && !!freeTherapist;
+    const setStationNow = !hasStation && !!freeStation;
+    if (setTherapistNow) setTherapistId(freeTherapist!.id);
+    if (setStationNow) setResourceId(freeStation!.id);
 
-    if (freeTherapist && freeStation) {
-      toast.success(`Auto-assigned ${freeTherapist.name}${note} · ${freeStation.name}`);
-    } else if (!freeTherapist && !freeStation) {
+    // Build a contextual toast: only mention the fields that were actually
+    // changed; warn about anything that's still missing.
+    const changed: string[] = [];
+    if (setTherapistNow) changed.push(`${freeTherapist!.name}${note}`);
+    if (setStationNow) changed.push(freeStation!.name);
+    const missingTherapist = !hasTherapist && !freeTherapist;
+    const missingStation = !hasStation && !freeStation;
+
+    if (changed.length === 2) {
+      toast.success(`Auto-assigned ${changed.join(' · ')}`);
+    } else if (changed.length === 1 && !missingTherapist && !missingStation) {
+      toast.success(`Auto-assigned ${changed[0]}${hasTherapist ? ' (therapist kept)' : ' (station kept)'}`);
+    } else if (changed.length === 1) {
+      toast.warning(`${changed[0]} set — ${missingTherapist ? 'no free therapist (own or borrowable)' : `no free station${neededType ? ` (${neededType})` : ''}`}`);
+    } else if (missingTherapist && missingStation) {
       toast.error('No free therapist (own or borrowable) or station');
-    } else if (!freeTherapist) {
-      toast.warning(`Station ${freeStation!.name} set — no free therapist (own or borrowable)`);
-    } else {
-      toast.warning(`${freeTherapist.name}${note} set — no free station${neededType ? ` (${neededType})` : ''}`);
+    } else if (missingTherapist) {
+      toast.error('No free therapist (own or borrowable)');
+    } else if (missingStation) {
+      toast.error(`No free station${neededType ? ` (${neededType})` : ''}`);
     }
   }
 
