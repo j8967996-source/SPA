@@ -15,11 +15,18 @@ import {
 } from '@dnd-kit/core';
 
 import { Card } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 import { NewReservationDialog, type ReservationItem } from '@/components/reservations/new-reservation-dialog';
 import { ReservationConvertButton } from '@/components/shift-schedule/reservation-convert-button';
 import { placeReservationOnBed, moveScheduledOrderItem } from '@/app/(dashboard)/shift-schedule/actions';
 
-export interface BoardBed { id: string; name: string }
+export interface BoardBed {
+  id: string;
+  name: string;
+  /** Station resource_type. Drives per-type counts in the hover popup so
+   *  "8 free" splits into "bed 6 · hair 1 · nail 1". */
+  type: string;
+}
 export type BlockVariant = 'pending' | 'confirmed' | 'scheduled' | 'in_service' | 'completed';
 export interface BoardBlock {
   key: string;
@@ -42,6 +49,21 @@ export interface BoardBlock {
   draggable: boolean;
   orderId?: string;
   editData?: ReservationItem; // reservation blocks carry their full record for the edit dialog
+  /** Therapist on this block. Used by the hover popup to mark staff busy at
+   *  a hovered minute (block's own variant decides if it actually occupies
+   *  the therapist — completed / interrupted don't). */
+  therapistId?: string | null;
+}
+export interface BoardStaffShift {
+  id: string;
+  name: string;
+  code: string;
+  /** Position code (MASSAGE_THERAPIST / HAIR_STYLIST / NAIL_TECHNICIAN /
+   *  MASSAGE_NEWBI / receptionist / etc). Non-service positions are
+   *  filtered out server-side so this should always be a service role. */
+  positionCode: string | null;
+  startMin: number;
+  endMin: number;
 }
 // Option data forwarded to NewReservationDialog for click-to-add.
 interface BranchOpt { id: string; code: string; name: string; businessUnitIds: string[] }
@@ -79,6 +101,98 @@ function assignLanes(blocks: { startMin: number; endMin: number }[]): { lanes: n
     laneEnds[placed] = blocks[i].endMin;
   }
   return { lanes, count: Math.max(1, laneEnds.length) };
+}
+
+interface HoverStations {
+  free: number;
+  total: number;
+  byType: { type: string; label: string; free: number; total: number }[];
+}
+interface HoverStaff {
+  free: number;
+  total: number;
+  byPosition: { code: string; label: string; free: number; onShift: number; freeNames: string[] }[];
+}
+
+// Floating "who's free at this minute" popover. Anchored to the scrub line via
+// `x`, flipped left when close to the right edge so it doesn't clip. Two
+// stacked sections — Stations (rooms / chairs / nail) and Staff (per position
+// with up to 3 free names) — match the structure of the StationsNowCard +
+// StaffNowCard at the top of the page so the desk sees the same shape on hover.
+function HoverPopover({ x, time, stations, staff }: { x: number; time: string; stations: HoverStations; staff: HoverStaff }) {
+  // Heuristic flip: if cursor is in the right third of a typical board (~800pt),
+  // anchor the popover to the cursor's RIGHT side so it grows leftward.
+  // (The board is overflow-auto inside a Card, so a more precise measurement
+  // would need a ref + resize observer; the heuristic is good enough in practice.)
+  const flipLeft = x > 560;
+  return (
+    <div
+      className="absolute z-40 pointer-events-none"
+      style={{
+        left: flipLeft ? undefined : x + 12,
+        right: flipLeft ? undefined : undefined,
+        // transform shifts the box if anchored to the right side
+        transform: flipLeft ? `translate(calc(${x}px - 100% - 12px), 24px)` : `translate(0, 24px)`,
+        top: 48, // sit just below the ruler
+      }}
+    >
+      <div className="rounded-lg border border-border bg-card/95 px-3 py-2 shadow-lg backdrop-blur-sm min-w-[200px] max-w-[260px]">
+        <div className="flex items-baseline justify-between gap-2 border-b border-border pb-1 mb-1">
+          <span className="text-xs font-extrabold tabular-nums">{time}</span>
+          <span className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">availability</span>
+        </div>
+
+        {/* Stations */}
+        <div className="flex flex-col gap-0.5 mb-1.5">
+          <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
+            <span>Stations</span>
+            <span className="tabular-nums">{stations.free}/{stations.total}</span>
+          </div>
+          <div className="flex flex-wrap gap-x-2 text-[11px] font-semibold text-muted-foreground tabular-nums">
+            {stations.byType.map((t) => (
+              <span key={t.type} className={cn('inline-flex items-baseline gap-1', t.total === 0 && 'opacity-50')}>
+                <span>{t.label}</span>
+                <span className={cn('font-bold', t.total > 0 && t.free === 0 ? 'text-amber-600 dark:text-amber-400' : 'text-foreground')}>{t.free}·{t.total}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {/* Staff — per-position sections with up to 3 free names */}
+        <div className="flex flex-col gap-1.5">
+          <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
+            <span>Staff</span>
+            <span className="tabular-nums">{staff.free}/{staff.total} on shift</span>
+          </div>
+          {staff.byPosition.length === 0 ? (
+            <span className="text-[11px] font-semibold italic text-muted-foreground/70">No service staff on shift</span>
+          ) : (
+            staff.byPosition.map((p) => {
+              const overflow = p.free - p.freeNames.length;
+              return (
+                <div key={p.code} className="flex flex-col gap-0">
+                  <div className="flex items-baseline justify-between text-[11px] font-bold">
+                    <span>{p.label}</span>
+                    <span className={cn('tabular-nums', p.free === 0 && p.onShift > 0 && 'text-amber-600 dark:text-amber-400')}>
+                      {p.free}/{p.onShift}
+                    </span>
+                  </div>
+                  {p.free > 0 ? (
+                    <div className="text-[10px] font-medium text-muted-foreground">
+                      {p.freeNames.join(', ')}
+                      {overflow > 0 && <span className="text-muted-foreground/70"> +{overflow} more</span>}
+                    </div>
+                  ) : (
+                    <div className="text-[10px] font-medium italic text-muted-foreground/70">all busy</div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 const VARIANT_CLASS: Record<BlockVariant, string> = {
@@ -203,7 +317,7 @@ function BedRow({
 }
 
 export function ScheduleBoard({
-  branchId, day, beds, blocks, windowStartMin, windowEndMin, bedCount, shiftWindows, nowMin, dialog,
+  branchId, day, beds, blocks, windowStartMin, windowEndMin, bedCount, staffShifts, nowMin, dialog,
 }: {
   branchId: string;
   day: string;
@@ -212,7 +326,7 @@ export function ScheduleBoard({
   windowStartMin: number;
   windowEndMin: number;
   bedCount: number;
-  shiftWindows: { startMin: number; endMin: number }[];
+  staffShifts: BoardStaffShift[];
   nowMin: number | null;
   dialog: BoardDialogData;
 }) {
@@ -240,13 +354,70 @@ export function ScheduleBoard({
   const blocksByBed = new Map<string, BoardBlock[]>();
   for (const b of blocks) if (b.bedId) blocksByBed.set(b.bedId, [...(blocksByBed.get(b.bedId) ?? []), b]);
 
-  // Scrub the timeline: availability at the hovered minute (beds free from the
-  // placed blocks incl. prep/cleanup; therapists on shift from the roster).
+  // Scrub the timeline: availability at the hovered minute (stations free from
+  // the placed blocks incl. prep/cleanup; staff on shift from the roster).
   const [hoverMin, setHoverMin] = useState<number | null>(null);
-  const hoverBedsFree = hoverMin == null ? null
-    : bedCount - new Set(blocks.filter((b) => b.bedId && hoverMin >= b.startMin - b.prepMin && hoverMin < b.endMin + b.cleanupMin).map((b) => b.bedId)).size;
-  const hoverOnShift = hoverMin == null ? null
-    : shiftWindows.filter((w) => hoverMin >= w.startMin && hoverMin < w.endMin).length;
+  const [hoverX, setHoverX] = useState<number | null>(null);
+
+  // Same ordering / labelling as the StationsNowCard + StaffNowCard so the
+  // hover popup reads consistently with the top-of-page summary cards.
+  const STATION_ORDER = ['massage_bed', 'hair_chair', 'nail_station'] as const;
+  const STATION_LABEL: Record<string, string> = { massage_bed: 'bed', hair_chair: 'hair', nail_station: 'nail' };
+  const POSITION_ORDER = ['MASSAGE_THERAPIST', 'MASSAGE_NEWBI', 'HAIR_STYLIST', 'NAIL_TECHNICIAN'];
+  const POSITION_LABEL: Record<string, string> = {
+    MASSAGE_THERAPIST: 'Massage', MASSAGE_NEWBI: 'Newbi', HAIR_STYLIST: 'Hair', NAIL_TECHNICIAN: 'Nail',
+  };
+
+  // Per-type station free-now @ hoverMin. A station is "busy" if any block on
+  // it overlaps [start − prep, end + cleanup]; everything else is free.
+  const hoverStations = hoverMin == null ? null : (() => {
+    const busy = new Set(
+      blocks.filter((b) => b.bedId && hoverMin >= b.startMin - b.prepMin && hoverMin < b.endMin + b.cleanupMin).map((b) => b.bedId!),
+    );
+    const byType = STATION_ORDER.map((type) => {
+      const rows = beds.filter((b) => b.type === type);
+      return { type, label: STATION_LABEL[type] ?? type, total: rows.length, free: rows.filter((b) => !busy.has(b.id)).length };
+    });
+    return { byType, total: beds.length, free: beds.length - busy.size };
+  })();
+
+  // Per-position staff free-now @ hoverMin. On-shift = shift window covers
+  // hoverMin. Busy = a non-completed block they own overlaps [start, end].
+  // (completed / interrupted lines don't tie up the therapist anymore.)
+  const hoverStaff = hoverMin == null ? null : (() => {
+    const occupiedAt = (b: BoardBlock) =>
+      b.therapistId &&
+      (b.variant === 'scheduled' || b.variant === 'in_service' || b.variant === 'confirmed') &&
+      hoverMin >= b.startMin && hoverMin < b.endMin;
+    const busyTh = new Set(blocks.filter(occupiedAt).map((b) => b.therapistId!));
+    const onShiftIds = staffShifts.filter((s) => hoverMin >= s.startMin && hoverMin < s.endMin);
+    const seenPos = new Set<string>();
+    const byPosition: { code: string; label: string; free: number; onShift: number; freeNames: string[] }[] = [];
+    const pickPosition = (code: string) => {
+      const inPos = onShiftIds.filter((s) => s.positionCode === code);
+      if (inPos.length === 0) return;
+      const free = inPos.filter((s) => !busyTh.has(s.id));
+      byPosition.push({
+        code,
+        label: POSITION_LABEL[code] ?? code.toLowerCase(),
+        onShift: inPos.length,
+        free: free.length,
+        // Limit to 3 names to keep the popup compact; an "+X more" hint
+        // surfaces overflow without growing the popup unbounded.
+        freeNames: free.slice(0, 3).map((s) => s.name),
+      });
+      seenPos.add(code);
+    };
+    for (const code of POSITION_ORDER) pickPosition(code);
+    // Any unknown service position not in the well-known list — render after.
+    for (const s of onShiftIds) if (s.positionCode && !seenPos.has(s.positionCode)) pickPosition(s.positionCode);
+    return { byPosition, total: onShiftIds.length, free: onShiftIds.length - onShiftIds.filter((s) => busyTh.has(s.id)).length };
+  })();
+
+  // Keep bedCount around (used by other callers / tests) but compute the same
+  // bottom-line free count from blocks so the legacy "1 of N beds" pill still
+  // works when the new popup is hidden.
+  void bedCount;
 
   function openBlock(b: BoardBlock) {
     if (b.kind === 'order' && b.orderId) router.push(`/sales-orders/${b.orderId}`);
@@ -297,10 +468,11 @@ export function ScheduleBoard({
           style={{ minWidth: LABEL_W + trackWidth }}
           onMouseMove={(e) => {
             const x = e.clientX - e.currentTarget.getBoundingClientRect().left - LABEL_W;
-            if (x < 0) { setHoverMin(null); return; }
+            if (x < 0) { setHoverMin(null); setHoverX(null); return; }
             setHoverMin(Math.min(windowEndMin, Math.max(windowStartMin, snapMin(windowStartMin + x / PX_PER_MIN))));
+            setHoverX(LABEL_W + x);
           }}
-          onMouseLeave={() => setHoverMin(null)}
+          onMouseLeave={() => { setHoverMin(null); setHoverX(null); }}
         >
           {/* hour + 15-min ruler */}
           <div className="flex border-b border-border sticky top-0 z-30 bg-muted">
@@ -341,9 +513,12 @@ export function ScheduleBoard({
                 </div>
               )}
               {hoverMin != null && (
+                // Time pip on the ruler — narrow, always visible above the scrub
+                // line. The richer popover (per-position breakdown) renders
+                // outside this sticky header so it can extend down over the body.
                 <div className="absolute top-0.5 z-40 -translate-x-1/2 pointer-events-none" style={{ left: (hoverMin - windowStartMin) * PX_PER_MIN }}>
-                  <span className="rounded-md bg-primary px-1.5 py-0.5 text-[10px] font-bold leading-tight text-primary-foreground whitespace-nowrap shadow">
-                    {hhmm(hoverMin)} · {hoverBedsFree} bed{hoverBedsFree === 1 ? '' : 's'} · {hoverOnShift} on shift
+                  <span className="rounded-md bg-primary px-1.5 py-0.5 text-[10px] font-bold leading-tight text-primary-foreground whitespace-nowrap shadow tabular-nums">
+                    {hhmm(hoverMin)}
                   </span>
                 </div>
               )}
@@ -394,6 +569,14 @@ export function ScheduleBoard({
           {/* scrub cursor — follows the pointer, marks the time the readout shows */}
           {hoverMin != null && (
             <div className="absolute top-0 bottom-0 z-20 w-px bg-primary/70 pointer-events-none" style={{ left: LABEL_W + (hoverMin - windowStartMin) * PX_PER_MIN }} />
+          )}
+
+          {/* Per-position / per-station hover popover. Pinned to the scrub line
+              but flipped to the left when there isn't enough room on the right
+              (would otherwise clip on narrow boards). Pointer-events:none so it
+              never steals a click meant for an empty bed slot. */}
+          {hoverMin != null && hoverX != null && hoverStaff && hoverStations && (
+            <HoverPopover x={hoverX} time={hhmm(hoverMin)} stations={hoverStations} staff={hoverStaff} />
           )}
         </div>
 

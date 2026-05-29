@@ -3,7 +3,7 @@ import { Card } from '@/components/ui/card';
 import { ShiftControls } from '@/components/shift-schedule/shift-controls';
 import { ShiftCell, type ShiftData } from '@/components/shift-schedule/shift-cell';
 import { DayTimeline, type DayRow, type ReservationBlock } from '@/components/shift-schedule/day-timeline';
-import { ScheduleBoard, type BoardBed, type BoardBlock, type BlockVariant, type BoardDialogData } from '@/components/shift-schedule/schedule-board';
+import { ScheduleBoard, type BoardBed, type BoardBlock, type BlockVariant, type BoardDialogData, type BoardStaffShift } from '@/components/shift-schedule/schedule-board';
 import { DispatchBoard } from '@/components/shift-schedule/dispatch-board';
 import { StaffNowCard } from '@/components/shift-schedule/staff-now-card';
 import { StationsNowCard } from '@/components/shift-schedule/stations-now-card';
@@ -209,13 +209,13 @@ async function fetchDayData(subject: ShiftView, branchId: string, day: string): 
 // Interactive Station board (15-min): beds as rows, with every scheduled /
 // in-service / done order item on its bed, pinned reservations as bed blocks,
 // and unplaced reservations in the "To place" lane (drag onto a bed).
-async function fetchStationBoard(branchId: string, day: string): Promise<{ beds: BoardBed[]; blocks: BoardBlock[]; windowStartMin: number; windowEndMin: number; bedCount: number; shiftWindows: { startMin: number; endMin: number }[] }> {
+async function fetchStationBoard(branchId: string, day: string): Promise<{ beds: BoardBed[]; blocks: BoardBlock[]; windowStartMin: number; windowEndMin: number; bedCount: number; staffShifts: BoardStaffShift[] }> {
   const supabase = createServiceClient();
   const [bedsRes, itemsRes, resvRes, shiftRes, graceMin] = await Promise.all([
-    supabase.from('resources').select('id, resource_name').eq('branch_id', branchId).eq('status', 'active').order('resource_name'),
+    supabase.from('resources').select('id, resource_name, resource_type').eq('branch_id', branchId).eq('status', 'active').order('resource_name'),
     supabase
       .from('order_items')
-      .select('id, status, resource_id, actual_start, actual_end, scheduled_start, service_start, slot_start, duration_minutes, service:service_items ( name, prep_before_minutes, cleanup_after_minutes ), therapist:employees!order_items_therapist_id_fkey ( name ), guest:order_customers ( customer_name ), order:orders!order_items_order_id_fkey ( id, branch_id, service_date, status, order_customers ( id ) )')
+      .select('id, status, resource_id, therapist_id, actual_start, actual_end, scheduled_start, service_start, slot_start, duration_minutes, service:service_items ( name, prep_before_minutes, cleanup_after_minutes ), therapist:employees!order_items_therapist_id_fkey ( name ), guest:order_customers ( customer_name ), order:orders!order_items_order_id_fkey ( id, branch_id, service_date, status, order_customers ( id ) )')
       .in('status', ['scheduled', 'in_service', 'service_completed', 'feedback_done', 'interrupted'])
       .not('resource_id', 'is', null),
     supabase
@@ -223,11 +223,17 @@ async function fetchStationBoard(branchId: string, day: string): Promise<{ beds:
       .select('id, status, branch_id, source_id, guest_name, guest_phone, pax, gender_preference, service_location_type, note, seat_together, service_item_id, desired_service_start, desired_service_end, service:service_items ( prep_before_minutes, cleanup_after_minutes ), customer_sources ( code ), reservation_service_categories ( service_category_id, service_categories ( name ) ), reservation_resources ( resource_id )')
       .eq('branch_id', branchId).in('status', ['reserved', 'confirmed']).is('deleted_at', null)
       .gte('desired_service_start', `${day}T00:00:00+08:00`).lte('desired_service_start', `${day}T23:59:59+08:00`).order('desired_service_start'),
-    supabase.from('employee_shifts').select('shift_start, shift_end').eq('branch_id', branchId).eq('shift_date', day).in('shift_type', ['regular', 'cross_branch', 'on_call']),
+    // Pull the full roster (with employee identity + position) instead of bare
+    // time windows; the schedule board now uses this to power the per-position
+    // hover popup ("who's free at 14:30?") on top of the original on-shift count.
+    supabase
+      .from('employee_shifts')
+      .select('employee_id, shift_start, shift_end, employees:employee_id ( name, employee_code, position:positions ( code ) )')
+      .eq('branch_id', branchId).eq('shift_date', day).in('shift_type', ['regular', 'cross_branch', 'on_call']),
     getReservationGraceMinutes(),
   ]);
 
-  const beds: BoardBed[] = (bedsRes.data ?? []).map((b) => ({ id: b.id, name: b.resource_name }));
+  const beds: BoardBed[] = (bedsRes.data ?? []).map((b) => ({ id: b.id, name: b.resource_name, type: b.resource_type }));
   const blocks: BoardBlock[] = [];
   const mins: number[] = [];
 
@@ -260,6 +266,7 @@ async function fetchStationBoard(branchId: string, day: string): Promise<{ beds:
       prepMin: one(it.service)?.prep_before_minutes ?? 0,
       cleanupMin: one(it.service)?.cleanup_after_minutes ?? 0,
       variant, draggable, orderId: ord.id,
+      therapistId: it.therapist_id ?? null,
     });
     mins.push(startMin, endMin);
   }
@@ -314,10 +321,26 @@ async function fetchStationBoard(branchId: string, day: string): Promise<{ beds:
 
   const windowStartMin = mins.length ? Math.min(540, Math.floor(Math.min(...mins) / 60) * 60) : 540;
   const windowEndMin = mins.length ? Math.max(1320, Math.ceil(Math.max(...mins) / 60) * 60) : 1320;
-  const shiftWindows = (shiftRes.data ?? [])
-    .map((s) => ({ startMin: timeToMin(s.shift_start), endMin: timeToMin(s.shift_end) }))
-    .filter((w): w is { startMin: number; endMin: number } => w.startMin != null && w.endMin != null);
-  return { beds, blocks, windowStartMin, windowEndMin, bedCount: beds.length, shiftWindows };
+  // Service-providing positions only — receptionists / managers are on shift
+  // but never relevant for "who's free to take a booking". Same prefix rule as
+  // computeNowAvailability so the two views agree on who counts.
+  const isServicePosition = (code: string | null): boolean =>
+    !!code && (code.startsWith('MASSAGE_') || code.startsWith('HAIR_') || code.startsWith('NAIL_'));
+  const staffShifts: BoardStaffShift[] = (shiftRes.data ?? [])
+    .map((s) => {
+      const e = one(s.employees);
+      const positionCode = e ? one(e.position)?.code ?? null : null;
+      return {
+        id: s.employee_id,
+        name: e?.name ?? '—',
+        code: e?.employee_code ?? '',
+        positionCode,
+        startMin: timeToMin(s.shift_start),
+        endMin: timeToMin(s.shift_end),
+      };
+    })
+    .filter((w): w is BoardStaffShift => w.startMin != null && w.endMin != null && isServicePosition(w.positionCode));
+  return { beds, blocks, windowStartMin, windowEndMin, bedCount: beds.length, staffShifts };
 }
 
 // Dispatch view: external (hotel-dispatched) reservations for the day. They
@@ -808,7 +831,7 @@ export default async function ShiftSchedulePage({
           windowStartMin={stationBoard.windowStartMin}
           windowEndMin={stationBoard.windowEndMin}
           bedCount={stationBoard.bedCount}
-          shiftWindows={stationBoard.shiftWindows}
+          staffShifts={stationBoard.staffShifts}
           nowMin={day === todayISO() ? tsToMin(new Date().toISOString()) : null}
           dialog={boardDialog!}
         />
