@@ -166,10 +166,13 @@ export interface ConfirmableOrder {
    *  own "Pass-through" column on the Revenue Confirm grid. */
   tip_cents: number;
   billing_label: string | null;
+  /** Acumatica GL voucher number from the day's batched Revenue Confirm. Null
+   *  if not yet posted (or this order was confirmed before ERP wiring). */
+  gl_batch_nbr: string | null;
 }
 
 const ORDER_SELECT = `
-  id, order_no, status, order_type, service_date, total_cents,
+  id, order_no, status, order_type, service_date, total_cents, gl_batch_nbr,
   billing:billing_destinations!orders_billing_to_id_fkey ( code, name, default_payment_method_id ),
   order_customers ( id ),
   payments ( amount_cents, method:payment_methods ( code ) ),
@@ -190,6 +193,7 @@ function mapOrderRow(o: any, arMethodId: string | null): ConfirmableOrder {
     cash_cents: sumByCode('cash'), paymaya_cents: sumByCode('paymaya'),
     tip_cents: tipsTotal,
     billing_label: b ? `${b.code} — ${b.name}` : null,
+    gl_batch_nbr: o.gl_batch_nbr ?? null,
   };
 }
 
