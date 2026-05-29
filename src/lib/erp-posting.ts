@@ -32,6 +32,12 @@ interface PostToErpArgs {
    *  `ar-proofs` bucket; override with proofBucket. */
   proofPath?: string;
   proofBucket?: string;
+  /** In-memory artefact (typically a rendered SOA / Revenue Confirm PDF) to
+   *  attach to the posted GL entry alongside any storage proof. Best effort —
+   *  same rule as proofPath: a failure here doesn't unwind the post. Pass a
+   *  fresh ArrayBuffer (Node Buffer's underlying buffer may be a
+   *  SharedArrayBuffer — copy into `new ArrayBuffer` if so). */
+  renderedAttachment?: { filename: string; buffer: ArrayBuffer; mimeType: string };
 }
 
 export type PostToErpResult =
@@ -127,6 +133,29 @@ export async function postToErp(args: PostToErpArgs): Promise<PostToErpResult> {
           await supabase
             .from('erp_posting_log')
             .update({ error_message: `Posted (batch ${res.batchNbr}) but proof attach failed: ${msg}` })
+            .eq('id', log.id);
+        }
+      }
+    }
+
+    // Attach the rendered source PDF (SOA / Revenue Confirm voucher) to the
+    // posted journal so reviewers in Acumatica can see what produced the entry.
+    // Same best-effort policy — attach failures don't unwind the post; the PDF
+    // is always re-renderable from our side via the PDF download routes.
+    if (args.renderedAttachment && res.batchNbr) {
+      try {
+        const ra = args.renderedAttachment;
+        await attachFileToJournal(
+          { batchNbr: res.batchNbr, filename: ra.filename, fileBuffer: ra.buffer, mimeType: ra.mimeType },
+          cookie,
+        );
+      } catch (attachErr) {
+        const msg = attachErr instanceof Error ? attachErr.message : String(attachErr);
+        console.error('[ERP attach] rendered PDF attach failed:', msg);
+        if (log) {
+          await supabase
+            .from('erp_posting_log')
+            .update({ error_message: `Posted (batch ${res.batchNbr}) but rendered PDF attach failed: ${msg}` })
             .eq('id', log.id);
         }
       }

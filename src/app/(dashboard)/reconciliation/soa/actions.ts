@@ -8,6 +8,25 @@ import { currentSession, isManager } from '@/lib/auth';
 import { canAccessBranch, getAllowedBranchIds } from '@/lib/branch-access';
 import { assertNoBlockedClose } from '@/lib/business-day';
 import { postToErp, type PostToErpResult } from '@/lib/erp-posting';
+import { renderSoaPdf } from '@/lib/soa-pdf';
+
+// Render the SOA voucher PDF and return it as a fresh ArrayBuffer payload for
+// postToErp's renderedAttachment slot. Best-effort: a failed render returns
+// undefined so the post still runs (and just doesn't get the PDF attached).
+// Buffer is copied into a new ArrayBuffer because Node Buffer's underlying
+// buffer may be SharedArrayBuffer, which attachFileToJournal doesn't accept.
+async function buildSoaAttachment(soaId: string): Promise<{ filename: string; buffer: ArrayBuffer; mimeType: string } | undefined> {
+  try {
+    const pdf = await renderSoaPdf(soaId);
+    if (!pdf) return undefined;
+    const ab = new ArrayBuffer(pdf.buffer.byteLength);
+    new Uint8Array(ab).set(pdf.buffer);
+    return { filename: pdf.filename, buffer: ab, mimeType: 'application/pdf' };
+  } catch (e) {
+    console.error('[SOA PDF render] failed:', e instanceof Error ? e.message : String(e));
+    return undefined;
+  }
+}
 
 // AR control account — constant for the whole SPA entity (CR side of a settle).
 const AR_ACCOUNT = '10200';
@@ -462,6 +481,10 @@ export async function settleSOA(id: string): Promise<ActionResult> {
   const billing = one<{ intercompany_account: string | null; intercompany_sub: string | null }>(soa.billing);
   const branchCode = one<{ code: string }>(soa.branch)?.code ?? '';
   const amount = soa.total_cents / 100;
+  // Pre-render the SOA voucher PDF — postToErp attaches it to the journal on
+  // success (matches Revenue Confirm's pattern; gives the Acumatica reviewer
+  // the source detail next to the entry).
+  const renderedAttachment = await buildSoaAttachment(id);
   const r = await postToErp({
     entityType: 'soa_settle',
     table: 'revenue_soa',
@@ -488,6 +511,7 @@ export async function settleSOA(id: string): Promise<ActionResult> {
     fromStatus: 'issued',
     toStatus: 'settled',
     extraOnSuccess: { paid_cents: soa.total_cents, outstanding_cents: 0 },
+    renderedAttachment,
   });
   if (!r.ok) return { ok: false, error: `ERP posting failed: ${r.error}` };
   revalidatePath('/reconciliation/soa');
@@ -536,6 +560,7 @@ const paymentSchema = z.object({
  */
 async function postSoaPaymentToErp(args: {
   paymentId: string;
+  soaId: string;
   soaNo: string;
   branchId: string;
   branchCode: string;
@@ -560,6 +585,9 @@ async function postSoaPaymentToErp(args: {
     return { ok: false, error: `No settle transaction code configured for ${args.methodCode}` };
   }
   const tag = args.soaNo;
+  // Pre-render the SOA voucher PDF — attached alongside the cash/bank proof so
+  // Acumatica reviewers see both the receipt evidence AND the statement detail.
+  const renderedAttachment = await buildSoaAttachment(args.soaId);
   return await postToErp({
     entityType: 'soa_payment',
     table: 'revenue_soa_payments',
@@ -572,6 +600,7 @@ async function postSoaPaymentToErp(args: {
       { account: tx.credit_account, sub_account: tx.credit_subaccount ?? '000000000', debit_amount: null, credit_amount: amount, transaction_desc: `${tag} AR settle`.trim() },
     ],
     proofPath: args.proofPath ?? undefined,
+    renderedAttachment,
   });
 }
 
@@ -637,6 +666,7 @@ export async function recordSoaPayment(input: unknown): Promise<ActionResult> {
   // settleSOA, not this path.
   await postSoaPaymentToErp({
     paymentId,
+    soaId: soa_id,
     soaNo: soa.soa_no ?? '',
     branchId: soa.branch_id,
     branchCode: one<{ code: string }>(soa.branch)?.code ?? '',
@@ -706,6 +736,7 @@ export async function retrySoaPaymentPosting(paymentId: string): Promise<ActionR
 
   const r = await postSoaPaymentToErp({
     paymentId: pay.id,
+    soaId: pay.soa_id,
     soaNo: soa.soa_no ?? '',
     branchId: soa.branch_id,
     branchCode: one<{ code: string }>(soa.branch)?.code ?? '',
