@@ -42,11 +42,13 @@ function OrderRow({ o, showDate }: { o: ConfirmableOrder; showDate?: boolean }) 
       <TableCell className="font-bold tabular text-center">{o.pax}</TableCell>
       <TableCell><Badge variant={o.isAR ? 'secondary' : 'default'} className="font-bold">{o.isAR ? 'AR' : 'Paid'}</Badge></TableCell>
       <TableCell className="font-medium text-muted-foreground">{o.billing_label ?? 'Self-pay'}</TableCell>
-      <TableCell className="font-medium tabular text-right text-muted-foreground">{moneyCell(o.cash_cents)}</TableCell>
-      <TableCell className="font-medium tabular text-right text-muted-foreground">{moneyCell(o.paymaya_cents)}</TableCell>
-      <TableCell className="font-medium tabular text-right text-muted-foreground">{moneyCell(o.isAR ? o.total_cents : 0)}</TableCell>
-      <TableCell className="font-bold tabular text-right">{peso(o.total_cents)}</TableCell>
-      <TableCell className="font-medium tabular text-right text-muted-foreground pr-4">{moneyCell(o.tip_cents)}</TableCell>
+      {/* Sales group — bracketed by border-x, tinted with bg-muted/20 */}
+      <TableCell className="font-medium tabular text-right text-muted-foreground bg-muted/20 border-l border-border">{moneyCell(o.cash_cents)}</TableCell>
+      <TableCell className="font-medium tabular text-right text-muted-foreground bg-muted/20">{moneyCell(o.paymaya_cents)}</TableCell>
+      <TableCell className="font-medium tabular text-right text-muted-foreground bg-muted/20">{moneyCell(o.isAR ? o.total_cents : 0)}</TableCell>
+      <TableCell className="font-bold tabular text-right bg-muted/20 border-r border-border">{peso(o.total_cents)}</TableCell>
+      {/* Pass-through group — separate visual treatment */}
+      <TableCell className="font-medium tabular text-right text-muted-foreground bg-muted/20 border-r border-border pr-4">{moneyCell(o.tip_cents)}</TableCell>
     </TableRow>
   );
 }
@@ -160,21 +162,32 @@ export default async function RevenueConfirmPage({
                   (代收代付 — collected on behalf of the therapist, posted as
                   DR 10121 / CR 20500, no impact on revenue). */}
               <TableHeader>
-                <TableRow className="border-b-0 hover:bg-transparent">
-                  <TableHead colSpan={4} />
-                  <TableHead colSpan={4} className="text-center font-bold text-[10px] uppercase tracking-[0.15em] text-muted-foreground pb-0">Sales</TableHead>
-                  <TableHead className="text-center font-bold text-[10px] uppercase tracking-[0.15em] text-muted-foreground pb-0 pr-4">Pass-through</TableHead>
+                {/* Group header brackets the Sales (4-col) and Pass-through
+                    (1-col) sets the same way the Sales Orders page does:
+                    bg-muted/50 + border-x for the label, bg-muted/30 for the
+                    individual column headers underneath. */}
+                <TableRow>
+                  <TableHead className="bg-transparent" />
+                  <TableHead className="bg-transparent" />
+                  <TableHead className="bg-transparent" />
+                  <TableHead className="bg-transparent" />
+                  <TableHead colSpan={4} className="text-center text-[11px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/50 border-x border-border">
+                    Sales
+                  </TableHead>
+                  <TableHead className="text-center text-[11px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/50 border-r border-border">
+                    Pass-through
+                  </TableHead>
                 </TableRow>
                 <TableRow>
                   <TableHead className="w-56 font-bold">Order No</TableHead>
                   <TableHead className="w-16 font-bold text-center">PAX</TableHead>
                   <TableHead className="w-24 font-bold">Settle</TableHead>
                   <TableHead className="font-bold">Billing</TableHead>
-                  <TableHead className="w-28 font-bold text-center">Cash</TableHead>
-                  <TableHead className="w-28 font-bold text-center">PAYMAYA</TableHead>
-                  <TableHead className="w-28 font-bold text-center">AR</TableHead>
-                  <TableHead className="w-28 font-bold text-right">Total</TableHead>
-                  <TableHead className="w-24 font-bold text-right pr-4">Tip</TableHead>
+                  <TableHead className="w-28 font-bold text-center bg-muted/30 border-l border-border">Cash</TableHead>
+                  <TableHead className="w-28 font-bold text-center bg-muted/30">PAYMAYA</TableHead>
+                  <TableHead className="w-28 font-bold text-center bg-muted/30">AR</TableHead>
+                  <TableHead className="w-28 font-bold text-right bg-muted/30 border-r border-border">Total</TableHead>
+                  <TableHead className="w-24 font-bold text-right bg-muted/30 border-r border-border pr-4">Tip</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -183,14 +196,15 @@ export default async function RevenueConfirmPage({
                 ) : (
                   <>
                     {orders.map((o) => <OrderRow key={o.id} o={o} />)}
-                    {/* Totals footer: aligned with Cash / PAYMAYA / AR / Total / Tip columns. */}
-                    <TableRow className="border-t-2 border-border bg-muted/30 hover:bg-muted/30">
-                      <TableCell colSpan={4} className="font-bold text-right pr-3">Totals</TableCell>
-                      <TableCell className="font-bold tabular text-right">{moneyCell(cashTotal)}</TableCell>
-                      <TableCell className="font-bold tabular text-right">{moneyCell(paymayaTotal)}</TableCell>
-                      <TableCell className="font-bold tabular text-right">{moneyCell(arTotal)}</TableCell>
-                      <TableCell className="font-extrabold tabular text-right">{peso(total)}</TableCell>
-                      <TableCell className="font-bold tabular text-right pr-4">{moneyCell(tipTotal)}</TableCell>
+                    {/* Totals footer — borders match the data rows above so the
+                        Sales / Pass-through groups stay bracketed all the way down. */}
+                    <TableRow className="border-t-2 border-border bg-muted/40 hover:bg-muted/40">
+                      <TableCell colSpan={4} className="font-bold text-right pr-3 uppercase text-xs tracking-wider text-muted-foreground">Totals</TableCell>
+                      <TableCell className="font-bold tabular text-right bg-muted/30 border-l border-border">{moneyCell(cashTotal)}</TableCell>
+                      <TableCell className="font-bold tabular text-right bg-muted/30">{moneyCell(paymayaTotal)}</TableCell>
+                      <TableCell className="font-bold tabular text-right bg-muted/30">{moneyCell(arTotal)}</TableCell>
+                      <TableCell className="font-extrabold tabular text-right bg-muted/30 border-r border-border">{peso(total)}</TableCell>
+                      <TableCell className="font-bold tabular text-right bg-muted/30 border-r border-border pr-4">{moneyCell(tipTotal)}</TableCell>
                     </TableRow>
                   </>
                 )}

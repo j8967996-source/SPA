@@ -81,24 +81,33 @@ export function RevenueConfirmHistory({ orders }: { orders: ConfirmableOrder[] }
             </button>
             {isOpen && (
               <Table className="table-fixed">
-                {/* Grouped header: Cash/PAYMAYA/AR/Total under "Sales", Tip
-                    under "Pass-through" (代收代付). Mirrors the Confirm tab. */}
+                {/* Grouped header style mirrors the Sales Orders list:
+                    bg-muted/50 + border-x for the group label, bg-muted/30 for
+                    individual column headers, bg-muted/20 + side borders on
+                    the data cells — keeps Sales / Pass-through bracketed. */}
                 <TableHeader>
-                  <TableRow className="border-b-0 hover:bg-transparent">
-                    <TableHead colSpan={4} />
-                    <TableHead colSpan={4} className="text-center font-bold text-[10px] uppercase tracking-[0.15em] text-muted-foreground pb-0">Sales</TableHead>
-                    <TableHead className="text-center font-bold text-[10px] uppercase tracking-[0.15em] text-muted-foreground pb-0 pr-4">Pass-through</TableHead>
+                  <TableRow>
+                    <TableHead className="bg-transparent" />
+                    <TableHead className="bg-transparent" />
+                    <TableHead className="bg-transparent" />
+                    <TableHead className="bg-transparent" />
+                    <TableHead colSpan={4} className="text-center text-[11px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/50 border-x border-border">
+                      Sales
+                    </TableHead>
+                    <TableHead className="text-center text-[11px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/50 border-r border-border">
+                      Pass-through
+                    </TableHead>
                   </TableRow>
                   <TableRow>
                     <TableHead className="w-56 font-bold">Order No</TableHead>
                     <TableHead className="w-16 font-bold text-center">PAX</TableHead>
                     <TableHead className="w-24 font-bold">Settle</TableHead>
                     <TableHead className="font-bold">Billing</TableHead>
-                    <TableHead className="w-28 font-bold text-center">Cash</TableHead>
-                    <TableHead className="w-28 font-bold text-center">PAYMAYA</TableHead>
-                    <TableHead className="w-28 font-bold text-center">AR</TableHead>
-                    <TableHead className="w-28 font-bold text-right">Total</TableHead>
-                    <TableHead className="w-24 font-bold text-right pr-4">Tip</TableHead>
+                    <TableHead className="w-28 font-bold text-center bg-muted/30 border-l border-border">Cash</TableHead>
+                    <TableHead className="w-28 font-bold text-center bg-muted/30">PAYMAYA</TableHead>
+                    <TableHead className="w-28 font-bold text-center bg-muted/30">AR</TableHead>
+                    <TableHead className="w-28 font-bold text-right bg-muted/30 border-r border-border">Total</TableHead>
+                    <TableHead className="w-24 font-bold text-right bg-muted/30 border-r border-border pr-4">Tip</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -110,11 +119,11 @@ export function RevenueConfirmHistory({ orders }: { orders: ConfirmableOrder[] }
                       <TableCell className="font-bold tabular text-center">{o.pax}</TableCell>
                       <TableCell><Badge variant={o.isAR ? 'secondary' : 'default'} className="font-bold">{o.isAR ? 'AR' : 'Paid'}</Badge></TableCell>
                       <TableCell className="font-medium text-muted-foreground">{o.billing_label ?? 'Self-pay'}</TableCell>
-                      <TableCell className="font-medium tabular text-right text-muted-foreground">{moneyCell(o.cash_cents)}</TableCell>
-                      <TableCell className="font-medium tabular text-right text-muted-foreground">{moneyCell(o.paymaya_cents)}</TableCell>
-                      <TableCell className="font-medium tabular text-right text-muted-foreground">{moneyCell(o.isAR ? o.total_cents : 0)}</TableCell>
-                      <TableCell className="font-bold tabular text-right">{peso(o.total_cents)}</TableCell>
-                      <TableCell className="font-medium tabular text-right text-muted-foreground pr-4">{moneyCell(o.tip_cents)}</TableCell>
+                      <TableCell className="font-medium tabular text-right text-muted-foreground bg-muted/20 border-l border-border">{moneyCell(o.cash_cents)}</TableCell>
+                      <TableCell className="font-medium tabular text-right text-muted-foreground bg-muted/20">{moneyCell(o.paymaya_cents)}</TableCell>
+                      <TableCell className="font-medium tabular text-right text-muted-foreground bg-muted/20">{moneyCell(o.isAR ? o.total_cents : 0)}</TableCell>
+                      <TableCell className="font-bold tabular text-right bg-muted/20 border-r border-border">{peso(o.total_cents)}</TableCell>
+                      <TableCell className="font-medium tabular text-right text-muted-foreground bg-muted/20 border-r border-border pr-4">{moneyCell(o.tip_cents)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
