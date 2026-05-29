@@ -107,7 +107,10 @@ export function StatusBadge({
             </Badge>
           }
         />
-        <TooltipContent side="bottom">{desc}</TooltipContent>
+        {/* side="top" so the popover floats above the badge. Status badges
+            sit on rows that often have an expanded detail panel just below;
+            popping downward gets visually clobbered by that panel. */}
+        <TooltipContent side="top">{desc}</TooltipContent>
       </Tooltip>
     </TooltipProvider>
   );

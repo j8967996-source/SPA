@@ -30,6 +30,7 @@ import {
 import { cn } from '@/lib/utils';
 import { SoaActions } from '@/components/reconciliation/soa-actions';
 import { ArBalanceExplorer } from '@/components/reconciliation/ar-balance-explorer';
+import { SoaPaymentsList } from '@/components/reconciliation/soa-payments-list';
 import { StatusBadge } from '@/components/reconciliation/status-badge';
 import { loadSoaWorkspace, generateSOAGroups, type SoaGroup, type SoaHistoryRow, type ArBalance } from '@/app/(dashboard)/reconciliation/soa/actions';
 
@@ -500,6 +501,7 @@ export function SoaWorkspace({
                                 {s.status === 'void' ? 'Voided — orders released back to Generate.' : 'No order detail.'}
                               </p>
                             ) : (
+                              <>
                               <Table className="table-fixed">
                                 {/* Net column + trailing spacers mirror the parent's
                                     Total (w-32) + Status (w-28) + Actions (w-32). */}
@@ -544,6 +546,19 @@ export function SoaWorkspace({
                                   )}
                                 </TableBody>
                               </Table>
+                              {/* Payment ledger — third-party SOAs collect via
+                                  Record Payment; surface that history here so
+                                  the History detail matches what AR Balance
+                                  shows under the same SOA. Intercompany SOAs
+                                  settle by cost transfer (no payments) so this
+                                  section is hidden for them. */}
+                              {s.settlement_type === 'third_party' && (
+                                <div className="px-6 py-4 border-t border-border">
+                                  <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">Payment ledger</p>
+                                  <SoaPaymentsList soaId={s.id} />
+                                </div>
+                              )}
+                              </>
                             )}
                           </TableCell>
                         </TableRow>
