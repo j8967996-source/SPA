@@ -1,0 +1,27 @@
+SOA detail: drop zero-list-price junk lines + reset script for batch re-test
+
+A test order surfaced a Combination line at ZERO list price next to its
+actual paid services (Hair Cut 540 / Filipino Traditional 1080) on the
+same Yuna in one SOA. order_items has no parent/child relation -- it's
+just a flat junk row whose list_price_cents = 0. Real services always
+carry a list price; DIS-90 nets to 0 but list stays positive, so the
+filter "list_price_cents > 0" cleanly drops placeholders without hiding
+legitimate 100%-discount lines.
+
+- soa/actions.ts:toSoaOrderLine -- filter chains 0-list-price out
+  alongside cancelled status. Shared by Generate workspace + History
+  detail so both views match the SOA PDF.
+- soa-pdf.tsx -- mirror the same filter (and add list_price_cents to
+  the order_items select so the column is available).
+
+Reset helper for re-testing the new one-journal batch-settle path:
+
+- scripts/reset-settled-soas-for-batch-test.mjs flips the three SOAs
+  that were posted as 3 separate Acumatica journals (F00188170/171/172)
+  back to issued: clears gl_batch_nbr / posting_status / posting_error,
+  restores outstanding_cents = total_cents. Order links are kept so the
+  same SOAs reappear in AR Balance. Lists open intercompany SOAs grouped
+  by branch afterwards so it's visible up front how many journals the
+  next batch-settle will produce (3 SOAs / 1 branch -> 1 journal).
+
+Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>

@@ -37,7 +37,7 @@ async function loadSoaForPdf(soaId: string): Promise<PdfData | null> {
           order_no, service_date,
           branch:branches ( name ),
           order_customers ( id, customer_name, seq_no ),
-          order_items ( order_customer_id, duration_minutes, final_amount_cents, status, service:service_items ( name ) )
+          order_items ( order_customer_id, duration_minutes, list_price_cents, final_amount_cents, status, service:service_items ( name ) )
         )
       )
     `)
@@ -57,6 +57,9 @@ async function loadSoaForPdf(soaId: string): Promise<PdfData | null> {
     const seqById = new Map((o.order_customers ?? []).map((c) => [c.id, c.seq_no]));
     for (const it of o.order_items ?? []) {
       if (it.status === 'cancelled') continue;
+      // Skip zero-list-price junk lines (same rule as the History grid — a
+      // real service always has a list price; 0 means placeholder/orphan).
+      if ((it.list_price_cents ?? 0) <= 0) continue;
       lines.push({
         date: o.service_date,
         order_no: o.order_no,

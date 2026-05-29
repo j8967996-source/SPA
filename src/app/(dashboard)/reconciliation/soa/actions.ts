@@ -108,11 +108,15 @@ interface RawSoaOrder {
 
 // One order → its SOA order line, with a per-service-line breakdown ordered by
 // guest seq. Shared by the Generate workspace and the History detail.
+// We drop cancelled lines AND zero-list-price placeholders: a real service
+// always carries a list price (DIS-90 discounts net to 0 but list stays
+// positive), so a `list_price_cents <= 0` row is a junk / orphan item that
+// shouldn't appear on the statement.
 function toSoaOrderLine(o: RawSoaOrder): SoaOrderLine {
   const name = new Map((o.order_customers ?? []).map((c) => [c.id, c.customer_name]));
   const seq = new Map((o.order_customers ?? []).map((c) => [c.id, c.seq_no]));
   const lines: SoaItemLine[] = (o.order_items ?? [])
-    .filter((it) => it.status !== 'cancelled')
+    .filter((it) => it.status !== 'cancelled' && (it.list_price_cents ?? 0) > 0)
     .map((it) => ({
       guest: name.get(it.order_customer_id ?? '') ?? 'Guest',
       _seq: seq.get(it.order_customer_id ?? '') ?? 99,
