@@ -4,8 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import { createAuditedClient } from '@/lib/supabase/server';
-import { currentSession, isManager } from '@/lib/auth';
-import { canAccessBranch } from '@/lib/branch-access';
+import { requireAdmin } from '@/lib/auth';
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -34,11 +33,13 @@ async function nextCardNo(): Promise<string> {
 }
 
 export async function issueCard(input: unknown): Promise<ActionResult> {
-  if (!(await currentSession())) return { ok: false, error: 'Sign in required' };
+  // Stored-Value Cards is currently admin-only — the feature isn't open to
+  // staff / manager workflows yet. Tighten when we decide to roll it out.
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied };
   const parsed = issueSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
-  if (!(await canAccessBranch(d.branch_id))) return { ok: false, error: 'No access to this branch' };
   const supabase = await createAuditedClient();
   const initialCents = Math.round(d.initial_amount * 100);
   const bonusCents = Math.round(d.bonus_amount * 100);
@@ -87,7 +88,8 @@ const topUpSchema = z.object({
 });
 
 export async function topUpCard(input: unknown): Promise<ActionResult> {
-  if (!(await currentSession())) return { ok: false, error: 'Sign in required' };
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied };
   const parsed = topUpSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
@@ -100,7 +102,6 @@ export async function topUpCard(input: unknown): Promise<ActionResult> {
     .eq('id', d.card_id)
     .single();
   if (ce || !card) return { ok: false, error: 'Card not found' };
-  if (card.branch_id && !(await canAccessBranch(card.branch_id))) return { ok: false, error: 'No access to this branch' };
   if (card.status !== 'active') return { ok: false, error: 'Card is not active' };
 
   const newBalance = card.current_balance_cents + addCents;
@@ -122,17 +123,14 @@ export async function setCardStatus(
   id: string,
   status: 'active' | 'suspended',
 ): Promise<ActionResult> {
-  // Freezing / unfreezing a card with a balance affects the holder's spend
-  // ability — that's a state change, not a routine top-up. Manager-only.
-  const session = await currentSession();
-  if (!isManager(session)) return { ok: false, error: 'Manager permission required to change card status' };
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied };
   const supabase = await createAuditedClient();
   const { data: card } = await supabase
     .from('stored_value_cards')
     .select('current_balance_cents, branch_id')
     .eq('id', id)
     .single();
-  if (card?.branch_id && !(await canAccessBranch(card.branch_id))) return { ok: false, error: 'No access to this branch' };
   const { error } = await supabase.from('stored_value_cards').update({ status }).eq('id', id);
   if (error) return { ok: false, error: error.message };
   if (card) {

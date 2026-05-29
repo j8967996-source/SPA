@@ -1,6 +1,8 @@
 import { Plus, CreditCard } from 'lucide-react';
+import { redirect } from 'next/navigation';
 
 import { createServiceClient } from '@/lib/supabase/server';
+import { currentSession, isAdmin } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -57,6 +59,10 @@ function one<T>(v: T | T[] | null): T | null {
 }
 
 export default async function StoredValueCardsPage() {
+  // Stored-Value Cards is admin-only until the feature ships to staff/manager
+  // workflows. Anyone bypassing the sidebar (typed URL, bookmark) lands on
+  // the dashboard instead of seeing an empty / broken page.
+  if (!isAdmin(await currentSession())) redirect('/dashboard');
   const { cards, customers, branches, discountClasses, defaultExpiryDays } = await fetchData();
   const totalLiability = cards
     .filter((c) => c.status === 'active')

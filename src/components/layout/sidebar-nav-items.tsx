@@ -36,6 +36,9 @@ export interface NavItem {
   label: string;
   href?: string;
   icon: LucideIcon;
+  /** Hide this item unless the viewer is admin. Used for modules that aren't
+   *  rolled out to staff / manager yet (e.g. Stored Value Cards). */
+  adminOnly?: boolean;
   children?: NavSubItem[];
   childGroups?: NavSubGroup[];
 }
@@ -50,7 +53,7 @@ export const mainNavItems: NavItem[] = [
   { label: 'Customers', href: '/customers', icon: Users },
   // Waitlist consolidated into Reservations (walk-ins use "Next available"); the
   // page/route stays but is off the nav.
-  { label: 'Stored Value Cards', href: '/stored-value-cards', icon: CreditCard },
+  { label: 'Stored Value Cards', href: '/stored-value-cards', icon: CreditCard, adminOnly: true },
   {
     label: 'Reconciliation',
     icon: Wallet,

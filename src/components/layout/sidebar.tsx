@@ -181,9 +181,12 @@ function ChildLink({
   );
 }
 
-export function Sidebar() {
+export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
   const pathname = usePathname();
   const { collapsed, toggle } = useSidebar();
+  // Hide nav items flagged adminOnly when the viewer isn't admin. Matches the
+  // server-side gate on those routes — keeps the menu honest.
+  const visibleNav = mainNavItems.filter((item) => !item.adminOnly || isAdmin);
 
   return (
     // Collapsed = full hide (width 0, border off) — matches the ENGO Back Office
@@ -222,7 +225,7 @@ export function Sidebar() {
       {/* Main nav */}
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         <div className="flex flex-col gap-1">
-          {mainNavItems.map((item) => (
+          {visibleNav.map((item) => (
             <NavLink key={item.label} item={item} pathname={pathname} />
           ))}
         </div>
