@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ChevronRight, ChevronDown, CalendarCheck } from 'lucide-react';
 
@@ -34,9 +34,6 @@ export function RevenueConfirmHistory({ orders }: { orders: ConfirmableOrder[] }
     return [...m.entries()]
       .sort((a, b) => (a[0] < b[0] ? 1 : -1))
       .map(([date, rows]) => {
-        // Distinct GL voucher numbers for this day. Usually 1 (the batched
-        // Revenue Confirm posts everything into one journal), but a retry
-        // after a partial earlier confirm could leave a day with 2 batches.
         const batches = [...new Set(rows.map((r) => r.gl_batch_nbr).filter((x): x is string => !!x))];
         return {
           date,
@@ -69,31 +66,60 @@ export function RevenueConfirmHistory({ orders }: { orders: ConfirmableOrder[] }
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      {groups.map((g) => {
-        const isOpen = expanded.has(g.date);
-        return (
-          <Card key={g.date} className="p-0 overflow-hidden ring-1 ring-border">
-            {/* Single Table with colgroup so the clickable summary row's
-                amounts line up with the data column positions below. */}
-            <Table className="table-fixed">
-              <colgroup>
-                <col className="w-56" />{/* Order No */}
-                <col className="w-16" />{/* PAX */}
-                <col className="w-24" />{/* Settle */}
-                <col />{/* Billing (flex) */}
-                <col className="w-28" />{/* Cash */}
-                <col className="w-28" />{/* PAYMAYA */}
-                <col className="w-28" />{/* AR */}
-                <col className="w-28" />{/* Total */}
-                <col className="w-24" />{/* Tip */}
-              </colgroup>
-              <TableBody>
-                {/* Always-visible clickable summary row — amounts under their
-                    proper columns. Shows the GL voucher number if posted. */}
+    // Single Card + single Table so the column headers stay visible no matter
+    // how many day-groups are collapsed. Each day = one clickable summary row
+    // (date + totals under their columns) followed by detail rows when open.
+    <Card className="p-0 overflow-hidden ring-1 ring-border">
+      <Table className="table-fixed">
+        <colgroup>
+          <col className="w-56" />{/* Order No / Date */}
+          <col className="w-16" />{/* PAX */}
+          <col className="w-24" />{/* Settle */}
+          <col />                 {/* Billing (flex) */}
+          <col className="w-28" />{/* Cash */}
+          <col className="w-28" />{/* PAYMAYA */}
+          <col className="w-28" />{/* AR */}
+          <col className="w-28" />{/* Total */}
+          <col className="w-32" />{/* Tip (a hair wider so "Pass-through" fits) */}
+        </colgroup>
+        <TableHeader>
+          {/* Group brackets: SALES (4 cols) + a separate single-column box
+              for the tip. Label shortened to "TIPS" so it stops getting
+              truncated. */}
+          <TableRow>
+            <TableHead className="bg-transparent" />
+            <TableHead className="bg-transparent" />
+            <TableHead className="bg-transparent" />
+            <TableHead className="bg-transparent" />
+            <TableHead colSpan={4} className="text-center text-[11px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/50 border-x border-border">
+              Sales
+            </TableHead>
+            <TableHead className="text-center text-[11px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/50 border-r border-border">
+              Tips
+            </TableHead>
+          </TableRow>
+          <TableRow>
+            <TableHead className="font-bold">Date / Order No</TableHead>
+            <TableHead className="font-bold text-center">PAX</TableHead>
+            <TableHead className="font-bold">Settle</TableHead>
+            <TableHead className="font-bold">Billing</TableHead>
+            <TableHead className="font-bold text-center bg-muted/30 border-l border-border">Cash</TableHead>
+            <TableHead className="font-bold text-center bg-muted/30">PAYMAYA</TableHead>
+            <TableHead className="font-bold text-center bg-muted/30">AR</TableHead>
+            <TableHead className="font-bold text-right bg-muted/30 border-r border-border">Total</TableHead>
+            <TableHead className="font-bold text-right bg-muted/30 border-r border-border pr-4">Tip</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {groups.map((g) => {
+            const isOpen = expanded.has(g.date);
+            return (
+              <Fragment key={g.date}>
+                {/* Group summary row — always visible, clickable. Numbers sit
+                    directly under their column headers thanks to the colgroup. */}
                 <TableRow
                   onClick={() => toggle(g.date)}
-                  className="cursor-pointer bg-muted/30 hover:bg-muted/50"
+                  className="cursor-pointer bg-muted/30 hover:bg-muted/40 border-t-2 border-border"
                 >
                   <TableCell colSpan={4} className="font-bold">
                     <span className="inline-flex items-center gap-2">
@@ -113,57 +139,27 @@ export function RevenueConfirmHistory({ orders }: { orders: ConfirmableOrder[] }
                   <TableCell className="font-extrabold tabular text-right bg-muted/40 border-r border-border">{peso(g.total)}</TableCell>
                   <TableCell className="font-bold tabular text-right bg-muted/40 border-r border-border pr-4">{moneyCell(g.tip)}</TableCell>
                 </TableRow>
-              </TableBody>
-              {isOpen && (
-                <>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="bg-transparent" />
-                      <TableHead className="bg-transparent" />
-                      <TableHead className="bg-transparent" />
-                      <TableHead className="bg-transparent" />
-                      <TableHead colSpan={4} className="text-center text-[11px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/50 border-x border-border">
-                        Sales
-                      </TableHead>
-                      <TableHead className="text-center text-[11px] font-bold uppercase tracking-wider text-muted-foreground bg-muted/50 border-r border-border">
-                        Pass-through
-                      </TableHead>
-                    </TableRow>
-                    <TableRow>
-                      <TableHead className="font-bold">Order No</TableHead>
-                      <TableHead className="font-bold text-center">PAX</TableHead>
-                      <TableHead className="font-bold">Settle</TableHead>
-                      <TableHead className="font-bold">Billing</TableHead>
-                      <TableHead className="font-bold text-center bg-muted/30 border-l border-border">Cash</TableHead>
-                      <TableHead className="font-bold text-center bg-muted/30">PAYMAYA</TableHead>
-                      <TableHead className="font-bold text-center bg-muted/30">AR</TableHead>
-                      <TableHead className="font-bold text-right bg-muted/30 border-r border-border">Total</TableHead>
-                      <TableHead className="font-bold text-right bg-muted/30 border-r border-border pr-4">Tip</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {g.rows.map((o) => (
-                      <TableRow key={o.id}>
-                        <TableCell className="font-mono font-bold">
-                          <Link href={`/sales-orders/${o.id}`} className="hover:text-primary">{o.order_no}</Link>
-                        </TableCell>
-                        <TableCell className="font-bold tabular text-center">{o.pax}</TableCell>
-                        <TableCell><Badge variant={o.isAR ? 'secondary' : 'default'} className="font-bold">{o.isAR ? 'AR' : 'Paid'}</Badge></TableCell>
-                        <TableCell className="font-medium text-muted-foreground">{o.billing_label ?? 'Self-pay'}</TableCell>
-                        <TableCell className="font-medium tabular text-right text-muted-foreground bg-muted/20 border-l border-border">{moneyCell(o.cash_cents)}</TableCell>
-                        <TableCell className="font-medium tabular text-right text-muted-foreground bg-muted/20">{moneyCell(o.paymaya_cents)}</TableCell>
-                        <TableCell className="font-medium tabular text-right text-muted-foreground bg-muted/20">{moneyCell(o.isAR ? o.total_cents : 0)}</TableCell>
-                        <TableCell className="font-bold tabular text-right bg-muted/20 border-r border-border">{peso(o.total_cents)}</TableCell>
-                        <TableCell className="font-medium tabular text-right text-muted-foreground bg-muted/20 border-r border-border pr-4">{moneyCell(o.tip_cents)}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </>
-              )}
-            </Table>
-          </Card>
-        );
-      })}
-    </div>
+                {/* Detail rows for this day — only rendered when group is open. */}
+                {isOpen && g.rows.map((o) => (
+                  <TableRow key={o.id}>
+                    <TableCell className="font-mono font-bold pl-9">
+                      <Link href={`/sales-orders/${o.id}`} className="hover:text-primary">{o.order_no}</Link>
+                    </TableCell>
+                    <TableCell className="font-bold tabular text-center">{o.pax}</TableCell>
+                    <TableCell><Badge variant={o.isAR ? 'secondary' : 'default'} className="font-bold">{o.isAR ? 'AR' : 'Paid'}</Badge></TableCell>
+                    <TableCell className="font-medium text-muted-foreground">{o.billing_label ?? 'Self-pay'}</TableCell>
+                    <TableCell className="font-medium tabular text-right text-muted-foreground bg-muted/20 border-l border-border">{moneyCell(o.cash_cents)}</TableCell>
+                    <TableCell className="font-medium tabular text-right text-muted-foreground bg-muted/20">{moneyCell(o.paymaya_cents)}</TableCell>
+                    <TableCell className="font-medium tabular text-right text-muted-foreground bg-muted/20">{moneyCell(o.isAR ? o.total_cents : 0)}</TableCell>
+                    <TableCell className="font-bold tabular text-right bg-muted/20 border-r border-border">{peso(o.total_cents)}</TableCell>
+                    <TableCell className="font-medium tabular text-right text-muted-foreground bg-muted/20 border-r border-border pr-4">{moneyCell(o.tip_cents)}</TableCell>
+                  </TableRow>
+                ))}
+              </Fragment>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </Card>
   );
 }
