@@ -86,7 +86,9 @@ async function loadForPdf(batchNbr: string): Promise<PdfData | null> {
       order_no: o.order_no,
       pax: (o.order_customers ?? []).length,
       is_ar: isAR,
-      billing_label: b ? `${b.code} — ${b.name}` : 'Self-pay',
+      // PDF shows just the billing CODE — the name is redundant for accounting
+      // (the code is what shows up on every report). Keeps the column narrow.
+      billing_label: b?.code ?? 'SELF',
       cash: sumByCode('cash'),
       paymaya: sumByCode('paymaya'),
       ar: isAR ? o.total_cents : 0,
@@ -115,6 +117,9 @@ async function loadForPdf(batchNbr: string): Promise<PdfData | null> {
 }
 
 const C = '#0f172a', MUTED = '#64748b', LINE = '#e2e8f0', GROUPBG = '#f8fafc', SALES_BG = '#f1f5f9';
+// Heavier separator line for the SALES / TIPS group brackets so the printout
+// reads "these columns belong together" without ambiguity.
+const GROUP_BORDER = '#94a3b8';
 const styles = StyleSheet.create({
   page: { padding: 36, fontSize: 9, color: C, fontFamily: 'Helvetica' },
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 },
@@ -137,13 +142,18 @@ const styles = StyleSheet.create({
   td: { fontSize: 9 },
   cOrder: { width: 110 },
   cPax: { width: 22, textAlign: 'center' },
-  cSettle: { width: 28 },
+  // paddingRight gives "Settle" some breathing room so "Paid" / "AR" don't
+  // bleed into the billing code on the next column.
+  cSettle: { width: 36, paddingRight: 6 },
   cBilling: { flex: 1 },
-  cCash: { width: 56, textAlign: 'right' },
+  // Cash starts the SALES group — give it a left vertical line that runs
+  // through the whole table; Total ends SALES with a right vertical line.
+  cCash: { width: 56, textAlign: 'right', borderLeftWidth: 1, borderLeftColor: GROUP_BORDER, paddingLeft: 4 },
   cPaymaya: { width: 56, textAlign: 'right' },
   cAR: { width: 56, textAlign: 'right' },
-  cTotal: { width: 62, textAlign: 'right', fontFamily: 'Helvetica-Bold' },
-  cTip: { width: 56, textAlign: 'right' },
+  cTotal: { width: 62, textAlign: 'right', fontFamily: 'Helvetica-Bold', borderRightWidth: 1, borderRightColor: GROUP_BORDER, paddingRight: 4 },
+  // Tip is its own group; padded on both sides so the vertical lines stand out.
+  cTip: { width: 56, textAlign: 'right', borderRightWidth: 1, borderRightColor: GROUP_BORDER, paddingRight: 4, paddingLeft: 4 },
 
   footer: { marginTop: 24, fontSize: 8, color: MUTED, borderTopWidth: 1, borderTopColor: LINE, paddingTop: 8 },
 });
@@ -184,13 +194,19 @@ function RevenueConfirmDoc({ d }: { d: PdfData }) {
           </View>
         </View>
 
-        {/* Two-tier header — group bracket then column names */}
+        {/* Two-tier header — group bracket then column names. The SALES
+            bracket cell carries explicit left/right borders to bracket the
+            4 child columns; TIPS uses cTip's borderRight + the SALES
+            cell's borderRight as its left divider (shared line). */}
         <View style={styles.groupBracket}>
           <Text style={[styles.groupBracketCell, styles.cOrder]} />
           <Text style={[styles.groupBracketCell, styles.cPax]} />
           <Text style={[styles.groupBracketCell, styles.cSettle]} />
           <Text style={[styles.groupBracketCell, styles.cBilling]} />
-          <Text style={[styles.groupBracketCell, { width: 56 * 3 + 62 }]}>SALES</Text>
+          <Text style={[
+            styles.groupBracketCell,
+            { width: 56 * 3 + 62, borderLeftWidth: 1, borderLeftColor: GROUP_BORDER, borderRightWidth: 1, borderRightColor: GROUP_BORDER },
+          ]}>SALES</Text>
           <Text style={[styles.groupBracketCell, styles.cTip]}>TIPS</Text>
         </View>
         <View style={styles.rowHead}>
