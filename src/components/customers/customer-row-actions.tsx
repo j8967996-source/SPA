@@ -19,9 +19,10 @@ import { CustomerFormDialog, type CustomerItem } from './customer-form-dialog';
 interface Props {
   customer: CustomerItem & { status: string };
   businessUnits: { id: string; code: string; name: string }[];
+  branches: { id: string; code: string; name: string }[];
 }
 
-export function CustomerRowActions({ customer, businessUnits }: Props) {
+export function CustomerRowActions({ customer, businessUnits, branches }: Props) {
   const [pending, startTransition] = useTransition();
   const [editOpen, setEditOpen] = useState(false);
   const isActive = customer.status === 'active';
@@ -70,6 +71,7 @@ export function CustomerRowActions({ customer, businessUnits }: Props) {
         mode="edit"
         customer={customer}
         businessUnits={businessUnits}
+        branches={branches}
         open={editOpen}
         onOpenChange={setEditOpen}
       />

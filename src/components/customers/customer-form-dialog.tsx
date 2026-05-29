@@ -29,6 +29,7 @@ export interface CustomerItem {
   id: string;
   phone: string;
   name: string;
+  home_branch_id: string | null;
   gender: string | null;
   email: string | null;
   dob: string | null;
@@ -42,10 +43,19 @@ interface BusinessUnitOption {
   name: string;
 }
 
+interface BranchOption {
+  id: string;
+  code: string;
+  name: string;
+}
+
 interface Props {
   mode?: 'create' | 'edit';
   customer?: CustomerItem;
   businessUnits: BusinessUnitOption[];
+  /** Branches the viewer can assign as a customer's home. Server filters this
+   *  to the user's allowed branches; admin gets the full active list. */
+  branches: BranchOption[];
   trigger?: React.ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -57,6 +67,7 @@ export function CustomerFormDialog({
   mode = 'create',
   customer,
   businessUnits,
+  branches,
   trigger,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
@@ -69,6 +80,9 @@ export function CustomerFormDialog({
 
   const [phone, setPhone] = useState(customer?.phone ?? '');
   const [name, setName] = useState(customer?.name ?? '');
+  // Default a new customer to the viewer's first allowed branch -- the server
+  // rejects anything outside the allowed set anyway, so this just saves a click.
+  const [branchId, setBranchId] = useState<string>(customer?.home_branch_id ?? branches[0]?.id ?? '');
   const [gender, setGender] = useState(customer?.gender ?? NONE);
   const [email, setEmail] = useState(customer?.email ?? '');
   const [dob, setDob] = useState(customer?.dob ?? '');
@@ -86,6 +100,7 @@ export function CustomerFormDialog({
       const payload = {
         phone,
         name,
+        home_branch_id: branchId,
         gender: gender === NONE ? null : gender,
         email: email || null,
         dob: dob || null,
@@ -154,7 +169,22 @@ export function CustomerFormDialog({
               <Input id="c-type" value={customerType ?? ''} onChange={(e) => setCustomerType(e.target.value)}
                 placeholder="VIP / Member / …" maxLength={40} />
             </div>
-            <div className="flex flex-col gap-2 col-span-2">
+            <div className="flex flex-col gap-2">
+              <Label className="font-semibold">Home Branch *</Label>
+              <Select
+                items={branches.map((b) => ({ value: b.id, label: `${b.code} — ${b.name}` }))}
+                value={branchId}
+                onValueChange={(v) => v && setBranchId(v)}
+              >
+                <SelectTrigger><SelectValue placeholder="Pick a branch" /></SelectTrigger>
+                <SelectContent>
+                  {branches.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>{b.code} — {b.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex flex-col gap-2">
               <Label className="font-semibold">Primary Business Unit</Label>
               <Select items={buOptions} value={buId ?? NONE} onValueChange={(v) => setBuId(v ?? NONE)}>
                 <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
