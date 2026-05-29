@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ChevronRight, ChevronDown, CalendarCheck } from 'lucide-react';
+import { ChevronRight, ChevronDown, CalendarCheck, Download } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -140,15 +140,25 @@ export function RevenueConfirmHistory({ orders }: { orders: ConfirmableOrder[] }
                   className="cursor-pointer bg-muted/30 hover:bg-muted/40 border-t-2 border-border"
                 >
                   <TableCell colSpan={4} className="font-bold">
-                    <span className="inline-flex items-center gap-2">
+                    <span className="inline-flex items-center gap-2 flex-wrap">
                       {isOpen ? <ChevronDown className="size-4 text-muted-foreground" /> : <ChevronRight className="size-4 text-muted-foreground" />}
                       <span className="tabular">{g.date}</span>
                       <span className="text-xs font-medium text-muted-foreground">({g.rows.length} order{g.rows.length > 1 ? 's' : ''})</span>
-                      {g.batches.length > 0 && (
-                        <span className="ml-2 inline-flex items-center gap-1 rounded bg-primary/15 px-1.5 py-0.5 text-xs font-bold text-primary font-mono">
-                          GL #{g.batches.join(', #')}
-                        </span>
-                      )}
+                      {g.batches.map((b) => (
+                        <Fragment key={b}>
+                          <a
+                            href={`/reconciliation/revenue-confirm/${b}/pdf`}
+                            target="_blank"
+                            rel="noopener"
+                            onClick={(e) => e.stopPropagation()}
+                            title={`Download GL #${b} voucher PDF`}
+                            className="ml-1 inline-flex items-center gap-1 rounded bg-primary/15 px-1.5 py-0.5 text-xs font-bold text-primary font-mono hover:bg-primary/25 transition-colors"
+                          >
+                            <Download className="size-3" />
+                            GL #{b}
+                          </a>
+                        </Fragment>
+                      ))}
                     </span>
                   </TableCell>
                   <TableCell className="font-bold tabular text-right bg-muted/40 border-l border-border">{moneyCell(g.cash)}</TableCell>

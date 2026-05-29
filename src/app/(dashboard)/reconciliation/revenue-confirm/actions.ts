@@ -8,9 +8,10 @@ import { currentSession, isManager } from '@/lib/auth';
 import { canAccessBranch } from '@/lib/branch-access';
 import { isDayCashClosed } from '@/app/(dashboard)/reconciliation/cash/actions';
 import { acumaticaConfigured } from '@/lib/erp-posting';
-import { pushGLEntry, type GLLine } from '@/lib/acumatica';
+import { pushGLEntry, attachFileToJournal, type GLLine } from '@/lib/acumatica';
 import { readAcuSessionCookie } from '@/lib/session';
 import { createServiceClient } from '@/lib/supabase/server';
+import { renderRevenueConfirmPdf } from '@/lib/revenue-confirm-pdf';
 import { assertNoBlockedClose } from '@/lib/business-day';
 
 const REVENUE_ACCOUNT = '40140'; // services revenue
@@ -350,6 +351,34 @@ export async function confirmRevenue(input: unknown): Promise<ActionResult<{ clo
       await (supabase.from('erp_posting_log') as unknown as { update: (p: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<unknown> } })
         .update({ status: 'success', batch_nbr: res.batchNbr, erp_response: res.raw })
         .eq('id', logRow.id);
+    }
+
+    // Best-effort attach the per-batch voucher PDF to the GL journal so the
+    // Acumatica entry has the source detail next to it. Failure here doesn't
+    // unwind the post — the GL is already correct and the PDF is regeneratable
+    // on demand from /reconciliation/revenue-confirm/[batch]/pdf.
+    if (res.batchNbr) {
+      try {
+        const pdf = await renderRevenueConfirmPdf(res.batchNbr);
+        if (pdf) {
+          // Copy into a plain ArrayBuffer so the type matches attachFileToJournal
+          // (Node Buffer's underlying buffer may be a SharedArrayBuffer).
+          const ab = new ArrayBuffer(pdf.buffer.byteLength);
+          new Uint8Array(ab).set(pdf.buffer);
+          await attachFileToJournal(
+            { batchNbr: res.batchNbr, filename: pdf.filename, fileBuffer: ab, mimeType: 'application/pdf' },
+            cookie,
+          );
+        }
+      } catch (attachErr) {
+        const msg = attachErr instanceof Error ? attachErr.message : String(attachErr);
+        console.error('[Revenue Confirm attach] PDF attach failed:', msg);
+        if (logRow) {
+          await (supabase.from('erp_posting_log') as unknown as { update: (p: Record<string, unknown>) => { eq: (c: string, v: string) => Promise<unknown> } })
+            .update({ error_message: `Posted (GL ${res.batchNbr}) but PDF attach failed: ${msg}` })
+            .eq('id', logRow.id);
+        }
+      }
     }
 
     for (const o of eligible) {
