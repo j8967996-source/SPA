@@ -182,18 +182,21 @@ export function SoaWorkspace({
     ? `/reconciliation/soa/${[...histSel][0]}/pdf`
     : `/reconciliation/soa/pdf-zip?ids=${[...histSel].join(',')}`;
 
-  // Grand totals across the current filter window (same pattern as Tip /
-  // Commission / Revenue Confirm history footers). Void SOAs are tracked as a
-  // separate count for visibility but excluded from the money sums — a void
-  // statement carries no economic value.
-  const histGrandCount = filteredHistory.filter((s) => s.status !== 'void').length;
-  const histVoidCount = filteredHistory.filter((s) => s.status === 'void').length;
-  const histGrandTotal = filteredHistory
-    .filter((s) => s.status !== 'void')
-    .reduce((sum, s) => sum + s.total_cents, 0);
-  const histGrandOutstanding = filteredHistory
-    .filter((s) => s.status !== 'void')
-    .reduce((sum, s) => sum + s.outstanding_cents, 0);
+  // Grand totals across the current filter window. Same void rule as the Tip
+  // and Commission Settlement footers — site-wide reconciliation convention:
+  //   · Void statements are EXCLUDED from monetary sums (total / outstanding).
+  //     A void was reversed by releasing its orders back to the open pool, so
+  //     counting its amount would double-count: once on the void row, once on
+  //     the re-issued statement that captured those same orders.
+  //   · Void COUNT is surfaced separately ("X void excluded") so the desk can
+  //     see how many were reversed without re-filtering by status.
+  // (Revenue Confirm has no void path — data layer only loads status='closed';
+  //  AR Balance only lists open SOAs — neither needs this split.)
+  const nonVoid = filteredHistory.filter((s) => s.status !== 'void');
+  const histGrandCount = nonVoid.length;
+  const histVoidCount = filteredHistory.length - histGrandCount;
+  const histGrandTotal = nonVoid.reduce((sum, s) => sum + s.total_cents, 0);
+  const histGrandOutstanding = nonVoid.reduce((sum, s) => sum + s.outstanding_cents, 0);
 
   return (
     <div className="flex flex-col gap-6">
@@ -550,9 +553,8 @@ export function SoaWorkspace({
                 <TableRow className="border-t-2 border-border bg-muted/50 hover:bg-muted/50">
                   <TableCell colSpan={6} className="font-extrabold uppercase text-xs tracking-wider text-muted-foreground pl-4">
                     Grand Totals
-                    <span className="ml-3 font-medium normal-case tracking-normal text-muted-foreground/80">
-                      {histGrandCount} statement{histGrandCount === 1 ? '' : 's'}
-                      {histVoidCount > 0 ? ` · ${histVoidCount} void` : ''}
+                    <span className="ml-2 text-muted-foreground/70 normal-case tracking-normal text-[11px]">
+                      ({histGrandCount} statement{histGrandCount === 1 ? '' : 's'}{histVoidCount > 0 ? ` · ${histVoidCount} void excluded` : ''})
                     </span>
                   </TableCell>
                   <TableCell className="font-extrabold tabular text-right pr-2 bg-muted/60">{peso(histGrandTotal)}</TableCell>
