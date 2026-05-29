@@ -498,8 +498,13 @@ export function TipSettlementWorkspace({
                                 {/* Amount + trailing spacers mirror the parent's Total
                                     (w-32) + Status (w-24) + Actions (w-20). */}
                                 <Table className="table-fixed">
+                                  {/* Therapist column widened (w-44 → w-60) to
+                                      fit "Long Name [from XXX]" without the
+                                      badge overflowing into Date. pl-12 indent
+                                      eats 48pt; the cell needs ~200pt of room
+                                      for name (~70pt) + gap + badge (~70pt). */}
                                   <colgroup>
-                                    <col className="w-44" />
+                                    <col className="w-60" />
                                     <col className="w-32" />
                                     <col />
                                     <col className="w-32" />
@@ -519,14 +524,16 @@ export function TipSettlementWorkspace({
                                   <TableBody>
                                     {s.lines.map((l, i) => (
                                       <TableRow key={`${s.id}-${i}`}>
-                                        <TableCell className="font-medium pl-12">
+                                        <TableCell className="font-medium pl-12 whitespace-nowrap">
                                           {l.therapist}
                                           {/* Per-line borrowed-from badge — flat
                                               History layout means each row carries
                                               its own marker; tag is small (10px) so
-                                              it doesn't dominate the therapist column. */}
+                                              it doesn't dominate the therapist column.
+                                              whitespace-nowrap on the cell stops the
+                                              badge wrapping under the name. */}
                                           {l.borrowed_from && (
-                                            <span className="ml-2 inline-flex items-center rounded bg-amber-100 dark:bg-amber-500/20 px-1.5 py-0.5 align-middle text-[10px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-300">
+                                            <span className="ml-2 inline-flex items-center rounded bg-amber-100 dark:bg-amber-500/20 px-1.5 py-0.5 align-middle text-[10px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-300 whitespace-nowrap">
                                               from {l.borrowed_from}
                                             </span>
                                           )}
