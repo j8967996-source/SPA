@@ -10,15 +10,22 @@ import { Label } from '@/components/ui/label';
  * Date-range filter for the Revenue Confirm History tab. Drives the page via
  * URL search params (`hist_from`, `hist_to`) so the server-side page re-loads
  * with the narrowed query — no extra client-side filtering needed.
+ *
+ * `defaultFrom` / `defaultTo` is the date window the page falls back to when
+ * no URL params are set (current month). Reset link restores those values.
  */
 export function RevenueHistoryFilter({
   from,
   to,
+  defaultFrom,
+  defaultTo,
   shownCount,
   totalCount,
 }: {
   from: string;
   to: string;
+  defaultFrom: string;
+  defaultTo: string;
   shownCount: number;
   totalCount: number | null;
 }) {
@@ -28,14 +35,19 @@ export function RevenueHistoryFilter({
 
   function go(next: { from?: string; to?: string }) {
     const sp = new URLSearchParams(params.toString());
-    if (next.from === '' || next.from === undefined) sp.delete('hist_from');
-    if (next.from && next.from.length) sp.set('hist_from', next.from);
-    if (next.to === '' || next.to === undefined) sp.delete('hist_to');
-    if (next.to && next.to.length) sp.set('hist_to', next.to);
+    if (next.from !== undefined) {
+      if (next.from === '' || next.from === defaultFrom) sp.delete('hist_from');
+      else sp.set('hist_from', next.from);
+    }
+    if (next.to !== undefined) {
+      if (next.to === '' || next.to === defaultTo) sp.delete('hist_to');
+      else sp.set('hist_to', next.to);
+    }
     router.push(`${pathname}?${sp.toString()}`);
   }
 
-  const hasFilter = !!(from || to);
+  // "Filtered" = anything other than the default month window.
+  const hasFilter = from !== defaultFrom || to !== defaultTo;
 
   return (
     <Card className="p-4">
@@ -61,10 +73,10 @@ export function RevenueHistoryFilter({
         {hasFilter && (
           <button
             type="button"
-            onClick={() => go({ from: '', to: '' })}
+            onClick={() => go({ from: defaultFrom, to: defaultTo })}
             className="self-end mb-2 text-xs font-semibold text-primary hover:underline"
           >
-            Clear filters
+            Reset to this month
           </button>
         )}
         <span className="ml-auto self-end mb-2 text-xs font-semibold text-muted-foreground">

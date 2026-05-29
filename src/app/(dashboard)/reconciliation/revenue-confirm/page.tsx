@@ -65,10 +65,14 @@ export default async function RevenueConfirmPage({
   const branchId = sp.branch && list.some((b) => b.id === sp.branch) ? sp.branch : list[0]?.id;
   const date = sp.date || todayPHT();
   const view = sp.view === 'history' ? 'history' : 'confirm';
-  // History filter — yyyy-mm-dd validated by the filter UI's native date input;
-  // unfiltered = full 300-row history.
-  const histFrom = sp.hist_from && /^\d{4}-\d{2}-\d{2}$/.test(sp.hist_from) ? sp.hist_from : '';
-  const histTo = sp.hist_to && /^\d{4}-\d{2}-\d{2}$/.test(sp.hist_to) ? sp.hist_to : '';
+  // History filter — yyyy-mm-dd validated by the filter UI's native date input.
+  // Default = current month in PHT (desk's normal workflow is "review this
+  // month"). Reset link in the filter UI restores this same default.
+  const monthStart = todayPHT().slice(0, 7) + '-01';
+  const [yY, mM] = todayPHT().split('-').map(Number);
+  const monthEnd = `${todayPHT().slice(0, 7)}-${String(new Date(Date.UTC(yY, mM, 0)).getUTCDate()).padStart(2, '0')}`;
+  const histFrom = sp.hist_from && /^\d{4}-\d{2}-\d{2}$/.test(sp.hist_from) ? sp.hist_from : monthStart;
+  const histTo = sp.hist_to && /^\d{4}-\d{2}-\d{2}$/.test(sp.hist_to) ? sp.hist_to : monthEnd;
 
   const cashClosed = branchId && view === 'confirm' ? await isCashClosed(branchId, date) : false;
   const orders = branchId && view === 'confirm' ? await loadConfirmable(branchId, date) : [];
@@ -127,7 +131,7 @@ export default async function RevenueConfirmPage({
         <Card className="border-dashed bg-muted/30 p-8 text-center text-sm font-semibold text-muted-foreground">Create a branch first.</Card>
       ) : view === 'history' ? (
         <>
-          <RevenueHistoryFilter from={histFrom} to={histTo} shownCount={history.length} totalCount={historyTotal} />
+          <RevenueHistoryFilter from={histFrom} to={histTo} defaultFrom={monthStart} defaultTo={monthEnd} shownCount={history.length} totalCount={historyTotal} />
           <RevenueConfirmHistory orders={history} />
         </>
       ) : (

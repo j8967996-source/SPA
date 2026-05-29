@@ -40,6 +40,16 @@ import {
 import { cn } from '@/lib/utils';
 import { loadOpenTipGroups, settleTips, voidTipSettlement, retryTipPosting, type TipGroup } from '@/app/(dashboard)/reconciliation/tips/actions';
 
+// First and last day of the current month in PHT (Asia/Manila). Used as the
+// default history filter window — the desk almost always looks at "this month".
+function currentMonthPHT(): { from: string; to: string } {
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const ym = today.slice(0, 7);
+  const [y, m] = today.split('-').map(Number);
+  const eom = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return { from: `${ym}-01`, to: `${ym}-${String(eom).padStart(2, '0')}` };
+}
+
 function peso(cents: number): string {
   return (cents / 100).toLocaleString('en-PH', { maximumFractionDigits: 0 });
 }
@@ -105,8 +115,11 @@ export function TipSettlementWorkspace({
   // overlap on period_from/to so a settlement is in range if its period
   // intersects the window. Selection always respects the filter — Select all
   // selects only the currently-visible rows.
-  const [histFrom, setHistFrom] = useState('');
-  const [histTo, setHistTo] = useState('');
+  // Default the history filter to "this month" so the desk's normal
+  // workflow (review the current month's settlements) is one click away.
+  const defaultMonth = useMemo(() => currentMonthPHT(), []);
+  const [histFrom, setHistFrom] = useState(defaultMonth.from);
+  const [histTo, setHistTo] = useState(defaultMonth.to);
   const [histStatus, setHistStatus] = useState('all');
   const [histSel, setHistSel] = useState<Set<string>>(new Set());
   const [voidConfirmId, setVoidConfirmId] = useState<string | null>(null);
@@ -350,9 +363,9 @@ export function TipSettlementWorkspace({
                   </SelectContent>
                 </Select>
               </div>
-              {(histFrom || histTo || histStatus !== 'all') && (
-                <button type="button" onClick={() => { setHistFrom(''); setHistTo(''); setHistStatus('all'); }} className="self-end mb-2 text-xs font-semibold text-primary hover:underline">
-                  Clear filters
+              {(histFrom !== defaultMonth.from || histTo !== defaultMonth.to || histStatus !== 'all') && (
+                <button type="button" onClick={() => { setHistFrom(defaultMonth.from); setHistTo(defaultMonth.to); setHistStatus('all'); }} className="self-end mb-2 text-xs font-semibold text-primary hover:underline">
+                  Reset to this month
                 </button>
               )}
               <span className="ml-auto self-end mb-2 text-xs font-semibold text-muted-foreground">
