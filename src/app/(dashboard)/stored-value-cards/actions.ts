@@ -4,6 +4,8 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import { createAuditedClient } from '@/lib/supabase/server';
+import { currentSession, isManager } from '@/lib/auth';
+import { canAccessBranch } from '@/lib/branch-access';
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -116,12 +118,17 @@ export async function setCardStatus(
   id: string,
   status: 'active' | 'suspended',
 ): Promise<ActionResult> {
+  // Freezing / unfreezing a card with a balance affects the holder's spend
+  // ability — that's a state change, not a routine top-up. Manager-only.
+  const session = await currentSession();
+  if (!isManager(session)) return { ok: false, error: 'Manager permission required to change card status' };
   const supabase = await createAuditedClient();
   const { data: card } = await supabase
     .from('stored_value_cards')
     .select('current_balance_cents, branch_id')
     .eq('id', id)
     .single();
+  if (card?.branch_id && !(await canAccessBranch(card.branch_id))) return { ok: false, error: 'No access to this branch' };
   const { error } = await supabase.from('stored_value_cards').update({ status }).eq('id', id);
   if (error) return { ok: false, error: error.message };
   if (card) {

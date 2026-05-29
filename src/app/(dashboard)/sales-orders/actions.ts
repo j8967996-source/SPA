@@ -1257,13 +1257,18 @@ export async function takePayment(input: unknown): Promise<ActionResult> {
 // redemption back onto its card, refund the order's paid total, and step a
 // fully-paid order back to completed if it no longer is.
 export async function voidPayment(paymentId: string, orderId: string): Promise<ActionResult> {
+  // Voiding a payment row deletes it outright — that's a reversal, not a routine
+  // cashier action, so it's manager-only. Routine refunds use `recordRefund`.
+  const session = await currentSession();
+  if (!isManager(session)) return { ok: false, error: 'Manager permission required to void a payment' };
   const supabase = await createAuditedClient();
   const { data: order, error: oe } = await supabase
     .from('orders')
-    .select('status, total_cents')
+    .select('status, total_cents, branch_id')
     .eq('id', orderId)
     .single();
   if (oe || !order) return { ok: false, error: 'Order not found' };
+  if (order.branch_id && !(await canAccessBranch(order.branch_id))) return { ok: false, error: 'No access to this branch' };
   if (['closed', 'void'].includes(order.status)) {
     return { ok: false, error: 'Order is locked — reopen is not possible' };
   }
