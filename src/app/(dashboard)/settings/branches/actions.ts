@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
 import { createAuditedClient } from '@/lib/supabase/server';
+import { requireAdmin } from '@/lib/auth';
 
 const branchSchema = z.object({
   code: z.string().min(1).max(20).regex(/^[A-Z0-9_-]+$/, 'Uppercase letters, digits, - and _ only'),
@@ -54,6 +55,8 @@ async function syncJunction(branchId: string, businessUnitIds: string[]) {
 }
 
 export async function createBranch(input: unknown): Promise<ActionResult> {
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied };
   const parsed = branchSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
@@ -81,6 +84,8 @@ export async function createBranch(input: unknown): Promise<ActionResult> {
 }
 
 export async function updateBranch(input: unknown): Promise<ActionResult> {
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied };
   const parsed = updateSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
@@ -111,6 +116,8 @@ export async function setBranchActive(
   id: string,
   active: boolean,
 ): Promise<ActionResult> {
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied };
   const supabase = await createAuditedClient();
   const { error } = await supabase.from('branches').update({ active }).eq('id', id);
   if (error) return { ok: false, error: error.message };
@@ -122,6 +129,8 @@ export async function setBranchActive(
 // Therapist Sharing management page). Branches sharing a non-empty label pool
 // their therapists for cross-branch borrowing.
 export async function setBranchShareGroup(id: string, group: string | null): Promise<ActionResult> {
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied };
   if (!id) return { ok: false, error: 'Missing branch' };
   const value = (group ?? '').trim().slice(0, 60) || null;
   const supabase = await createAuditedClient();

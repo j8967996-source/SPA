@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { createAuditedClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/database';
+import { requireAdmin } from '@/lib/auth';
 
 type SourceUpdate = Database['public']['Tables']['customer_sources']['Update'];
 
@@ -39,6 +40,8 @@ async function variableLockError(
 }
 
 export async function createCustomerSource(input: unknown): Promise<ActionResult> {
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied };
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const lockErr = await variableLockError(parsed.data.discount_locked, parsed.data.default_discount_class_id);
@@ -62,6 +65,8 @@ export async function createCustomerSource(input: unknown): Promise<ActionResult
 }
 
 export async function updateCustomerSource(input: unknown): Promise<ActionResult> {
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied };
   const parsed = updateSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
@@ -83,6 +88,8 @@ export async function updateCustomerSource(input: unknown): Promise<ActionResult
 }
 
 export async function setCustomerSourceActive(id: string, active: boolean): Promise<ActionResult> {
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied };
   const supabase = await createAuditedClient();
   const { error } = await supabase.from('customer_sources').update({ active }).eq('id', id);
   if (error) return { ok: false, error: error.message };

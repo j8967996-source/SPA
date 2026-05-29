@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { createAuditedClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/database';
+import { requireAdmin } from '@/lib/auth';
 
 type ServiceItemUpdate = Database['public']['Tables']['service_items']['Update'];
 
@@ -64,6 +65,8 @@ function deriveServiceGroup(name: string): string {
 }
 
 export async function createServiceItem(input: unknown): Promise<ActionResult> {
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied };
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const { price, ...fields } = parsed.data;
@@ -95,6 +98,8 @@ export async function createServiceItem(input: unknown): Promise<ActionResult> {
 }
 
 export async function updateServiceItem(input: unknown): Promise<ActionResult> {
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied };
   const parsed = updateSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
@@ -159,6 +164,10 @@ export interface PriceSegment {
 
 /** The Normal / all-branch price timeline for a service item, oldest first. */
 export async function loadPriceSchedule(serviceItemId: string): Promise<PriceSegment[]> {
+  // Read-only loader; return shape is the timeline array. The writes that
+  // consume this (scheduleServicePriceChange / updateFuturePrice / etc.)
+  // are admin-gated, so reading the price history isn't sensitive enough
+  // to warrant gating here.
   const supabase = await createAuditedClient();
   const { data } = await supabase
     .from('service_item_prices')
@@ -186,6 +195,8 @@ const scheduleSchema = z.object({
 
 /** Schedule a price change: cap the open segment, then open a new one. */
 export async function scheduleServicePriceChange(input: unknown): Promise<ActionResult> {
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied };
   const parsed = scheduleSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const { service_item_id, price, effective_from } = parsed.data;
@@ -223,6 +234,8 @@ export async function scheduleServicePriceChange(input: unknown): Promise<Action
 
 /** Edit the price of a not-yet-effective (future) segment. */
 export async function updateFuturePrice(priceId: string, pricePhp: number): Promise<ActionResult> {
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied };
   if (!(pricePhp > 0)) return { ok: false, error: 'Price must be greater than 0' };
   const supabase = await createAuditedClient();
   const { data: row } = await supabase.from('service_item_prices').select('effective_from').eq('id', priceId).maybeSingle();
@@ -236,6 +249,8 @@ export async function updateFuturePrice(priceId: string, pricePhp: number): Prom
 
 /** Cancel the latest future price change, re-opening the prior segment. */
 export async function deleteFuturePrice(priceId: string): Promise<ActionResult> {
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied };
   const supabase = await createAuditedClient();
   const { data: row } = await supabase
     .from('service_item_prices')
@@ -351,6 +366,8 @@ export async function batchScheduleServicePriceChange(
 }
 
 export async function setServiceItemActive(id: string, active: boolean): Promise<ActionResult> {
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied };
   const supabase = await createAuditedClient();
   const { error } = await supabase.from('service_items').update({ active }).eq('id', id);
   if (error) return { ok: false, error: error.message };

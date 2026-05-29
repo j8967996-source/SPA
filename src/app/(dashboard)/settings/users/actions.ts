@@ -5,15 +5,10 @@ import { z } from 'zod';
 import bcrypt from 'bcryptjs';
 
 import { createAuditedClient } from '@/lib/supabase/server';
-import { currentSession, isAdmin } from '@/lib/auth';
+import { requireAdmin } from '@/lib/auth';
 import type { Database } from '@/types/database';
 
 type StaffUserUpdate = Database['public']['Tables']['staff_users']['Update'];
-
-async function requireAdmin(): Promise<string | null> {
-  const s = await currentSession();
-  return isAdmin(s) ? null : 'Admin permission required';
-}
 
 const passwordSchema = z.object({
   id: z.string().uuid(),

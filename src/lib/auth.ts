@@ -141,6 +141,25 @@ export function isAdmin(s: SessionPayload | null): boolean {
   return !!s && s.role === 'admin';
 }
 
+// Server-action guard: returns null when the caller is admin, or a friendly
+// error string otherwise. Usage in an action:
+//   const denied = await requireAdmin();
+//   if (denied) return { ok: false, error: denied };
+// Promoted from settings/users/actions.ts so every Settings action uses the
+// same gate text + signature.
+export async function requireAdmin(): Promise<string | null> {
+  const s = await currentSession();
+  return isAdmin(s) ? null : 'Admin permission required';
+}
+
+// Same shape as requireAdmin but for manager+ (admin counts as manager).
+// Most actions still spell this out inline today; new code should prefer this
+// helper for consistency.
+export async function requireManager(): Promise<string | null> {
+  const s = await currentSession();
+  return isManager(s) ? null : 'Manager permission required';
+}
+
 export async function hashPassword(plain: string): Promise<string> {
   return bcrypt.hash(plain, 10);
 }

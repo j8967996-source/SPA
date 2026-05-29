@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { createAuditedClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/database';
+import { requireAdmin } from '@/lib/auth';
 
 type ResourceUpdate = Database['public']['Tables']['resources']['Update'];
 
@@ -22,6 +23,8 @@ const updateSchema = schema.partial().extend({ id: z.string().uuid() });
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
 export async function createResource(input: unknown): Promise<ActionResult> {
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied };
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const supabase = await createAuditedClient();
@@ -36,6 +39,8 @@ export async function createResource(input: unknown): Promise<ActionResult> {
 }
 
 export async function updateResource(input: unknown): Promise<ActionResult> {
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied };
   const parsed = updateSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
@@ -58,6 +63,8 @@ export async function setResourceStatus(
   status: 'active' | 'cleaning' | 'maintenance' | 'closed',
   reason?: string,
 ): Promise<ActionResult> {
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied };
   const supabase = await createAuditedClient();
   const { error } = await supabase
     .from('resources')

@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { createAuditedClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/database';
+import { requireAdmin } from '@/lib/auth';
 
 type SettingUpdate = Database['public']['Tables']['settings']['Update'];
 
@@ -37,6 +38,8 @@ function validateValueForType(value: string, type: 'string' | 'integer' | 'decim
 }
 
 export async function createSetting(input: unknown): Promise<ActionResult> {
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied };
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
@@ -61,6 +64,8 @@ export async function createSetting(input: unknown): Promise<ActionResult> {
 }
 
 export async function updateSetting(input: unknown): Promise<ActionResult> {
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied };
   const parsed = updateSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
 
@@ -84,6 +89,8 @@ export async function updateSetting(input: unknown): Promise<ActionResult> {
 }
 
 export async function deleteSetting(id: string): Promise<ActionResult> {
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied };
   const supabase = await createAuditedClient();
   const { error } = await supabase.from('settings').delete().eq('id', id);
   if (error) return { ok: false, error: error.message };

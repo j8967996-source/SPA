@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { createAuditedClient } from '@/lib/supabase/server';
 import type { Database } from '@/types/database';
+import { requireAdmin } from '@/lib/auth';
 
 type TxCodeUpdate = Database['public']['Tables']['transaction_codes']['Update'];
 
@@ -28,6 +29,8 @@ const updateSchema = schema.partial({ code: true }).extend({ id: z.string().uuid
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
 export async function createTransactionCode(input: unknown): Promise<ActionResult> {
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied };
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
@@ -54,6 +57,8 @@ export async function createTransactionCode(input: unknown): Promise<ActionResul
 }
 
 export async function updateTransactionCode(input: unknown): Promise<ActionResult> {
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied };
   const parsed = updateSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
@@ -75,6 +80,8 @@ export async function updateTransactionCode(input: unknown): Promise<ActionResul
 }
 
 export async function setTransactionCodeActive(id: string, active: boolean): Promise<ActionResult> {
+  const denied = await requireAdmin();
+  if (denied) return { ok: false, error: denied };
   const supabase = await createAuditedClient();
   const { error } = await supabase.from('transaction_codes').update({ active }).eq('id', id);
   if (error) return { ok: false, error: error.message };
