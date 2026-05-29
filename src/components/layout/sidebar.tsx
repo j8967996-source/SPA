@@ -3,11 +3,12 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, PanelLeftClose } from 'lucide-react';
 
 import { cn } from '@/lib/utils';
 import { SpaLeaf } from '@/components/icons/spa-leaf';
 import { mainNavItems, bottomNavItems, type NavItem, type NavSubItem } from './sidebar-nav-items';
+import { useSidebar } from './sidebar-context';
 
 // Walk children once and emit segments of consecutive items that share a
 // `section` marker. Items without a section get their own ungrouped segment
@@ -172,10 +173,21 @@ function ChildLink({
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { collapsed, toggle } = useSidebar();
 
   return (
-    <aside className="flex h-screen w-64 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
-      {/* Logo */}
+    // Collapsed = full hide (width 0, border off) — matches the ENGO Back Office
+    // pattern: sidebar disappears entirely, TopBar's hamburger restores it.
+    // overflow-hidden clips the inner content so partial labels don't peek out
+    // during the transition.
+    <aside
+      className={cn(
+        'flex h-screen shrink-0 flex-col bg-sidebar transition-[width] duration-200 overflow-hidden',
+        collapsed ? 'w-0 border-r-0' : 'w-64 border-r border-sidebar-border',
+      )}
+      aria-hidden={collapsed}
+    >
+      {/* Logo + collapse button */}
       <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-5">
         <div className="grid size-10 place-items-center rounded-xl bg-primary/10 text-primary">
           <SpaLeaf className="size-7" />
@@ -186,6 +198,15 @@ export function Sidebar() {
             POS System
           </span>
         </div>
+        <button
+          type="button"
+          onClick={toggle}
+          aria-label="Collapse sidebar"
+          tabIndex={collapsed ? -1 : 0}
+          className="ml-auto grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+        >
+          <PanelLeftClose className="size-4" strokeWidth={2} />
+        </button>
       </div>
 
       {/* Main nav */}

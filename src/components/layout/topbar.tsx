@@ -1,9 +1,10 @@
 'use client';
 
-import { Bell, Search } from 'lucide-react';
+import { Bell, PanelLeftOpen, Search } from 'lucide-react';
 
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { CurrencyBadge } from '@/components/ui/currency-badge';
+import { useSidebar } from '@/components/layout/sidebar-context';
 
 export interface TopBarProps {
   /**
@@ -17,6 +18,7 @@ export interface TopBarProps {
 }
 
 export function TopBar({ title, userName }: TopBarProps) {
+  const { collapsed, toggle } = useSidebar();
   const initials = userName
     ?.split(' ')
     .map((s) => s[0])
@@ -26,7 +28,20 @@ export function TopBar({ title, userName }: TopBarProps) {
 
   return (
     <header className="flex h-16 items-center justify-between border-b border-border bg-background px-6">
-      <div className="flex flex-col">
+      <div className="flex items-center gap-3">
+        {/* Hamburger re-opens the sidebar when collapsed; the chevron inside
+            the sidebar header collapses it. Two distinct controls keep both
+            states' affordance obvious. */}
+        {collapsed && (
+          <button
+            type="button"
+            onClick={toggle}
+            aria-label="Open sidebar"
+            className="grid size-9 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <PanelLeftOpen className="size-5" strokeWidth={1.75} />
+          </button>
+        )}
         {title && <h1 className="text-lg font-semibold tracking-tight">{title}</h1>}
       </div>
 

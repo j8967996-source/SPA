@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 
 import { Sidebar } from '@/components/layout/sidebar';
+import { SidebarProvider } from '@/components/layout/sidebar-context';
 import { TopBar } from '@/components/layout/topbar';
 import { currentSession } from '@/lib/auth';
 
@@ -13,12 +14,14 @@ export default async function DashboardLayout({
   if (!session) redirect('/login');
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar />
-      <div className="flex flex-1 flex-col overflow-hidden">
-        <TopBar userName={session.displayName ?? session.email} />
-        <main className="flex-1 overflow-y-auto bg-background spa-pattern p-6">{children}</main>
+    <SidebarProvider>
+      <div className="flex h-screen overflow-hidden">
+        <Sidebar />
+        <div className="flex flex-1 flex-col overflow-hidden">
+          <TopBar userName={session.displayName ?? session.email} />
+          <main className="flex-1 overflow-y-auto bg-background spa-pattern p-6">{children}</main>
+        </div>
       </div>
-    </div>
+    </SidebarProvider>
   );
 }
