@@ -763,7 +763,6 @@ const paymentSchema = z.object({
  */
 async function postSoaPaymentToErp(args: {
   paymentId: string;
-  soaId: string;
   soaNo: string;
   branchId: string;
   branchCode: string;
@@ -788,9 +787,11 @@ async function postSoaPaymentToErp(args: {
     return { ok: false, error: `No settle transaction code configured for ${args.methodCode}` };
   }
   const tag = args.soaNo;
-  // Pre-render the SOA voucher PDF — attached alongside the cash/bank proof so
-  // Acumatica reviewers see both the receipt evidence AND the statement detail.
-  const renderedAttachment = await buildSoaAttachment(args.soaId);
+  // Third-party AR collection journals only attach the PROOF (cash photo /
+  // remittance slip / bank receipt). The SOA PDF is intentionally NOT attached
+  // here — the journal represents the receipt event, and the proof is its
+  // primary document. Intercompany settle is the inverse: no proof exists, so
+  // the SOA PDF is attached there (see postSoaSettleBatch).
   return await postToErp({
     entityType: 'soa_payment',
     table: 'revenue_soa_payments',
@@ -803,7 +804,6 @@ async function postSoaPaymentToErp(args: {
       { account: tx.credit_account, sub_account: tx.credit_subaccount ?? '000000000', debit_amount: null, credit_amount: amount, transaction_desc: `${tag} AR settle`.trim() },
     ],
     proofPath: args.proofPath ?? undefined,
-    renderedAttachment,
   });
 }
 
@@ -869,7 +869,6 @@ export async function recordSoaPayment(input: unknown): Promise<ActionResult> {
   // settleSOA, not this path.
   await postSoaPaymentToErp({
     paymentId,
-    soaId: soa_id,
     soaNo: soa.soa_no ?? '',
     branchId: soa.branch_id,
     branchCode: one<{ code: string }>(soa.branch)?.code ?? '',
@@ -939,7 +938,6 @@ export async function retrySoaPaymentPosting(paymentId: string): Promise<ActionR
 
   const r = await postSoaPaymentToErp({
     paymentId: pay.id,
-    soaId: pay.soa_id,
     soaNo: soa.soa_no ?? '',
     branchId: soa.branch_id,
     branchCode: one<{ code: string }>(soa.branch)?.code ?? '',
