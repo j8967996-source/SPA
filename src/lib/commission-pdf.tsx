@@ -17,7 +17,18 @@ function longDate(ymd: string): string {
 }
 
 interface PdfCommLine { service_date: string; order_no: string; service: string; minutes: number | null; gross: number; rate: number; commission: number; warmup: boolean }
-interface PdfCommGroup { therapist_name: string; sessions: number; gross: number; commission: number; lines: PdfCommLine[] }
+interface PdfCommGroup {
+  therapist_name: string;
+  sessions: number;
+  gross: number;
+  commission: number;
+  lines: PdfCommLine[];
+  // When the therapist's home branch ≠ the settlement's branch, the work was
+  // done as a borrow (cross-branch share) — surface the home branch code so
+  // the finance desk sees who's a loaner without cross-referencing rosters.
+  // null = therapist's home is the settlement branch (no badge needed).
+  borrowed_from: string | null;
+}
 interface PdfData {
   period_no: string;
   status: string;
@@ -35,11 +46,12 @@ async function loadCommissionForPdf(periodId: string): Promise<PdfData | null> {
   const { data: p } = await supabase
     .from('commission_periods')
     .select(`
-      period_no, status, period_from, period_to, confirmed_at,
+      period_no, status, period_from, period_to, confirmed_at, branch_id,
       total_sessions, total_commission_cents,
       branch:branches!commission_periods_branch_id_fkey ( name ),
       items:order_items!fk_order_items_commission_period (
         list_price_cents, duration_minutes, commission_rate, commission_amount_cents, status, actual_start,
+        therapist_home_branch_id,
         therapist:employees!order_items_therapist_id_fkey ( id, name ),
         order:orders!order_items_order_id_fkey ( order_no, service_date ),
         service:service_items!order_items_service_item_id_fkey ( name )
@@ -49,7 +61,17 @@ async function loadCommissionForPdf(periodId: string): Promise<PdfData | null> {
     .maybeSingle();
   if (!p) return null;
 
+  // Branch-code lookup (id → code) for the borrowed-from badge. The PDF
+  // displays codes (e.g. "MNL") rather than UUIDs — finance desk speaks codes.
+  const { data: branches } = await supabase.from('branches').select('id, code');
+  const branchCode = new Map((branches ?? []).map((b) => [b.id as string, b.code as string]));
+
   // Bucket lines by therapist; compute warmup (earliest session of the day).
+  // Borrowed-from is per-line (snapshotted on order_items.therapist_home_branch_id
+  // at booking time) but rolls up to the group: a therapist is shown as
+  // borrowed if ANY of their lines in this period was done outside their home
+  // branch. The displayed home-branch code uses the first non-null snapshot —
+  // a therapist only has one home at a time, so all snapshots match.
   const byTh = new Map<string, PdfCommGroup>();
   type RawLine = { service_date: string; order_no: string; service: string; minutes: number | null; gross: number; rate: number; commission: number; actual_start: string };
   const rawByTh = new Map<string, RawLine[]>();
@@ -57,10 +79,15 @@ async function loadCommissionForPdf(periodId: string): Promise<PdfData | null> {
     const th = one(it.therapist);
     if (!th) continue;
     const name = th.name ?? '—';
-    const g = byTh.get(th.id ?? name) ?? { therapist_name: name, sessions: 0, gross: 0, commission: 0, lines: [] };
+    const g = byTh.get(th.id ?? name) ?? { therapist_name: name, sessions: 0, gross: 0, commission: 0, lines: [], borrowed_from: null };
     g.sessions += 1;
     g.gross += it.list_price_cents ?? 0;
     g.commission += it.commission_amount_cents ?? 0;
+    // Resolve borrowed-from once per group: settlement branch ≠ therapist's
+    // snapshot home branch ⇒ loaner; remember the home code for the badge.
+    if (g.borrowed_from === null && it.therapist_home_branch_id && it.therapist_home_branch_id !== p.branch_id) {
+      g.borrowed_from = branchCode.get(it.therapist_home_branch_id) ?? null;
+    }
     byTh.set(th.id ?? name, g);
     const raws = rawByTh.get(th.id ?? name) ?? [];
     raws.push({
@@ -119,29 +146,33 @@ const styles = StyleSheet.create({
   summaryLabel: { color: MUTED, fontSize: 8 },
   summaryVal: { fontFamily: 'Helvetica-Bold', fontSize: 11, marginTop: 2 },
 
-  groupHead: { flexDirection: 'row', justifyContent: 'space-between', backgroundColor: GROUPBG, paddingVertical: 6, paddingHorizontal: 6, marginTop: 10, borderTopWidth: 1, borderBottomWidth: 1, borderColor: LINE },
-  groupName: { fontFamily: 'Helvetica-Bold', fontSize: 10, flex: 1 },
+  groupHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: GROUPBG, paddingVertical: 6, paddingHorizontal: 6, marginTop: 10, borderTopWidth: 1, borderBottomWidth: 1, borderColor: LINE },
+  groupNameWrap: { flex: 1, flexDirection: 'row', alignItems: 'center' },
+  groupName: { fontFamily: 'Helvetica-Bold', fontSize: 10 },
   groupSub: { color: MUTED, fontSize: 9, width: 110, textAlign: 'right' },
   groupTotal: { fontFamily: 'Helvetica-Bold', fontSize: 10, width: 90, textAlign: 'right' },
+  // Borrowed-from badge — small amber pill next to therapist name in the
+  // group header (matches warm-up tag styling) so loaner sessions are
+  // visible without scanning every line.
+  borrowed: { fontSize: 7, color: WARM, backgroundColor: WARMBG, paddingHorizontal: 3, paddingVertical: 1, marginLeft: 6, borderRadius: 2, fontFamily: 'Helvetica-Bold' },
 
   rowHead: { flexDirection: 'row', backgroundColor: '#fafafa', borderBottomWidth: 1, borderBottomColor: LINE, paddingVertical: 3, paddingHorizontal: 6 },
   rowHeadCell: { fontSize: 7, color: MUTED, fontFamily: 'Helvetica-Bold', letterSpacing: 0.5 },
 
   row: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: LINE, paddingVertical: 4, paddingHorizontal: 6 },
   td: { fontSize: 9 },
-  // Column widths reclaim slack from Date / Order / Mins (which had spare
-  // room) to widen Gross + Commission. Two goals:
-  //   1. push Rate visually right of Gross by widening Gross (~+16pt)
-  //   2. fit big amounts cleanly — Gross/Commission both handle up to
-  //      "PHP 999,999.00" (~72pt text) with room to spare.
-  // Service flex stays at ~103pt so "Thai Massage [warm-up]" still fits.
+  // Column widths — A4 usable ≈ 523pt. Reclaim slack from the right-side
+  // numeric columns (max payload "999,999" / "100%" — all comfortably narrow)
+  // so Service has room for "Filipino Traditional [warm-up]" (~140pt) without
+  // clipping. Service stays flex:1 to absorb any residual slack.
+  // Layout: cDate 60 + cOrder 110 + cSvc(flex≈155) + cMins 26 + cGross 72 + cRate 32 + cComm 68 = 523pt
   cDate: { width: 60, paddingRight: 8 },
-  cOrder: { width: 116, paddingRight: 8 },
+  cOrder: { width: 110, paddingRight: 8 },
   cSvc: { flex: 1, paddingRight: 8 },
-  cMins: { width: 32, paddingRight: 8, textAlign: 'right' },
-  cGross: { width: 86, paddingRight: 8, textAlign: 'right' },
-  cRate: { width: 40, paddingRight: 8, textAlign: 'right' },
-  cComm: { width: 84, textAlign: 'right' },
+  cMins: { width: 26, paddingRight: 6, textAlign: 'right' },
+  cGross: { width: 72, paddingRight: 8, textAlign: 'right' },
+  cRate: { width: 32, paddingRight: 8, textAlign: 'right' },
+  cComm: { width: 68, textAlign: 'right' },
 
   warm: { fontSize: 7, color: WARM, backgroundColor: WARMBG, paddingHorizontal: 3, paddingVertical: 1, marginLeft: 4, borderRadius: 2 },
 
@@ -190,7 +221,10 @@ function CommDoc({ d }: { d: PdfData }) {
         {d.groups.map((g, gi) => (
           <View key={gi} wrap={false}>
             <View style={styles.groupHead}>
-              <Text style={styles.groupName}>{g.therapist_name}</Text>
+              <View style={styles.groupNameWrap}>
+                <Text style={styles.groupName}>{g.therapist_name}</Text>
+                {g.borrowed_from && <Text style={styles.borrowed}>from {g.borrowed_from}</Text>}
+              </View>
               <Text style={styles.groupSub}>{g.sessions} session{g.sessions === 1 ? '' : 's'} · {php(g.gross)} gross</Text>
               <Text style={styles.groupTotal}>{php(g.commission)}</Text>
             </View>

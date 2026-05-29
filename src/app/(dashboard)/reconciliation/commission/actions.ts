@@ -30,6 +30,10 @@ export interface CommGroup {
   sessions: number;
   gross_cents: number;
   commission_cents: number;
+  // When the therapist's home branch ≠ the settling branch, they were
+  // borrowed for this period — surface the home code so manager sees who's
+  // a loaner without cross-referencing the roster. null = same branch.
+  borrowed_from: string | null;
   items: CommItemLine[];
 }
 
@@ -42,7 +46,7 @@ async function loadEligible(from: string, to: string, branchId: string) {
   const { data, error } = await supabase
     .from('order_items')
     .select(`
-      id, list_price_cents, duration_minutes, actual_start, created_at, therapist_id, commission_settlement_id, status,
+      id, list_price_cents, duration_minutes, actual_start, created_at, therapist_id, therapist_home_branch_id, commission_settlement_id, status,
       service:service_items!order_items_service_item_id_fkey ( name, commission_applicable ),
       therapist:employees!order_items_therapist_id_fkey ( name ),
       order:orders!order_items_order_id_fkey ( order_no, status, service_date, branch_id )
@@ -71,12 +75,17 @@ async function computeGroups(branchId: string, from: string, to: string): Promis
   if (eligible.length === 0) return [];
 
   const therapistIds = [...new Set(eligible.map((r) => r.it.therapist_id as string))];
-  const [emps, classes, brates, br] = await Promise.all([
+  const [emps, classes, brates, br, allBranches] = await Promise.all([
     supabase.from('employees').select('id, commission_class_id').in('id', therapistIds),
     supabase.from('commission_classes').select('id, commission_rate'),
     supabase.from('branch_commission_rates').select('commission_class_id, commission_rate').eq('branch_id', branchId),
     supabase.from('branches').select('commission_policy_id').eq('id', branchId).maybeSingle(),
+    // Branch id → code lookup for the borrowed-from badge. Loaded once
+    // because the workspace can list ≤ ~dozen therapists, many borrowed
+    // from a small set of branches — one fetch is cheaper than per-group.
+    supabase.from('branches').select('id, code'),
   ]);
+  const branchCode = new Map((allBranches.data ?? []).map((b) => [b.id as string, b.code as string]));
   const defaultClass = new Map((emps.data ?? []).map((e) => [e.id, e.commission_class_id]));
   const globalRate = new Map((classes.data ?? []).map((c) => [c.id, c.commission_rate]));
   const branchRate = new Map((brates.data ?? []).map((r) => [r.commission_class_id, r.commission_rate]));
@@ -128,10 +137,15 @@ async function computeGroups(branchId: string, from: string, to: string): Promis
       const effRate = warm != null ? warm : classRate;
       const commission = Math.round(r.it.list_price_cents * effRate);
       const tid = r.it.therapist_id as string;
-      const g = groups.get(tid) ?? { therapist_id: tid, therapist_name: r.th?.name ?? '—', sessions: 0, gross_cents: 0, commission_cents: 0, items: [] };
+      const g = groups.get(tid) ?? { therapist_id: tid, therapist_name: r.th?.name ?? '—', sessions: 0, gross_cents: 0, commission_cents: 0, borrowed_from: null, items: [] };
       g.sessions += 1;
       g.gross_cents += r.it.list_price_cents;
       g.commission_cents += commission;
+      // Borrowed-from: snapshot on the item; once set on the group, leave it
+      // (a therapist has one home at a time, all line snapshots agree).
+      if (g.borrowed_from === null && r.it.therapist_home_branch_id && r.it.therapist_home_branch_id !== branchId) {
+        g.borrowed_from = branchCode.get(r.it.therapist_home_branch_id) ?? null;
+      }
       g.items.push({
         item_id: r.it.id,
         service_date: r.ord!.service_date,

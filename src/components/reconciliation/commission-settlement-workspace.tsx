@@ -82,6 +82,9 @@ export interface CommHistoryRow {
   therapists: string[];
   detail: {
     therapist: string;
+    // Home branch code when ≠ this settlement's branch. Drives the "from XXX"
+    // amber badge in the History detail (matches Settle workspace + PDF).
+    borrowed_from: string | null;
     sessions: number;
     gross_cents: number;
     commission_cents: number;
@@ -298,6 +301,15 @@ export function CommissionSettlementWorkspace({
                       </button>
                       <button type="button" onClick={() => toggleExp(g.therapist_id)} className="flex items-center gap-2 text-left">
                         <span className="font-bold">{g.therapist_name}</span>
+                        {/* Borrowed-from badge — surfaces cross-branch loaners
+                            so the desk sees them at a glance (matches the
+                            commission PDF group header). Same amber tint as
+                            the warm-up tag pattern. */}
+                        {g.borrowed_from && (
+                          <span className="inline-flex items-center rounded bg-amber-100 dark:bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-300">
+                            from {g.borrowed_from}
+                          </span>
+                        )}
                         <span className="text-xs font-medium text-muted-foreground">({g.sessions} session{g.sessions > 1 ? 's' : ''} · {peso(g.gross_cents)} gross)</span>
                       </button>
                       <span className="ml-auto text-base font-extrabold tabular">Commission: {peso(g.commission_cents)}</span>
@@ -482,6 +494,14 @@ export function CommissionSettlementWorkspace({
                                           <TableCell colSpan={6} className="py-2.5 pl-6">
                                             <span className="mr-2 inline-flex size-6 items-center justify-center rounded-full bg-primary/20 text-[11px] font-bold text-primary align-middle">{initials}</span>
                                             <span className="align-middle text-sm font-extrabold text-primary">{g.therapist}</span>
+                                            {/* Borrowed-from badge — same convention as Settle workspace
+                                                + commission PDF: amber tag when therapist worked outside
+                                                their home branch in this period. */}
+                                            {g.borrowed_from && (
+                                              <span className="ml-2 inline-flex items-center rounded bg-amber-100 dark:bg-amber-500/20 px-1.5 py-0.5 align-middle text-[10px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-300">
+                                                from {g.borrowed_from}
+                                              </span>
+                                            )}
                                             <span className="ml-2 align-middle text-xs font-semibold text-muted-foreground">{g.sessions} session{g.sessions > 1 ? 's' : ''} · {peso(g.gross_cents)} gross</span>
                                           </TableCell>
                                           <TableCell className="py-2.5 font-extrabold tabular text-right text-primary">{peso(g.commission_cents)}</TableCell>
