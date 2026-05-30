@@ -25,6 +25,9 @@ export interface NavSubItem {
   // the "must do daily" trio inside Reconciliation so the desk sees them as
   // one workflow rather than 6 independent links.
   section?: string;
+  /** Hide from non-admin viewers. Matches the same flag on NavItem; used for
+   *  child links inside admin-only sub-menus (e.g. Settings → Users). */
+  adminOnly?: boolean;
 }
 
 export interface NavSubGroup {
@@ -114,7 +117,7 @@ export const mainNavItems: NavItem[] = [
       {
         label: 'System',
         items: [
-          { label: 'Users', href: '/settings/users' },
+          { label: 'Users', href: '/settings/users', adminOnly: true },
           { label: 'System Settings', href: '/settings/system' },
           { label: 'Audit Log', href: '/settings/audit-log' },
         ],

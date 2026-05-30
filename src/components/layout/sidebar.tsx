@@ -47,11 +47,20 @@ function isActive(pathname: string, href?: string, children?: { href: string }[]
 function NavLink({
   item,
   pathname,
+  isAdmin,
 }: {
   item: NavItem;
   pathname: string;
+  isAdmin: boolean;
 }) {
-  const flatChildren = item.children ?? item.childGroups?.flatMap((g) => g.items);
+  // Strip admin-only sub-items / sub-groups up front so the chevron / active
+  // detection both see the post-filter view (a sub-group that ends up empty
+  // disappears entirely rather than rendering as a blank header).
+  const filteredChildren = item.children?.filter((c) => !c.adminOnly || isAdmin);
+  const filteredChildGroups = item.childGroups
+    ?.map((g) => ({ ...g, items: g.items.filter((c) => !c.adminOnly || isAdmin) }))
+    .filter((g) => g.items.length > 0);
+  const flatChildren = filteredChildren ?? filteredChildGroups?.flatMap((g) => g.items);
   const hasChildren = !!flatChildren?.length;
   const active = isActive(pathname, item.href, flatChildren);
   const [open, setOpen] = useState(active);
@@ -108,7 +117,7 @@ function NavLink({
           <ChevronDown className={cn('size-4 transition-transform', open && 'rotate-180')} strokeWidth={2} />
         </button>
       </div>
-      {open && (item.children || item.childGroups) && (
+      {open && (filteredChildren || filteredChildGroups) && (
         <div className="mt-1 ml-3 flex flex-col gap-1">
           {/* Children rendered as section-aware segments: consecutive items
               with the same `section` share one wrapper. Sectioned segments
@@ -116,8 +125,8 @@ function NavLink({
               grouping reads visually (e.g. Daily Close inside Reconciliation).
               Un-sectioned items fall back to the muted border-l, matching the
               previous single-bar look. */}
-          {item.children &&
-            groupChildrenBySection(item.children).map((seg, si) => {
+          {filteredChildren &&
+            groupChildrenBySection(filteredChildren).map((seg, si) => {
               const style = seg.section
                 ? SECTION_STYLES[seg.section] ?? NEUTRAL_SECTION_STYLE
                 : NEUTRAL_SECTION_STYLE;
@@ -137,9 +146,9 @@ function NavLink({
                 </div>
               );
             })}
-          {item.childGroups && (
+          {filteredChildGroups && (
             <div className="border-l border-sidebar-border pl-3 flex flex-col gap-px">
-              {item.childGroups.map((group, idx) => (
+              {filteredChildGroups.map((group, idx) => (
                 <div key={group.label} className={cn('flex flex-col gap-px', idx > 0 && 'mt-2')}>
                   <p className="mx-3 pt-1 pb-1 mb-1 border-b border-sidebar-border text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
                     {group.label}
@@ -226,7 +235,7 @@ export function Sidebar({ isAdmin = false }: { isAdmin?: boolean }) {
       <nav className="flex-1 overflow-y-auto px-3 py-4">
         <div className="flex flex-col gap-1">
           {visibleNav.map((item) => (
-            <NavLink key={item.label} item={item} pathname={pathname} />
+            <NavLink key={item.label} item={item} pathname={pathname} isAdmin={isAdmin} />
           ))}
         </div>
       </nav>

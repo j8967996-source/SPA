@@ -19,8 +19,17 @@ import {
 } from 'lucide-react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { currentSession, isAdmin } from '@/lib/auth';
 
-const sections = [
+type SectionItem = {
+  icon: typeof Building2;
+  label: string;
+  href: string;
+  desc: string;
+  adminOnly?: boolean;
+};
+
+const sections: { group: string; items: SectionItem[] }[] = [
   {
     group: 'Core Business',
     items: [
@@ -49,7 +58,7 @@ const sections = [
   {
     group: 'System',
     items: [
-      { icon: UserCog, label: 'Users', href: '/settings/users', desc: 'Staff accounts and roles' },
+      { icon: UserCog, label: 'Users', href: '/settings/users', desc: 'Staff accounts and roles', adminOnly: true },
       { icon: KeySquare, label: 'Roles & Permissions', href: '/settings/roles', desc: 'Role-based access (future)' },
       { icon: Cog, label: 'System Settings', href: '/settings/system', desc: 'Magic numbers & thresholds' },
       { icon: History, label: 'Audit Log', href: '/settings/audit-log', desc: 'Who changed what & when (admin)' },
@@ -57,7 +66,12 @@ const sections = [
   },
 ];
 
-export default function SettingsLandingPage() {
+export default async function SettingsLandingPage() {
+  const admin = isAdmin(await currentSession());
+  const visible = sections
+    .map((sec) => ({ ...sec, items: sec.items.filter((it) => !it.adminOnly || admin) }))
+    .filter((sec) => sec.items.length > 0);
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -67,7 +81,7 @@ export default function SettingsLandingPage() {
         </p>
       </div>
 
-      {sections.map((sec) => (
+      {visible.map((sec) => (
         <div key={sec.group} className="flex flex-col gap-3">
           <h3 className="text-xs font-bold uppercase tracking-[0.15em] text-muted-foreground">
             {sec.group}

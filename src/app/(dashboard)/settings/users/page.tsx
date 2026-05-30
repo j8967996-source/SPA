@@ -1,6 +1,8 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import { ChevronLeft, KeyRound, Plus } from 'lucide-react';
 
+import { currentSession, isAdmin } from '@/lib/auth';
 import { createServiceClient } from '@/lib/supabase/server';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -59,6 +61,7 @@ function roleBadge(role: UserRole) {
 }
 
 export default async function UsersPage() {
+  if (!isAdmin(await currentSession())) redirect('/dashboard');
   const { users, branches } = await fetchData();
   const activeCount = users.filter((u) => u.active).length;
 
