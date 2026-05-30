@@ -73,23 +73,18 @@ export function CashReconForm({ branchId, date, shift, canReopen, siblings = [] 
 
   const rows = (
     <div className="flex flex-col gap-1 text-sm">
-      {!shift.firstOfDay && (
-        <div className="flex items-center justify-between">
-          <span className="font-medium text-muted-foreground">Opening float (handover)</span>
-          <span className="font-bold tabular">{peso(shift.openingCents)}</span>
-        </div>
-      )}
-      <div className="flex items-center justify-between">
-        <span className="font-medium text-muted-foreground">Cash received this shift</span>
-        <span className="font-bold tabular">{peso(shift.receivedCents)}</span>
-      </div>
       {siblingsWithCash.length > 0 && (
         // Cross-shift context — payments are attributed by paid_at clock, not
         // by who was on duty, so a 17:01 cash sale by a Shift-1 cashier lands
         // in Shift-2. Without this line, the cashier sees "Cash received = 0"
         // here, counts what's actually in their drawer, and gets a positive
         // variance they can't explain.
-        <div className="mt-0.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 px-2 py-1 text-xs font-medium text-amber-900 dark:text-amber-200">
+        //
+        // Placed at the very top of the rows block (same vertical slot the
+        // Opening float row would occupy on a non-first shift), so Counted
+        // cash inputs across sibling cards line up — adding the warning
+        // doesn't push this card's input down relative to the others.
+        <div className="rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 px-2 py-1 text-xs font-medium text-amber-900 dark:text-amber-200">
           <span className="font-bold">Heads up:</span> other shifts today —{' '}
           {siblingsWithCash.map((s, i) => (
             <span key={s.label}>
@@ -100,6 +95,16 @@ export function CashReconForm({ branchId, date, shift, canReopen, siblings = [] 
           . If the cash is in your drawer it may have been paid after the shift boundary.
         </div>
       )}
+      {!shift.firstOfDay && (
+        <div className="flex items-center justify-between">
+          <span className="font-medium text-muted-foreground">Opening float (handover)</span>
+          <span className="font-bold tabular">{peso(shift.openingCents)}</span>
+        </div>
+      )}
+      <div className="flex items-center justify-between">
+        <span className="font-medium text-muted-foreground">Cash received this shift</span>
+        <span className="font-bold tabular">{peso(shift.receivedCents)}</span>
+      </div>
       <div className="flex items-center justify-between border-t border-border pt-1">
         <span className="font-medium text-muted-foreground">Expected in drawer</span>
         <span className="font-bold tabular">{peso(shift.expectedCents)}</span>

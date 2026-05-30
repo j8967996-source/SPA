@@ -199,8 +199,12 @@ export async function reopenCashReconciliation(input: unknown): Promise<ActionRe
 }
 
 export async function closeCashReconciliation(input: unknown): Promise<ActionResult> {
+  // Cashier (= whoever's on duty at the till) closes their own shift after
+  // counting — no manager needed for the routine path. Manager authority is
+  // reserved for reopen + shift-config. Branch access still applies: staff
+  // can only close their own branch's shifts.
   const session = await currentSession();
-  if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
+  if (!session) return { ok: false, error: 'Not signed in' };
   const parsed = schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' };
   const d = parsed.data;
