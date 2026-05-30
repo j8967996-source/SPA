@@ -250,9 +250,18 @@ async function bypassAdminSession(): Promise<SessionPayload | null> {
  * page + its loaders + its actions all share one DB read.
  */
 export const currentSession = cache(async (): Promise<SessionPayload | null> => {
+  // Bypass wins over any real Supabase Auth cookie. Otherwise a stale cookie
+  // from a previous real login shadows the impersonation and you end up
+  // testing as the wrong user without realising (e.g. cookie says EP000513 →
+  // admin, AUTH_BYPASS says staff-osp2 → staff: the cookie wins silently and
+  // you think the staff guard is broken when it isn't). Bypass is dev-only —
+  // in production AUTH_BYPASS is unset so this short-circuit is dead code.
+  const bypass = await bypassAdminSession();
+  if (bypass) return bypass;
+
   const ssr = await createServerClient();
   const { data: { user } } = await ssr.auth.getUser();
-  if (!user) return bypassAdminSession();
+  if (!user) return null;
 
   // Read the canonical row by auth_user_id (preferred) or fall back to email.
   // Email fallback handles the brief window after a brand-new login when
