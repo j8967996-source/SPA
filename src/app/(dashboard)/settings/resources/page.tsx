@@ -57,7 +57,7 @@ const TYPE_LABEL: Record<string, string> = {
   massage_bed: 'Massage Bed',
   rest_room: 'Rest Room',
   hair_chair: 'Hair Chair',
-  nail_table: 'Nail Table',
+  nail_station: 'Nail Station',
   steam_room: 'Steam Room',
 };
 

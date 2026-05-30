@@ -8,6 +8,7 @@ import { currentSession, isManager } from '@/lib/auth';
 import { isBusinessDayClosed } from '@/app/(dashboard)/reconciliation/end-of-day/actions';
 import { canAccessBranch } from '@/lib/branch-access';
 import { canPerformGroup, matchesGender } from '@/lib/therapist-availability';
+import { assertBedMatchesServiceItem } from '@/lib/resource-compatibility';
 
 // Shared guard for operational order actions: enforce a logged-in session AND
 // branch scoping by looking up the order's branch_id. Used by the service-flow
@@ -591,6 +592,14 @@ export async function addOrderItem(input: unknown): Promise<ActionResult> {
   if (!(await canAccessBranch(ord.branch_id))) return { ok: false, error: 'No access to this branch' };
   if (!['draft', 'open', 'in_service'].includes(ord.status)) return { ok: false, error: 'This order can no longer be edited' };
 
+  // Server-side backstop for the UI's station-by-type filter. The picker
+  // already hides incompatible stations, but a stale form, a future API
+  // client, or a manual id paste would slip through without this check.
+  if (d.resource_id) {
+    const compat = await assertBedMatchesServiceItem(d.resource_id, d.service_item_id);
+    if (!compat.ok) return { ok: false, error: compat.error };
+  }
+
   const res = await resolveLinePricing(supabase, d);
   if ('error' in res) return { ok: false, error: res.error };
 
@@ -628,6 +637,12 @@ export async function updateOrderItem(input: unknown): Promise<ActionResult> {
   const { data: existing } = await supabase.from('order_items').select('status').eq('id', d.id).single();
   if (!existing) return { ok: false, error: 'Service line not found' };
   if (existing.status !== 'scheduled') return { ok: false, error: 'Only a not-yet-started line can be edited' };
+
+  // Same backstop as addOrderItem — UI filter is convenience, not security.
+  if (d.resource_id) {
+    const compat = await assertBedMatchesServiceItem(d.resource_id, d.service_item_id);
+    if (!compat.ok) return { ok: false, error: compat.error };
+  }
 
   const res = await resolveLinePricing(supabase, d);
   if ('error' in res) return { ok: false, error: res.error };
@@ -678,7 +693,7 @@ export async function startOrderItem(itemId: string, orderId: string): Promise<A
   // on another line.
   const { data: item } = await supabase
     .from('order_items')
-    .select('therapist_id, resource_id, order_customer_id, service:service_items ( commission_applicable, required_resource_type, service_group )')
+    .select('therapist_id, resource_id, service_item_id, order_customer_id, service:service_items ( commission_applicable, required_resource_type, service_group )')
     .eq('id', itemId)
     .single();
 
@@ -690,6 +705,15 @@ export async function startOrderItem(itemId: string, orderId: string): Promise<A
   }
   if (svc?.required_resource_type && !item?.resource_id) {
     return { ok: false, error: 'Assign a station/bed before starting this service' };
+  }
+  // Type-match the assigned station to the service. The picker already does
+  // this, but if a service swap happened earlier without clearing the
+  // station, or a line was created via a path that skipped the picker, we
+  // catch it here — same start-time hard-stop pattern as the therapist check
+  // below.
+  if (item?.resource_id && item?.service_item_id) {
+    const compat = await assertBedMatchesServiceItem(item.resource_id, item.service_item_id);
+    if (!compat.ok) return { ok: false, error: compat.error };
   }
 
   // Hard-stop at the binding moment: the assigned therapist must be trained for

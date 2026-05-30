@@ -4,13 +4,13 @@
 //  - Service Categories — which station a category needs (reservation capacity)
 //  - the reservation capacity panel
 // Keep these values in sync with resources.resource_type so capacity matching works.
-export type ResourceType = 'massage_bed' | 'rest_room' | 'hair_chair' | 'nail_table' | 'steam_room';
+export type ResourceType = 'massage_bed' | 'rest_room' | 'hair_chair' | 'nail_station' | 'steam_room';
 
 export const RESOURCE_TYPES: { value: ResourceType; label: string }[] = [
   { value: 'massage_bed', label: 'Massage Bed' },
   { value: 'rest_room', label: 'Rest Room' },
   { value: 'hair_chair', label: 'Hair Chair' },
-  { value: 'nail_table', label: 'Nail Table' },
+  { value: 'nail_station', label: 'Nail Station' },
   { value: 'steam_room', label: 'Steam Room' },
 ];
 

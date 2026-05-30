@@ -52,6 +52,7 @@ import { CustomerPaymentCard, type TipTarget } from '@/components/sales-orders/c
 import { FeedbackDialog } from '@/components/sales-orders/feedback-dialog';
 import { InterruptDialog } from '@/components/sales-orders/interrupt-dialog';
 import { ANY_GENDER, canPerformGroup, matchesGender } from '@/lib/therapist-availability';
+import { RESOURCE_TYPE_LABEL } from '@/lib/resource-types';
 
 function peso(cents: number): string {
   return (cents / 100).toLocaleString('en-PH', { maximumFractionDigits: 0 });
@@ -547,9 +548,33 @@ export function OrderWorkspace({
   const empOptions = [{ value: NONE, label: 'Unassigned' }, ...thisBranchOptions, ...borrowOptions];
   // A station occupied by an in-service order can't take another — disable it.
   const busyRes = new Set(busyResourceIds);
+  // Filter the station picker by the service's required resource_type so the
+  // dropdown only shows stations that can actually do the service (no more
+  // "Gel Polish on Massage Bed" because the picker listed every station at
+  // the branch). When the service declares no required type (REST or a
+  // misc service), fall back to showing every station, grouped by type.
+  const neededType = serviceItems.find((s) => s.id === svcId)?.required_resource_type ?? null;
+  const eligibleResources = neededType
+    ? resources.filter((r) => r.resource_type === neededType)
+    : resources;
+  // Bucket by type so the dropdown can render one labelled group per type
+  // (Massage Beds / Hair Chairs / Nail Stations). Insertion order preserved
+  // — the consumer iterates resources as they came in, so the grouping order
+  // matches the data's existing sort (resource_type then resource_name).
+  const resGroups = new Map<string, ResourceOpt[]>();
+  for (const r of eligibleResources) {
+    const k = r.resource_type ?? '__untyped__';
+    if (!resGroups.has(k)) resGroups.set(k, []);
+    resGroups.get(k)!.push(r);
+  }
+  const resLabel = (r: ResourceOpt) => `${r.name}${busyRes.has(r.id) ? ' · in use' : ''}`;
+  // The Select primitive uses `items` for its trigger's value→label lookup —
+  // every selectable option must appear in this flat list, even though the
+  // SelectContent below groups them visually. Order matches the groups so
+  // there are no orphans.
   const resOptions = [
     { value: NONE, label: 'None', disabled: false },
-    ...resources.map((r) => ({ value: r.id, label: `${r.name}${busyRes.has(r.id) ? ' · in use' : ''}`, disabled: busyRes.has(r.id) })),
+    ...eligibleResources.map((r) => ({ value: r.id, label: resLabel(r), disabled: busyRes.has(r.id) })),
   ];
   const discRate = (d: DiscountOpt): string | null =>
     d.discount_percent > 0
@@ -888,7 +913,19 @@ export function OrderWorkspace({
                       <Select
                         items={variantOptions}
                         value={svcId}
-                        onValueChange={(v) => v && setSvcId(v)}
+                        onValueChange={(v) => {
+                          if (!v) return;
+                          setSvcId(v);
+                          // Drop a now-mismatched station so the user can't carry
+                          // (say) a massage Bed over to a freshly picked Gel Polish
+                          // — the picker would filter it out anyway, so silently
+                          // clearing is less confusing than showing a stale value.
+                          if (resourceId !== NONE) {
+                            const need = serviceItems.find((s) => s.id === v)?.required_resource_type ?? null;
+                            const cur = resources.find((r) => r.id === resourceId);
+                            if (need && cur && cur.resource_type !== need) setResourceId(NONE);
+                          }
+                        }}
                         disabled={!groupSel}
                       >
                         <SelectTrigger><SelectValue placeholder={groupSel ? 'Pick duration' : 'Pick service first'} /></SelectTrigger>
@@ -954,7 +991,25 @@ export function OrderWorkspace({
                           <Select items={resOptions} value={resourceId} onValueChange={(v) => setResourceId(v ?? NONE)}>
                             <SelectTrigger><SelectValue /></SelectTrigger>
                             <SelectContent>
-                              {resOptions.map((o) => <SelectItem key={o.value} value={o.value} disabled={o.disabled}>{o.label}</SelectItem>)}
+                              <SelectItem value={NONE}>None</SelectItem>
+                              {eligibleResources.length === 0 ? (
+                                <SelectItem value="__nomatch__" disabled>
+                                  {neededType
+                                    ? `No ${RESOURCE_TYPE_LABEL[neededType] ?? neededType} at this branch`
+                                    : 'No stations'}
+                                </SelectItem>
+                              ) : (
+                                [...resGroups.entries()].map(([type, list]) => (
+                                  <SelectGroup key={type}>
+                                    <SelectLabel>{RESOURCE_TYPE_LABEL[type] ?? type}</SelectLabel>
+                                    {list.map((r) => (
+                                      <SelectItem key={r.id} value={r.id} disabled={busyRes.has(r.id)}>
+                                        {resLabel(r)}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectGroup>
+                                ))
+                              )}
                             </SelectContent>
                           </Select>
                         </div>

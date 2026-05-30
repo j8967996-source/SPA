@@ -11,7 +11,7 @@ type ResourceUpdate = Database['public']['Tables']['resources']['Update'];
 
 const schema = z.object({
   branch_id: z.string().uuid(),
-  resource_type: z.enum(['massage_bed', 'rest_room', 'hair_chair', 'nail_table', 'steam_room']),
+  resource_type: z.enum(['massage_bed', 'rest_room', 'hair_chair', 'nail_station', 'steam_room']),
   resource_name: z.string().min(1).max(80),
   location_zone: z.string().max(40).optional().nullable(),
   capacity: z.coerce.number().int().min(1).max(20).default(1),
