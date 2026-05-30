@@ -10,6 +10,20 @@ export type Role = SessionPayload['role'];
 
 const acumaticaConfigured = (): boolean => !!process.env.ACUMATICA_BASE_URL;
 
+/**
+ * Resolve the AUTH_BYPASS env into a target email, or null if bypass is off.
+ * Treats the literal strings "false" / "0" / empty as "off" so that
+ * `AUTH_BYPASS=false` (the common "explicit disable" form) really disables it.
+ * `AUTH_BYPASS=true` resolves to the seeded admin. Anything else is treated as
+ * an email to impersonate.
+ */
+export function bypassTargetEmail(): string | null {
+  const v = (process.env.AUTH_BYPASS ?? '').trim().toLowerCase();
+  if (!v || v === 'false' || v === '0') return null;
+  if (v === 'true') return 'admin@acumatica.local';
+  return v;
+}
+
 export type LoginResult =
   | { ok: true; acuCookie: string | null }
   | { ok: false; error: string };
@@ -186,18 +200,27 @@ async function bridgeSupabaseAuthSession(
   return { ok: true };
 }
 
-// Dev-only login bypass: when AUTH_BYPASS=true and there is no Supabase Auth
-// session, act as the seeded admin. Controlled by env (default off) so it
-// never ships on. The middleware skips redirecting when this env is true.
+// Dev-only login bypass for testing roles without going through Supabase Auth.
+// Controlled by AUTH_BYPASS env (default off — never ships on). Two forms:
+//
+//   AUTH_BYPASS=true                       → seeded admin@acumatica.local
+//   AUTH_BYPASS=staff@acumatica.local      → any active staff_users row by email
+//
+// The second form is the role-testing workflow: edit .env.local, restart dev
+// server, and the whole app sees you as that user. Used together with the
+// matching middleware bypass triggered by the same env. Falls back to a
+// synthetic admin payload if the target row doesn't exist (so the seed
+// script's typo doesn't lock you out — you stay admin to fix it).
 async function bypassAdminSession(): Promise<SessionPayload | null> {
-  if (process.env.AUTH_BYPASS !== 'true') return null;
+  const targetEmail = bypassTargetEmail();
+  if (!targetEmail) return null;
   const svc = createServiceClient();
   const { data } = await svc
     .from('staff_users')
-    .select('id, email, acumatica_user_id, display_name, role, home_branch_id')
-    .eq('email', 'admin@acumatica.local')
+    .select('id, email, acumatica_user_id, display_name, role, home_branch_id, active')
+    .eq('email', targetEmail)
     .maybeSingle();
-  if (data) {
+  if (data && data.active) {
     return {
       staffUserId: data.id,
       email: data.email,
@@ -207,11 +230,13 @@ async function bypassAdminSession(): Promise<SessionPayload | null> {
       homeBranchId: data.home_branch_id,
     };
   }
+  // Synthetic admin so a misspelt email or missing seed doesn't lock you out
+  // — you stay admin, can see what's wrong, fix the env or seed, and retry.
   return {
     staffUserId: '00000000-0000-0000-0000-000000000000',
-    email: 'admin@acumatica.local',
+    email: targetEmail,
     acumaticaUserId: 'admin',
-    displayName: 'System Admin (bypass)',
+    displayName: `System Admin (bypass: ${targetEmail})`,
     role: 'admin',
     homeBranchId: null,
   };

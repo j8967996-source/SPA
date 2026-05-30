@@ -6,6 +6,13 @@ import { SESSION_IDLE_SECONDS } from '@/lib/session';
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
+// Local copy of the bypass check (the canonical one is in @/lib/auth; we
+// inline it here to avoid the middleware pulling in server-only modules).
+function isBypassActive(): boolean {
+  const v = (process.env.AUTH_BYPASS ?? '').trim().toLowerCase();
+  return v !== '' && v !== 'false' && v !== '0';
+}
+
 /**
  * Supabase SSR middleware — same pattern as ENGO Back Office. Three jobs:
  *
@@ -28,11 +35,13 @@ export async function updateSession(request: NextRequest) {
   // request through so the AUTH_BYPASS fallback in currentSession() can
   // synthesise a session for local development.
   //
-  //   - AUTH_BYPASS=true               -> explicit local dev opt-in
-  //   - Supabase env missing/placeholder -> not configured yet
-  //   - ACUMATICA_BASE_URL missing       -> ERP not wired (preview / staging)
+  //   - AUTH_BYPASS any truthy value       -> explicit local dev opt-in
+  //     ("true" for the seeded admin, or an email like
+  //      "staff-osp1@acumatica.local" for role-switching).
+  //   - Supabase env missing / "placeholder" -> not configured yet
+  //   - ACUMATICA_BASE_URL missing           -> ERP not wired (preview / staging)
   if (
-    process.env.AUTH_BYPASS === 'true'
+    isBypassActive()
     || !SUPABASE_URL
     || SUPABASE_URL.includes('placeholder')
     || !SUPABASE_PUBLISHABLE_KEY
