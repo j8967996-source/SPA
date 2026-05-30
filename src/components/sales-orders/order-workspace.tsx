@@ -553,7 +553,17 @@ export function OrderWorkspace({
   // "Gel Polish on Massage Bed" because the picker listed every station at
   // the branch). When the service declares no required type (REST or a
   // misc service), fall back to showing every station, grouped by type.
-  const neededType = serviceItems.find((s) => s.id === svcId)?.required_resource_type ?? null;
+  //
+  // We also accept the service GROUP as a fallback: when the user has picked
+  // a service group (e.g. Pedicure) but hasn't picked a specific duration
+  // variant yet, svcId is still empty — but every variant in the group
+  // shares the same required_resource_type, so any representative variant
+  // tells us what the picker should filter to.
+  const svcSelected = serviceItems.find((s) => s.id === svcId);
+  const groupRep = !svcSelected && groupSel
+    ? serviceItems.find((s) => s.group === groupSel)
+    : null;
+  const neededType = (svcSelected ?? groupRep)?.required_resource_type ?? null;
   const eligibleResources = neededType
     ? resources.filter((r) => r.resource_type === neededType)
     : resources;
@@ -900,7 +910,20 @@ export function OrderWorkspace({
                       <Select
                         items={groupOptions}
                         value={groupSel}
-                        onValueChange={(v) => { if (v) { setGroupSel(v); setSvcId(''); setTherapistId(NONE); } }}
+                        onValueChange={(v) => {
+                          if (!v) return;
+                          setGroupSel(v);
+                          setSvcId('');
+                          setTherapistId(NONE);
+                          // Switching groups can change the required station
+                          // type (Massage → Nail). Drop a station that no
+                          // longer fits so the user picks one that does.
+                          if (resourceId !== NONE) {
+                            const newGroupType = serviceItems.find((s) => s.group === v)?.required_resource_type ?? null;
+                            const cur = resources.find((r) => r.id === resourceId);
+                            if (newGroupType && cur && cur.resource_type !== newGroupType) setResourceId(NONE);
+                          }
+                        }}
                       >
                         <SelectTrigger><SelectValue placeholder="Pick a service" /></SelectTrigger>
                         <SelectContent>
