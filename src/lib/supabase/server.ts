@@ -4,7 +4,6 @@ import { createClient } from '@supabase/supabase-js';
 import { cookies } from 'next/headers';
 
 import type { Database } from '@/types/database';
-import { readSession } from '@/lib/session';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
@@ -61,8 +60,12 @@ export function createServiceClient(staffUserId?: string | null) {
  * Service client that tags writes with the current staff user for the audit
  * log. Use this in server actions that mutate audited tables so the change is
  * attributed; plain createServiceClient() is fine for reads.
+ *
+ * Lazy import of `@/lib/auth` to avoid a circular dependency
+ * (auth.ts → supabase/server.ts → auth.ts).
  */
 export async function createAuditedClient() {
-  const session = await readSession();
+  const { currentSession } = await import('@/lib/auth');
+  const session = await currentSession();
   return createServiceClient(session?.staffUserId ?? null);
 }
