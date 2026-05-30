@@ -32,9 +32,14 @@ interface Props {
   date: string;
   shift: ShiftStatus;
   canReopen?: boolean;
+  /** Other shifts on the same business day, with their cash received. Drives
+   *  the cross-shift hint — without it, a Shift-1 staff who took a cash
+   *  payment at 17:01 would see "Cash received = 0" here with no clue the
+   *  payment landed in Shift-2's bucket. Empty array = no hint. */
+  siblings?: { label: string; receivedCents: number }[];
 }
 
-export function CashReconForm({ branchId, date, shift, canReopen }: Props) {
+export function CashReconForm({ branchId, date, shift, canReopen, siblings = [] }: Props) {
   const [actual, setActual] = useState(shift.closed ? String((shift.closed.actualCents) / 100) : '');
   const [reason, setReason] = useState(shift.closed?.reason ?? '');
   const [reopenOpen, setReopenOpen] = useState(false);
@@ -61,6 +66,11 @@ export function CashReconForm({ branchId, date, shift, canReopen }: Props) {
     });
   }
 
+  // Show only siblings that actually received cash — a sibling with 0 is just
+  // noise. The case we care about is "you took cash but it's not here" (it's
+  // in another shift because of the paid_at clock).
+  const siblingsWithCash = siblings.filter((s) => s.receivedCents > 0);
+
   const rows = (
     <div className="flex flex-col gap-1 text-sm">
       {!shift.firstOfDay && (
@@ -73,6 +83,23 @@ export function CashReconForm({ branchId, date, shift, canReopen }: Props) {
         <span className="font-medium text-muted-foreground">Cash received this shift</span>
         <span className="font-bold tabular">{peso(shift.receivedCents)}</span>
       </div>
+      {siblingsWithCash.length > 0 && (
+        // Cross-shift context — payments are attributed by paid_at clock, not
+        // by who was on duty, so a 17:01 cash sale by a Shift-1 cashier lands
+        // in Shift-2. Without this line, the cashier sees "Cash received = 0"
+        // here, counts what's actually in their drawer, and gets a positive
+        // variance they can't explain.
+        <div className="mt-0.5 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 px-2 py-1 text-xs font-medium text-amber-900 dark:text-amber-200">
+          <span className="font-bold">Heads up:</span> other shifts today —{' '}
+          {siblingsWithCash.map((s, i) => (
+            <span key={s.label}>
+              {i > 0 ? ', ' : ''}
+              <span className="font-bold">{s.label}</span> ₱{peso(s.receivedCents)}
+            </span>
+          ))}
+          . If the cash is in your drawer it may have been paid after the shift boundary.
+        </div>
+      )}
       <div className="flex items-center justify-between border-t border-border pt-1">
         <span className="font-medium text-muted-foreground">Expected in drawer</span>
         <span className="font-bold tabular">{peso(shift.expectedCents)}</span>

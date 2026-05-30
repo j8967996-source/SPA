@@ -1394,6 +1394,12 @@ export async function takePayment(input: unknown): Promise<ActionResult> {
 
   revalidatePath('/sales-orders');
   revalidatePath(`/sales-orders/${d.order_id}`);
+  // Cash recon page reads payments live — without this, a cashier who took
+  // cash and then opened /reconciliation/cash in the same session would see
+  // stale "Cash received this shift" until manual F5. Same story for the
+  // daily-close hub, Revenue Confirm, and the dashboard count widgets.
+  revalidatePath('/reconciliation/cash');
+  revalidatePath('/reconciliation');
   return { ok: true };
 }
 
@@ -1464,6 +1470,10 @@ export async function voidPayment(paymentId: string, orderId: string): Promise<A
 
   revalidatePath('/sales-orders');
   revalidatePath(`/sales-orders/${orderId}`);
+  // Mirror the recordPayment revalidation — a voided cash payment changes
+  // the drawer's expected total too.
+  revalidatePath('/reconciliation/cash');
+  revalidatePath('/reconciliation');
   return { ok: true };
 }
 

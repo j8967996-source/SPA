@@ -70,9 +70,25 @@ export default async function CashReconciliationPage({
             {allClosed && <span className="text-xs font-bold uppercase tracking-wide text-primary">All shifts closed — Revenue Confirm unlocked</span>}
           </CardHeader>
           <CardContent className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {shifts.map((s) => (
-              <CashReconForm key={s.label} branchId={branchId} date={date} shift={s} canReopen={canReopen} />
-            ))}
+            {shifts.map((s) => {
+              // Build the sibling list from the same `shifts` data — for each
+              // card, "siblings" is every other shift on the day. Lets each
+              // card render a "cash from other shifts today" hint without an
+              // extra round-trip.
+              const siblings = shifts
+                .filter((other) => other.label !== s.label)
+                .map((other) => ({ label: other.label, receivedCents: other.receivedCents }));
+              return (
+                <CashReconForm
+                  key={s.label}
+                  branchId={branchId}
+                  date={date}
+                  shift={s}
+                  canReopen={canReopen}
+                  siblings={siblings}
+                />
+              );
+            })}
           </CardContent>
         </Card>
       )}
