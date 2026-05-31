@@ -84,6 +84,10 @@ export function OrdersExplorer({ rows, billingCodes }: { rows: OrderRow[]; billi
         if (billing !== ALL && o.billing_code !== billing) return false;
         if (service !== ALL && !SERVICE_OPTIONS.find((x) => x.value === service)?.match(o.status)) return false;
         if (payment !== ALL) {
+          // Drafts aren't classified by payment state (the cashier is still
+          // composing) — exclude them from any payment filter. Matches the
+          // badge + outstanding cell which both stay silent for drafts.
+          if (o.status === 'draft') return false;
           const st = orderPaymentState(o);
           const ok = payment === 'owing' ? st === 'unpaid' || st === 'partial' : st === payment;
           if (!ok) return false;
@@ -101,7 +105,8 @@ export function OrdersExplorer({ rows, billingCodes }: { rows: OrderRow[]; billi
           a.cash += o.cash_cents;
           a.paymaya += o.paymaya_cents;
           a.ar += o.ar_cents;
-          a.outstanding += o.is_ar ? 0 : Math.max(0, o.total_cents - o.paid_cents);
+          // Mirror outstandingCell: drafts aren't real liabilities, don't add to total.
+          a.outstanding += o.is_ar || o.status === 'draft' ? 0 : Math.max(0, o.total_cents - o.paid_cents);
           a.total += o.total_cents;
           a.tip += o.tip_cents;
           return a;
@@ -121,9 +126,12 @@ export function OrdersExplorer({ rows, billingCodes }: { rows: OrderRow[]; billi
     cents > 0 ? <span className={cls}>{peso(cents)}</span> : <span className="text-muted-foreground">—</span>;
   // Uncollected at the counter. Red when service is done but money's still out
   // (the concern); calmer grey while the order is still in progress; — for AR
-  // (billed monthly) and fully-paid orders.
+  // (billed monthly), fully-paid orders, and DRAFTS (the line items aren't
+  // committed yet — a draft is the cashier still editing the order, not money
+  // the customer owes us). Drafts are caught by EoD's runOrderReview, not by
+  // the outstanding total here.
   const outstandingCell = (o: OrderRow) => {
-    const due = o.is_ar ? 0 : Math.max(0, o.total_cents - o.paid_cents);
+    const due = o.is_ar || o.status === 'draft' ? 0 : Math.max(0, o.total_cents - o.paid_cents);
     if (due === 0) return <span className="text-muted-foreground">—</span>;
     return <span className={o.status === 'completed' ? 'font-bold text-destructive' : 'font-medium text-muted-foreground'}>{peso(due)}</span>;
   };

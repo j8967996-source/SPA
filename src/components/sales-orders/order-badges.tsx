@@ -99,6 +99,10 @@ export function PaymentBadge({
   status: string;
 }) {
   if (status === 'void') return null;
+  // A draft is the cashier still composing the order — no payment is expected
+  // yet, so the "Unpaid" badge would be alarming + meaningless. Stay quiet
+  // until the order is at least open / in_service / completed.
+  if (status === 'draft') return null;
   const state = orderPaymentState({ total_cents, paid_cents, is_ar });
   const due = total_cents - paid_cents;
 
