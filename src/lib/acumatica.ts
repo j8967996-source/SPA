@@ -53,7 +53,11 @@ export async function acumaticaLogin(
   const body: Record<string, string> = { name: username, password };
   if (TENANT) body.tenant = TENANT;
   if (COMPANY) body.company = COMPANY;
-  if (BRANCH) body.branch = BRANCH;
+  // Do NOT include `branch` at login. Empirically Acumatica's auth endpoint
+  // returns "Invalid credentials" for a valid (user, password) pair when a
+  // branch is bound at login time — even when the user has access to that
+  // branch via the web UI. Branch is supplied per-request on GL posts
+  // (PXBranchName header) so login-time binding isn't needed.
 
   let res: Response;
   try {
