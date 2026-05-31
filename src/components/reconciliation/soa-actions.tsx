@@ -74,7 +74,13 @@ function RecordPaymentDialog({ id, outstandingCents }: { id: string; outstanding
         paid_at: isCash ? todayISO() : date,
         proof_file_path: up.data?.path ?? null,
       });
-      if (r.ok) { toast.success('Payment recorded & posted'); setOpen(false); router.refresh(); }
+      if (r.ok) {
+        // AR Receipt batch ref from Acumatica — null in dev mode.
+        const batchTag = r.data?.batchNbr ? ` · GL #${r.data.batchNbr}` : '';
+        toast.success(`Payment recorded & posted${batchTag}`, { duration: r.data?.batchNbr ? 8000 : 4000 });
+        setOpen(false);
+        router.refresh();
+      }
       else toast.error(r.error);
     });
   }

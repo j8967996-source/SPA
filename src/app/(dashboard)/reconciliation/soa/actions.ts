@@ -812,7 +812,7 @@ async function postSoaPaymentToErp(args: {
  * paid / outstanding and flips to partial_paid or settled, then posts the cash
  * receipt to ERP: DR cash/bank (per method, from transaction_codes) / CR AR.
  */
-export async function recordSoaPayment(input: unknown): Promise<ActionResult> {
+export async function recordSoaPayment(input: unknown): Promise<ActionResult<{ batchNbr: string | null }>> {
   const session = await currentSession();
   if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
   const parsed = paymentSchema.safeParse(input);
@@ -867,7 +867,7 @@ export async function recordSoaPayment(input: unknown): Promise<ActionResult> {
   // posting failure is noted on the payment row (retriable), it doesn't undo
   // the collection. No-op until Acumatica is configured. Intercompany uses
   // settleSOA, not this path.
-  await postSoaPaymentToErp({
+  const postRes = await postSoaPaymentToErp({
     paymentId,
     soaNo: soa.soa_no ?? '',
     branchId: soa.branch_id,
@@ -877,11 +877,16 @@ export async function recordSoaPayment(input: unknown): Promise<ActionResult> {
     methodCode: (payment_method ?? '').toLowerCase(),
     proofPath: proof_file_path ?? null,
   });
+  // Surface the AR-receipt batch ref (`batchNbr` from PostToErpResult) so
+  // the success toast can show it. null in dev mode (no Acumatica). A
+  // posting failure is noted on the payment row (retriable) — the payment
+  // itself is already recorded, so we still return ok=true here.
+  const batchNbr = postRes.ok ? postRes.batchNbr : null;
 
   revalidatePath('/reconciliation/soa');
   // A cash collection feeds the shift cash count — refresh that page too.
   if (isCash) revalidatePath('/reconciliation/cash');
-  return { ok: true };
+  return { ok: true, data: { batchNbr } };
 }
 
 /**
@@ -892,7 +897,7 @@ export async function recordSoaPayment(input: unknown): Promise<ActionResult> {
  * failure → still failed, error refreshed, retried_count incremented in the
  * log). Manager-gated; only valid for rows that aren't already posted.
  */
-export async function retrySoaPaymentPosting(paymentId: string): Promise<ActionResult> {
+export async function retrySoaPaymentPosting(paymentId: string): Promise<ActionResult<{ batchNbr: string | null }>> {
   const session = await currentSession();
   if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
   const supabase = await createAuditedClient();
@@ -948,7 +953,7 @@ export async function retrySoaPaymentPosting(paymentId: string): Promise<ActionR
   });
   revalidatePath('/reconciliation/soa');
   if (!r.ok) return { ok: false, error: r.error };
-  return { ok: true };
+  return { ok: true, data: { batchNbr: r.batchNbr } };
 }
 
 /** Upload an AR collection proof (remittance slip / cash photo) to the private

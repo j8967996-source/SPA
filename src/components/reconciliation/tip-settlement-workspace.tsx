@@ -175,7 +175,9 @@ export function TipSettlementWorkspace({
     startGen(async () => {
       const r = await settleTips({ branch_id: branchId, tip_ids: tipIds });
       if (r.ok) {
-        toast.success(`Settled ${r.data?.count} tip(s)`);
+        // AP Bill number from Acumatica — null in dev mode (no ERP).
+        const batchTag = r.data?.batchNbr ? ` · AP #${r.data.batchNbr}` : '';
+        toast.success(`Settled ${r.data?.count} tip(s)${batchTag}`, { duration: r.data?.batchNbr ? 8000 : 4000 });
         setSelected(new Set());
         const data = await loadOpenTipGroups(branchId, from, to);
         setGroups(data);
@@ -196,7 +198,11 @@ export function TipSettlementWorkspace({
   function doRetry(id: string) {
     startGen(async () => {
       const r = await retryTipPosting(id);
-      if (r.ok) { toast.success('Retried — posted to ERP'); router.refresh(); }
+      if (r.ok) {
+        const batchTag = r.data?.batchNbr ? ` · AP #${r.data.batchNbr}` : '';
+        toast.success(`Retried — posted to ERP${batchTag}`, { duration: r.data?.batchNbr ? 8000 : 4000 });
+        router.refresh();
+      }
       else { toast.error(r.error); router.refresh(); }
     });
   }

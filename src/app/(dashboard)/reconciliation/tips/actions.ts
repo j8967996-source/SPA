@@ -154,7 +154,7 @@ const settleSchema = z.object({
 });
 
 /** Settle the selected open tips into one settlement (closed; ERP/AP posting deferred). */
-export async function settleTips(input: unknown): Promise<ActionResult<{ id: string; count: number }>> {
+export async function settleTips(input: unknown): Promise<ActionResult<{ id: string; count: number; batchNbr: string | null }>> {
   const session = await currentSession();
   if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
   const parsed = settleSchema.safeParse(input);
@@ -214,16 +214,20 @@ export async function settleTips(input: unknown): Promise<ActionResult<{ id: str
   // AP Bill: DR 20500 Tips Payable (per therapist) / CR 20100 AP (Acumatica
   // auto). The helper queries tips + therapists, builds lines, posts and
   // attaches the PDF — same path as Retry, so they can't drift.
-  await postTipSettlementToErp(settlement.id);
+  const postRes = await postTipSettlementToErp(settlement.id);
+  // Surface the AP Bill ref (`RefNbr` / `batchNbr` from PostToErpResult) to
+  // the caller so the success toast can show it — the accountant uses this
+  // to look up the bill in Acumatica. null when ERP isn't configured (dev).
+  const batchNbr = postRes.ok ? postRes.batchNbr : null;
 
   revalidatePath('/reconciliation/tips');
-  return { ok: true, data: { id: settlement.id, count: valid.length } };
+  return { ok: true, data: { id: settlement.id, count: valid.length, batchNbr } };
 }
 
 /** Re-attempt the AP Bill push for a settlement whose previous post failed.
  *  Manager-gated; refuses if already posted. Re-uses the shared helper, so the
  *  retry path runs exactly the same compose-and-post (lines + PDF attach). */
-export async function retryTipPosting(settlementId: string): Promise<ActionResult> {
+export async function retryTipPosting(settlementId: string): Promise<ActionResult<{ batchNbr: string | null }>> {
   const session = await currentSession();
   if (!isManager(session)) return { ok: false, error: 'Manager permission required' };
   const supabase = await createAuditedClient();
@@ -247,7 +251,7 @@ export async function retryTipPosting(settlementId: string): Promise<ActionResul
   const r = await postTipSettlementToErp(settlementId);
   revalidatePath('/reconciliation/tips');
   if (!r.ok) return { ok: false, error: r.error };
-  return { ok: true };
+  return { ok: true, data: { batchNbr: r.batchNbr } };
 }
 
 export async function voidTipSettlement(id: string): Promise<ActionResult> {

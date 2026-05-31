@@ -40,7 +40,11 @@ export function SoaPaymentsList({ soaId }: { soaId: string }) {
   function retry(paymentId: string) {
     start(async () => {
       const r = await retrySoaPaymentPosting(paymentId);
-      if (r.ok) { toast.success('Retried — posted to ERP'); refresh(); }
+      if (r.ok) {
+        const batchTag = r.data?.batchNbr ? ` · GL #${r.data.batchNbr}` : '';
+        toast.success(`Retried — posted to ERP${batchTag}`, { duration: r.data?.batchNbr ? 8000 : 4000 });
+        refresh();
+      }
       else { toast.error(r.error); refresh(); /* error message may have changed */ }
     });
   }
