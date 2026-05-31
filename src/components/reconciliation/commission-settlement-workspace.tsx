@@ -481,7 +481,7 @@ export function CommissionSettlementWorkspace({
                                     Mins (w-14) sits between Service and Gross. */}
                                 <Table className="table-fixed">
                                   {/* Widened Date (w-32 → w-40) and Order No
-                                      (w-48 → w-60) so the SO-OSP2-YYYYMMDD-NNN
+                                      (w-48 → w-60) so the SO-HSPA2-YYYYMMDD-NNN
                                       pattern (~150pt) has breathing room and
                                       the Date / Order / Service triplet stops
                                       visually clumping together. Right-side

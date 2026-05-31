@@ -215,7 +215,7 @@ export function ResourceFormDialog({
                 id="r-zone"
                 value={locationZone}
                 onChange={(e) => setLocationZone(e.target.value)}
-                placeholder="OSP2-2F"
+                placeholder="HSPA2-2F"
                 maxLength={40}
               />
             </div>

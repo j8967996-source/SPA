@@ -1,4 +1,4 @@
-// One-off rollback: take today's seeded OSP2 orders that were Revenue
+// One-off rollback: take today's seeded HSPA2 orders that were Revenue
 // Confirm-ed (status='closed' with a gl_batch_nbr) and step them back to
 // their pre-confirm state — paid orders → 'paid', AR-completed → 'completed'
 // — clearing all posting metadata so they can be re-confirmed by the new
@@ -27,16 +27,16 @@ console.log(`Today PHT = ${today}\n`);
 const { data: ar } = await sb.from('payment_methods').select('id').eq('code', 'ar').single();
 const AR_ID = ar.id;
 
-// All today's closed orders for OSP2 — we only revert ones with gl_batch_nbr
+// All today's closed orders for HSPA2 — we only revert ones with gl_batch_nbr
 // set (i.e. they actually went through Revenue Confirm).
-const { data: br } = await sb.from('branches').select('id').eq('code', 'OSP2').single();
+const { data: br } = await sb.from('branches').select('id').eq('code', 'HSPA2').single();
 const { data: orders } = await sb.from('orders')
   .select('id, order_no, status, gl_batch_nbr, posting_status, billing:billing_destinations!orders_billing_to_id_fkey(default_payment_method_id)')
   .eq('branch_id', br.id)
   .eq('service_date', today)
   .eq('status', 'closed');
 
-console.log(`Found ${orders?.length ?? 0} closed orders for today at OSP2.\n`);
+console.log(`Found ${orders?.length ?? 0} closed orders for today at HSPA2.\n`);
 
 let reverted = 0;
 for (const o of orders ?? []) {

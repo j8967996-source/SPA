@@ -1,4 +1,4 @@
-// Seed 10 OSP2 orders for TODAY that cover every ERP-posting path:
+// Seed 10 HSPA2 orders for TODAY that cover every ERP-posting path:
 //   #1-5  paid via cash / paymaya / mixed (some with PAYMAYA tip)
 //   #6    ENGO third-party paid in cash (settles same-day, not via SOA)
 //   #7-9  intercompany AR (HHO / HCC / HJH) — completed, awaits Revenue Confirm
@@ -27,7 +27,7 @@ const now = new Date().toISOString();
 console.log(`Today PHT = ${today}\n`);
 
 // --- Reference ids ---
-const { data: br } = await sb.from('branches').select('id').eq('code', 'OSP2').single();
+const { data: br } = await sb.from('branches').select('id').eq('code', 'HSPA2').single();
 const BRANCH = br.id;
 
 const { data: pms } = await sb.from('payment_methods').select('id, code').in('code', ['cash', 'paymaya', 'ar']);
@@ -73,7 +73,7 @@ const guestNames = ['Joey', 'Maya', 'Liam', 'Ava', 'Noah', 'Sofia', 'Lucas', 'Mi
 let created = 0;
 for (const sc of SCENARIOS) {
   const seq = String(sc.i).padStart(3, '0');
-  const order_no = `SO-OSP2-${ymd}-${seq}`;
+  const order_no = `SO-HSPA2-${ymd}-${seq}`;
   const therapist = THERAPISTS[(sc.i - 1) % THERAPISTS.length];
   const totalCents = sc.total * 100;
 

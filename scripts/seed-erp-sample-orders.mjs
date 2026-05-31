@@ -1,8 +1,8 @@
-// Seed 5 OSP2 sample orders covering each ERP-posting scenario, so the user
+// Seed 5 HSPA2 sample orders covering each ERP-posting scenario, so the user
 // can run Revenue Confirm / SOA / Tip Settlement and visually inspect the
 // resulting Acumatica entries.
 //
-// Created (all on 2026-05-31, OSP2):
+// Created (all on 2026-05-31, HSPA2):
 //   #1  Walk-in / Cash                  → PAYMENT-CASH (DR 10108 / CR 40140)
 //   #2  Walk-in / PAYMAYA               → PAYMENT-PAYMAYA (DR 10121 / CR 40140)
 //   #3  Walk-in / PAYMAYA + tip ₱100    → + PAYMENT-TIP-PAYMAYA (CR 20500 liability)
@@ -26,7 +26,7 @@ const env = Object.fromEntries(
 const sb = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SECRET_KEY);
 
 const TODAY = '2026-05-31';
-const BR_CODE = 'OSP2';
+const BR_CODE = 'HSPA2';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Lookups — pull everything we need once, fail loudly if missing.
@@ -70,7 +70,7 @@ async function lookup() {
   const findRes = (type) => (ress.data ?? []).find((r) => r.resource_type === type)
     ?? (() => { throw new Error(`Resource type ${type} missing at branch`); })();
 
-  // Therapist for OSP2 (any active employee with home_branch_id = OSP2; fall
+  // Therapist for HSPA2 (any active employee with home_branch_id = HSPA2; fall
   // back to any active employee if none — we just need a valid FK).
   const osp2Emps = (emps.data ?? []).filter((e) => e.home_branch_id === br.data.id);
   const therapist = osp2Emps[0] ?? emps.data?.[0] ?? null;
@@ -228,7 +228,7 @@ const seqFn = await nextOrderNo(ctx.br.id);
 let n = 0;
 ctx.seq = () => seqFn(++n);
 
-console.log(`Seeding 5 sample orders for OSP2 on ${TODAY} (therapist=${ctx.therapist.name})\n`);
+console.log(`Seeding 5 sample orders for HSPA2 on ${TODAY} (therapist=${ctx.therapist.name})\n`);
 
 const scenarios = [
   { label: 'Walk-in / Cash',                  sourceCode: 'WALK-IN', billingCode: 'SELF', svcCode: 'M60T',  paymentMethodCode: 'cash',    guestName: 'Maria Santos' },
@@ -252,9 +252,9 @@ for (const s of scenarios) {
 console.log('\n=== Summary ===');
 console.log(`Created: ${results.length} / ${scenarios.length}`);
 console.log(`Date:    ${TODAY}`);
-console.log(`Branch:  OSP2`);
+console.log(`Branch:  HSPA2`);
 console.log('\nTo flush to Acumatica:');
-console.log('  1. /reconciliation/cash         — close OSP2 today\'s shift(s)');
+console.log('  1. /reconciliation/cash         — close HSPA2 today\'s shift(s)');
 console.log('  2. /reconciliation/revenue-confirm — confirm to post GL journals');
 console.log('  3. /reconciliation/soa          — generate SOA for H-Hotel + ENGO AR orders');
 console.log('  4. (after settlement)            — SOA payment → posts AR receipts');

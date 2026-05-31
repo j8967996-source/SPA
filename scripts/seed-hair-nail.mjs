@@ -2,7 +2,7 @@
 // Idempotent — upserts on natural keys, safe to re-run.
 //
 // Adds:
-//   1. Stations  — 1 hair_chair + 1 nail_station per branch (OSP1 / OSP2)
+//   1. Stations  — 1 hair_chair + 1 nail_station per branch (OSP1 / HSPA2)
 //   2. Employees — 2 hair stylists + 2 nail technicians, mixed across branches
 //   3. Services  — 3 nail service items (Manicure, Pedicure, Gel Polish)
 //   4. Prices    — global "Normal" price for each new nail service, effective
@@ -39,7 +39,7 @@ const bUnitId = byCode(bUnits ?? [], 'code');
 const SPA_UNIT = bUnitId.spa;
 
 for (const [need, val] of Object.entries({
-  'branch OSP1': branchId.OSP1, 'branch OSP2': branchId.OSP2,
+  'branch OSP1': branchId.OSP1, 'branch HSPA2': branchId.HSPA2,
   'category HAIR': categoryId.HAIR, 'category NAIL': categoryId.NAIL,
   'class J': classId.J,
   'position HAIR_STYLIST': positionId.HAIR_STYLIST,
@@ -53,9 +53,9 @@ for (const [need, val] of Object.entries({
 console.log('\n=== Stations ===');
 const stations = [
   { branch: 'OSP1', type: 'hair_chair',   name: 'Hair Chair A',   zone: 'OSP1-1F' },
-  { branch: 'OSP2', type: 'hair_chair',   name: 'Hair Chair A',   zone: 'OSP2-1F' },
+  { branch: 'HSPA2', type: 'hair_chair',   name: 'Hair Chair A',   zone: 'HSPA2-1F' },
   { branch: 'OSP1', type: 'nail_station', name: 'Nail Station A', zone: 'OSP1-1F' },
-  { branch: 'OSP2', type: 'nail_station', name: 'Nail Station A', zone: 'OSP2-1F' },
+  { branch: 'HSPA2', type: 'nail_station', name: 'Nail Station A', zone: 'HSPA2-1F' },
 ];
 for (const s of stations) {
   // No unique constraint on (branch_id, resource_name) — do a check-then-insert
@@ -83,13 +83,13 @@ for (const s of stations) {
   console.log(`  ✓ ${s.branch}  ${s.type.padEnd(13)} ${s.name}`);
 }
 
-// ── 2. Employees — next available codes per branch (after OSP1-007, OSP2-009)
+// ── 2. Employees — next available codes per branch (after OSP1-007, HSPA2-009)
 console.log('\n=== Employees ===');
 const employees = [
   { code: 'OSP1-008', name: 'Rosa Mendoza',  branch: 'OSP1', gender: 'F', position: 'HAIR_STYLIST',    class: 'J' },
-  { code: 'OSP2-010', name: 'Marco Aquino',  branch: 'OSP2', gender: 'M', position: 'HAIR_STYLIST',    class: 'J' },
+  { code: 'HSPA2-010', name: 'Marco Aquino',  branch: 'HSPA2', gender: 'M', position: 'HAIR_STYLIST',    class: 'J' },
   { code: 'OSP1-009', name: 'Bea Castro',    branch: 'OSP1', gender: 'F', position: 'NAIL_TECHNICIAN', class: 'J' },
-  { code: 'OSP2-011', name: 'Patricia Lim',  branch: 'OSP2', gender: 'F', position: 'NAIL_TECHNICIAN', class: 'J' },
+  { code: 'HSPA2-011', name: 'Patricia Lim',  branch: 'HSPA2', gender: 'F', position: 'NAIL_TECHNICIAN', class: 'J' },
 ];
 for (const e of employees) {
   const { error } = await sb.from('employees').upsert(

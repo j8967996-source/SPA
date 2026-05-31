@@ -31,7 +31,7 @@ async function main() {
     .upsert(
       [
         { code: 'OSP1', name: 'Oriental SPA 1', active: true },
-        { code: 'OSP2', name: 'Oriental SPA 2', active: true },
+        { code: 'HSPA2', name: 'Oriental SPA 2', active: true },
         { code: 'SPA3', name: 'SPA 666', active: false },
         { code: 'SPA4', name: 'SPA 888', active: false },
       ],

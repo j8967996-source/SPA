@@ -160,7 +160,7 @@ export function TransactionCodeFormDialog({
                 id="tc-code"
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
-                placeholder="OSP2-PAYMENT-CASH / OSP2-SETTLE-AR-INTERCOMPANY"
+                placeholder="HSPA2-PAYMENT-CASH / HSPA2-SETTLE-AR-INTERCOMPANY"
                 disabled={isEdit}
                 required
                 maxLength={60}

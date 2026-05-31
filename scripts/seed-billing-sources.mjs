@@ -112,18 +112,18 @@ async function main() {
     if (error) throw error;
   }
 
-  // ---- Transaction codes (sample — Excel-derived, OSP2)
+  // ---- Transaction codes (sample — Excel-derived, HSPA2)
   console.log('  · transaction_codes');
   const { data: branches } = await supabase.from('branches').select('id, code');
   const brId = Object.fromEntries((branches ?? []).map((b) => [b.code, b.id]));
 
-  if (!brId.OSP2) {
-    console.log('    (OSP2 branch missing — skipping tx codes)');
+  if (!brId.HSPA2) {
+    console.log('    (HSPA2 branch missing — skipping tx codes)');
   } else {
     const txCodes = [
       {
-        code: 'OSP2-PAYMENT-CASH',
-        branch_id: brId.OSP2,
+        code: 'HSPA2-PAYMENT-CASH',
+        branch_id: brId.HSPA2,
         transaction_type: 'payment',
         payment_method_id: pmId.cash,
         debit_account: '10108',
@@ -132,8 +132,8 @@ async function main() {
         credit_subaccount: '000000000',
       },
       {
-        code: 'OSP2-PAYMENT-PAYMAYA',
-        branch_id: brId.OSP2,
+        code: 'HSPA2-PAYMENT-PAYMAYA',
+        branch_id: brId.HSPA2,
         transaction_type: 'payment',
         payment_method_id: pmId.paymaya,
         debit_account: '10121',
@@ -142,8 +142,8 @@ async function main() {
         credit_subaccount: '000000000',
       },
       {
-        code: 'OSP2-PAYMENT-AR',
-        branch_id: brId.OSP2,
+        code: 'HSPA2-PAYMENT-AR',
+        branch_id: brId.HSPA2,
         transaction_type: 'payment',
         payment_method_id: pmId.ar,
         debit_account: '10200',
@@ -152,8 +152,8 @@ async function main() {
         credit_subaccount: '000000000',
       },
       {
-        code: 'OSP2-PAYMENT-TIP-PAYMAYA',
-        branch_id: brId.OSP2,
+        code: 'HSPA2-PAYMENT-TIP-PAYMAYA',
+        branch_id: brId.HSPA2,
         transaction_type: 'payment',
         payment_method_id: pmId.paymaya,
         debit_account: '10121',
@@ -162,8 +162,8 @@ async function main() {
         credit_subaccount: '000000000',
       },
       {
-        code: 'OSP2-SETTLE-AR-INTERCOMPANY',
-        branch_id: brId.OSP2,
+        code: 'HSPA2-SETTLE-AR-INTERCOMPANY',
+        branch_id: brId.HSPA2,
         transaction_type: 'settle',
         payment_method_id: null,
         debit_account: '50170',
@@ -172,8 +172,8 @@ async function main() {
         credit_subaccount: '000000000',
       },
       {
-        code: 'OSP2-SETTLE-AR-THIRDPARTY',
-        branch_id: brId.OSP2,
+        code: 'HSPA2-SETTLE-AR-THIRDPARTY',
+        branch_id: brId.HSPA2,
         transaction_type: 'settle',
         payment_method_id: null,
         debit_account: '10111',
@@ -182,8 +182,8 @@ async function main() {
         credit_subaccount: '000000000',
       },
       {
-        code: 'OSP2-SETTLE-TIP-TO-AP',
-        branch_id: brId.OSP2,
+        code: 'HSPA2-SETTLE-TIP-TO-AP',
+        branch_id: brId.HSPA2,
         transaction_type: 'settle',
         payment_method_id: null,
         debit_account: '20500',
@@ -192,8 +192,8 @@ async function main() {
         credit_subaccount: '000000000',
       },
       {
-        code: 'OSP2-PAYMENT-SVC-DEPOSIT',
-        branch_id: brId.OSP2,
+        code: 'HSPA2-PAYMENT-SVC-DEPOSIT',
+        branch_id: brId.HSPA2,
         transaction_type: 'payment',
         payment_method_id: pmId.stored_value_card,
         debit_account: '10108',
@@ -202,8 +202,8 @@ async function main() {
         credit_subaccount: '000000000',
       },
       {
-        code: 'OSP2-SETTLE-SVC',
-        branch_id: brId.OSP2,
+        code: 'HSPA2-SETTLE-SVC',
+        branch_id: brId.HSPA2,
         transaction_type: 'settle',
         payment_method_id: pmId.stored_value_card,
         debit_account: '20510',

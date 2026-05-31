@@ -43,25 +43,25 @@ async function main() {
   const SPA_UNIT = bUnitId.spa;
   const MASSAGE_THERAPIST = positionId.MASSAGE_THERAPIST;
 
-  if (!branchId.OSP2 || !categoryId.MASSAGE || !classId.J) {
-    throw new Error('Phase 1 seed missing required rows (OSP2 / MASSAGE / J)');
+  if (!branchId.HSPA2 || !categoryId.MASSAGE || !classId.J) {
+    throw new Error('Phase 1 seed missing required rows (HSPA2 / MASSAGE / J)');
   }
   if (!SPA_UNIT) throw new Error('business_units.spa missing — run business_units_master migration first');
   if (!MASSAGE_THERAPIST) throw new Error('positions.MASSAGE_THERAPIST missing — run add_positions_table migration first');
 
-  // ---- Resources (OSP1 + OSP2)
+  // ---- Resources (OSP1 + HSPA2)
   console.log('  · resources');
   const resourceRows = [
     { branch: 'OSP1', type: 'massage_bed', name: 'Bed #1', zone: 'OSP1-2F', capacity: 1 },
     { branch: 'OSP1', type: 'massage_bed', name: 'Bed #2', zone: 'OSP1-2F', capacity: 1 },
     { branch: 'OSP1', type: 'hair_chair', name: 'Hair Chair A', zone: 'OSP1-1F', capacity: 1 },
-    { branch: 'OSP2', type: 'massage_bed', name: 'Bed #1', zone: 'OSP2-2F', capacity: 1 },
-    { branch: 'OSP2', type: 'massage_bed', name: 'Bed #2', zone: 'OSP2-2F', capacity: 1 },
-    { branch: 'OSP2', type: 'massage_bed', name: 'Bed #3', zone: 'OSP2-2F', capacity: 1 },
-    { branch: 'OSP2', type: 'massage_bed', name: 'Bed #4', zone: 'OSP2-3F', capacity: 1 },
-    { branch: 'OSP2', type: 'massage_bed', name: 'VIP Suite', zone: 'OSP2-VIP', capacity: 2 },
-    { branch: 'OSP2', type: 'hair_chair', name: 'Hair Chair A', zone: 'OSP2-1F', capacity: 1 },
-    { branch: 'OSP2', type: 'rest_room', name: 'Rest Room A', zone: 'OSP2-3F', capacity: 2 },
+    { branch: 'HSPA2', type: 'massage_bed', name: 'Bed #1', zone: 'HSPA2-2F', capacity: 1 },
+    { branch: 'HSPA2', type: 'massage_bed', name: 'Bed #2', zone: 'HSPA2-2F', capacity: 1 },
+    { branch: 'HSPA2', type: 'massage_bed', name: 'Bed #3', zone: 'HSPA2-2F', capacity: 1 },
+    { branch: 'HSPA2', type: 'massage_bed', name: 'Bed #4', zone: 'HSPA2-3F', capacity: 1 },
+    { branch: 'HSPA2', type: 'massage_bed', name: 'VIP Suite', zone: 'HSPA2-VIP', capacity: 2 },
+    { branch: 'HSPA2', type: 'hair_chair', name: 'Hair Chair A', zone: 'HSPA2-1F', capacity: 1 },
+    { branch: 'HSPA2', type: 'rest_room', name: 'Rest Room A', zone: 'HSPA2-3F', capacity: 2 },
   ];
   // resources has no UNIQUE constraint on (branch_id, resource_name), so the
   // old `upsert(..., { onConflict: ... })` would fail outright. Do a manual
@@ -90,10 +90,10 @@ async function main() {
   // ---- Employees
   console.log('  · employees');
   const employees = [
-    { code: 'E001', name: 'Jack', phone: '63917000001', branch: 'OSP2', class: 'J', gender: 'M' },
-    { code: 'E002', name: 'Yuna', phone: '63917000002', branch: 'OSP2', class: 'J', gender: 'F' },
-    { code: 'E003', name: 'Maria', phone: '63917000003', branch: 'OSP2', class: 'J', gender: 'F' },
-    { code: 'E004', name: 'Pedro', phone: '63917000004', branch: 'OSP2', class: 'J', gender: 'M' },
+    { code: 'E001', name: 'Jack', phone: '63917000001', branch: 'HSPA2', class: 'J', gender: 'M' },
+    { code: 'E002', name: 'Yuna', phone: '63917000002', branch: 'HSPA2', class: 'J', gender: 'F' },
+    { code: 'E003', name: 'Maria', phone: '63917000003', branch: 'HSPA2', class: 'J', gender: 'F' },
+    { code: 'E004', name: 'Pedro', phone: '63917000004', branch: 'HSPA2', class: 'J', gender: 'M' },
     { code: 'E005', name: 'Lily', phone: '63917000005', branch: 'OSP1', class: 'J', gender: 'F' },
   ];
   // employees has multiple unique keys (employee_code, phone). Supabase upsert

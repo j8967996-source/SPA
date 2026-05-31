@@ -19,10 +19,10 @@ const env = Object.fromEntries(
 const sb = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SECRET_KEY);
 
 console.log('Looking up branches…');
-const { data: branches } = await sb.from('branches').select('id, code').in('code', ['OSP1', 'OSP2']);
+const { data: branches } = await sb.from('branches').select('id, code').in('code', ['OSP1', 'HSPA2']);
 const branchId = Object.fromEntries((branches ?? []).map((b) => [b.code, b.id]));
-if (!branchId.OSP1 || !branchId.OSP2) {
-  console.error('✗ OSP1 or OSP2 branch missing — seed branches first');
+if (!branchId.OSP1 || !branchId.HSPA2) {
+  console.error('✗ OSP1 or HSPA2 branch missing — seed branches first');
   process.exit(1);
 }
 
@@ -40,10 +40,10 @@ const USERS = [
   {
     email: 'staff-osp2@acumatica.local',
     acumatica_user_id: 'staff-osp2',
-    display_name: 'Test Staff (OSP2)',
+    display_name: 'Test Staff (HSPA2)',
     role: 'staff',
-    homeBranchCode: 'OSP2',
-    branchCodes: ['OSP2'],
+    homeBranchCode: 'HSPA2',
+    branchCodes: ['HSPA2'],
   },
   {
     email: 'booker@acumatica.local',
